@@ -1,10 +1,11 @@
 "use client";
 
 import { AiMessage } from "@/components/AiMessage";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
-import { useState } from "react";
 import { Message, TaskCategory } from "@/types";
+import { useState } from "react";
 
 const initialTasks: TaskCategory = {
   "Visa & Documents": [
@@ -22,7 +23,7 @@ const initialTasks: TaskCategory = {
   ],
 };
 
-const feedMessages: Message[] = [
+const initialFeedMessages: Message[] = [
     { id: "msg-1", type: "reasoning", text: "Based on your 3-month timeline, I've prioritized visa-related tasks as they often have the longest processing times.", timestamp: "May 22, 2026, 10:00 AM" },
     { 
       id: "msg-5", 
@@ -45,6 +46,7 @@ const feedMessages: Message[] = [
 
 export default function MissionPage() {
   const [tasks, setTasks] = useState(initialTasks);
+  const [feedMessages, setFeedMessages] = useState(initialFeedMessages);
 
   const handleTaskChange = (taskId: string, completed: boolean) => {
     const newTasks = { ...tasks };
@@ -58,17 +60,41 @@ export default function MissionPage() {
     setTasks(newTasks);
   };
 
+  const handleSimulateChange = () => {
+    // 1. Create a new reasoning message
+    const newMessage: Message = {
+        id: `msg-${Date.now()}`,
+        type: "reasoning",
+        text: "A delay in your visa application has been detected. I've adjusted the downstream 'Book Flight to Seoul' task to mitigate risk.",
+        timestamp: new Date().toLocaleString(),
+    };
+
+    // 2. Update the flight booking task's due date
+    const newTasks = { ...tasks };
+    const travelTaskIndex = newTasks["Travel & Housing"].findIndex(t => t.id === "task-6");
+    if (travelTaskIndex !== -1) {
+        newTasks["Travel & Housing"][travelTaskIndex].dueDate = "2026-07-25"; // Pushed back 10 days
+    }
+
+    // 3. Update state
+    setFeedMessages([newMessage, ...feedMessages]);
+    setTasks(newTasks);
+  };
+
   return (
     <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
       {/* AI Coordination Feed */}
       <div className="lg:col-span-2 flex flex-col gap-6">
-        <div>
-            <h1 className="text-3xl font-bold tracking-tight">
-            Mission: Relocate to South Korea
-            </h1>
-            <p className="text-muted-foreground">
-            Here is your AI-powered transition plan.
-            </p>
+        <div className="flex items-start justify-between">
+            <div>
+                <h1 className="text-3xl font-bold tracking-tight">
+                Mission: Relocate to South Korea
+                </h1>
+                <p className="text-muted-foreground">
+                Here is your AI-powered transition plan.
+                </p>
+            </div>
+            <Button onClick={handleSimulateChange} variant="outline">Simulate Change</Button>
         </div>
         <Card>
           <CardHeader>
