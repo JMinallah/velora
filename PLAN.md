@@ -13,8 +13,8 @@ This document outlines the systematic development phases for building Velora, an
         *   Establish a primary color palette, accent colors, and neutral shades.
         *   Choose typography (fonts, sizes, weights) for headings and body text.
         *   Design the main application layout (e.g., sidebar navigation, main content area, header).
-    *   [ ] Build the static shell for the main dashboard layout using `shadcn/ui` components.
-    *   [ ] Create a `components/layout` directory for reusable layout components (e.g., `Sidebar`, `Header`, `PageWrapper`).
+*   [x] Build the static shell for the main dashboard layout using `shadcn/ui` components.
+*   [x] Create a `components/layout` directory for reusable layout components (e.g., `Sidebar`, `Header`, `PageWrapper`).
 
 ---
 
@@ -22,10 +22,10 @@ This document outlines the systematic development phases for building Velora, an
 
 *   **Goal**: Create the initial user experience where a user defines their transition goal.
 *   **Tasks**:
-    *   [ ] Design and build a simple, elegant onboarding page or modal.
-    *   [ ] Implement a text input area for the user to describe their mission (e.g., "I’m moving from Uganda to South Korea for university in 3 months.").
-    *   [ ] Create the UI for the AI's initial response, which presents the generated master plan and timeline. This should feel intelligent and reassuring.
-    *   [ ] Design the transition from onboarding to the main dashboard.
+    *   [x] Design and build a simple, elegant onboarding page or modal.
+    *   [x] Implement a text input area for the user to describe their mission (e.g., "I’m moving from Uganda to South Korea for university in 3 months.").
+*   [x] Create the UI for the AI's initial response, which presents the generated master plan and timeline. This should feel intelligent and reassuring.
+*   [x] Design the transition from onboarding to the main dashboard.
 
 ---
 
