@@ -1,6 +1,7 @@
 import { AlertTriangle, CheckCircle2, Info, Lightbulb } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Message } from "@/types";
+import { ExtractedInfo } from "./documents/ExtractedInfo";
 
 const messageConfig = {
   suggestion: {
@@ -58,6 +59,7 @@ export function AiMessage({ message }: { message: Message }) {
       <Icon className={cn("h-5 w-5 flex-shrink-0 mt-0.5", config.iconColor, config.darkIconColor)} />
       <div className="flex-1">
         <p className="text-sm">{message.text}</p>
+        {message.extractedData && <ExtractedInfo extractedData={message.extractedData} />}
         <p className="text-xs text-muted-foreground mt-2">{message.timestamp}</p>
       </div>
     </div>

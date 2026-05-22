@@ -24,7 +24,21 @@ const initialTasks: TaskCategory = {
 
 const feedMessages: Message[] = [
     { id: "msg-1", type: "reasoning", text: "Based on your 3-month timeline, I've prioritized visa-related tasks as they often have the longest processing times.", timestamp: "May 22, 2026, 10:00 AM" },
-    { id: "msg-2", type: "update", text: "I've marked 'Gather University Admission Documents' as complete based on the documents you provided.", timestamp: "May 22, 2026, 10:01 AM" },
+    { 
+      id: "msg-5", 
+      type: "update", 
+      text: "I've analyzed your 'acceptance_letter.pdf' and updated your plan. A new task has been added to your finances.", 
+      timestamp: "May 22, 2026, 11:30 AM",
+      extractedData: {
+        title: "acceptance_letter.pdf",
+        data: {
+          "University": "Seoul National University",
+          "Program": "MSc Computer Science",
+          "Tuition Deadline": "2026-07-01",
+          "Reporting Date": "2026-08-25",
+        }
+      }
+    },
     { id: "msg-3", type: "alert", text: "Your visa application should be submitted within the next 10 days to avoid potential processing delays.", timestamp: "May 22, 2026, 10:05 AM" },
     { id: "msg-4", type: "suggestion", text: "Consider looking into student travel insurance. I can help you find some options if you'd like.", timestamp: "May 22, 2026, 10:15 AM" },
 ];

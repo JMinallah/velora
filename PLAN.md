@@ -44,9 +44,9 @@ This document outlines the systematic development phases for building Velora, an
 
 *   **Goal**: Build the interface for document handling and information extraction.
 *   **Tasks**:
-    *   [ ] Design a clean and simple UI for uploading files (PDFs, images).
-    *   [ ] Create a "Documents" view or section where users can see all their uploaded files.
-    *   [ ] Design how extracted information is presented back to the user. For example, an AI message in the feed saying, "I've analyzed your acceptance letter. The tuition deadline is August 15th. I've added it to your timeline."
+    *   [x] Design a clean and simple UI for uploading files (PDFs, images).
+    *   [x] Create a "Documents" view or section where users can see all their uploaded files.
+    *   [x] Design how extracted information is presented back to the user. For example, an AI message in the feed saying, "I've analyzed your acceptance letter. The tuition deadline is August 15th. I've added it to your timeline."
 
 ---
 

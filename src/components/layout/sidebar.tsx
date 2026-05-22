@@ -33,7 +33,7 @@ export function Sidebar() {
               Timeline
             </Link>
             <Link
-              href="#"
+              href="/documents"
               className="flex items-center gap-3 rounded-lg px-3 py-2 text-sidebar-foreground transition-all hover:text-primary"
             >
               <Users className="h-4 w-4" />
