@@ -33,10 +33,10 @@ This document outlines the systematic development phases for building Velora, an
 
 *   **Goal**: Develop the core dashboard interface where the user interacts with the AI and their tasks.
 *   **Tasks**:
-    *   [ ] Design the "AI Coordination Feed," which will be the central, scrollable area displaying AI messages, insights, and reasoning.
-    *   [ ] Create distinct UI components for different types of AI messages (e.g., suggestions, risk alerts, status updates).
-    *   [ ] Build the UI for displaying categorized task lists (e.g., "Visa & Documents," "Finance," "Travel").
-    *   [ ] Implement interactive task items with checkboxes, due dates, and status indicators.
+    *   [x] Design the "AI Coordination Feed," which will be the central, scrollable area displaying AI messages, insights, and reasoning.
+    *   [x] Create distinct UI components for different types of AI messages (e.g., suggestions, risk alerts, status updates).
+    *   [x] Build the UI for displaying categorized task lists (e.g., "Visa & Documents," "Finance," "Travel").
+    *   [x] Implement interactive task items with checkboxes, due dates, and status indicators.
 
 ---
 
