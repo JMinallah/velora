@@ -43,24 +43,41 @@ const messageConfig = {
 };
 
 export function AiMessage({ message }: { message: Message }) {
+  if (message.type === "user") {
+    return (
+      <div className="flex min-w-0 justify-end">
+        <div className="max-w-[82%] min-w-0 rounded-2xl bg-primary px-3 py-2.5 text-primary-foreground shadow-sm">
+          <p className="text-sm whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+            {message.text}
+          </p>
+          <p className="mt-1.5 text-[11px] text-primary-foreground/80">
+            {message.timestamp}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   const config = messageConfig[message.type];
   const Icon = config.icon;
 
   return (
     <div
       className={cn(
-        "flex items-start gap-4 rounded-lg p-4",
+        "flex min-w-0 items-start gap-3 rounded-xl p-3",
         config.bgColor,
         config.textColor,
         config.darkBgColor,
         config.darkTextColor
       )}
     >
-      <Icon className={cn("h-5 w-5 flex-shrink-0 mt-0.5", config.iconColor, config.darkIconColor)} />
-      <div className="flex-1">
-        <p className="text-sm">{message.text}</p>
+      <Icon className={cn("mt-0.5 h-4 w-4 shrink-0", config.iconColor, config.darkIconColor)} />
+      <div className="min-w-0 flex-1">
+        <p className="text-sm leading-6 whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+          {message.text}
+        </p>
         {message.extractedData && <ExtractedInfo extractedData={message.extractedData} />}
-        <p className="text-xs text-muted-foreground mt-2">{message.timestamp}</p>
+        <p className="mt-1.5 text-[11px] text-muted-foreground">{message.timestamp}</p>
       </div>
     </div>
   );

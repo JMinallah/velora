@@ -2,173 +2,378 @@
 
 import { AiMessage } from "@/components/AiMessage";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Message, TaskCategory } from "@/types";
-import { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetDescription,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Textarea } from "@/components/ui/textarea";
+import { missionOrder, missionSeeds, type MissionId } from "@/lib/missions";
+import { Message } from "@/types";
+import { Menu, Plus, Send, X } from "lucide-react";
+import Link from "next/link";
+import { useParams } from "next/navigation";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 
-const initialTasks: TaskCategory = {
-  "Visa & Documents": [
-    { id: "task-1", label: "Apply for Student Visa", completed: false, dueDate: "2026-06-15" },
-    { id: "task-2", label: "Gather University Admission Documents", completed: true, dueDate: "2026-05-30" },
-    { id: "task-3", label: "Submit Proof of Financial Sponsorship", completed: false, dueDate: "2026-06-10" },
-  ],
-  "Finances": [
-    { id: "task-4", label: "Pay First Semester Tuition Fees", completed: false, dueDate: "2026-07-01" },
-    { id: "task-5", label: "Open a South Korean Bank Account", completed: false, dueDate: "2026-08-20" },
-  ],
-  "Travel & Housing": [
-    { id: "task-6", label: "Book Flight to Seoul", completed: false, dueDate: "2026-07-15" },
-    { id: "task-7", label: "Arrange for University Dormitory", completed: false, dueDate: "2026-06-25" },
-  ],
-};
-
-const initialFeedMessages: Message[] = [
-    { id: "msg-1", type: "reasoning", text: "Based on your 3-month timeline, I've prioritized visa-related tasks as they often have the longest processing times.", timestamp: "May 22, 2026, 10:00 AM" },
-    { 
-      id: "msg-5", 
-      type: "update", 
-      text: "I've analyzed your 'acceptance_letter.pdf' and updated your plan. A new task has been added to your finances.", 
-      timestamp: "May 22, 2026, 11:30 AM",
-      extractedData: {
-        title: "acceptance_letter.pdf",
-        data: {
-          "University": "Seoul National University",
-          "Program": "MSc Computer Science",
-          "Tuition Deadline": "2026-07-01",
-          "Reporting Date": "2026-08-25",
-        }
-      }
-    },
-    { id: "msg-3", type: "alert", text: "Your visa application should be submitted within the next 10 days to avoid potential processing delays.", timestamp: "May 22, 2026, 10:05 AM" },
-    { id: "msg-4", type: "suggestion", text: "Consider looking into student travel insurance. I can help you find some options if you'd like.", timestamp: "May 22, 2026, 10:15 AM" },
-];
+function resolveMissionId(value: string | string[] | undefined): MissionId {
+  const candidate = Array.isArray(value) ? value[0] : value;
+  return missionOrder.includes(candidate as MissionId)
+    ? (candidate as MissionId)
+    : "1";
+}
 
 export default function MissionPage() {
-  const [tasks, setTasks] = useState(initialTasks);
-  const [feedMessages, setFeedMessages] = useState(initialFeedMessages);
+  const params = useParams();
+  const activeMissionId = resolveMissionId(params.id);
+  const [draft, setDraft] = useState("");
+  const [missions, setMissions] = useState(missionSeeds);
+  const [attachmentMenuOpen, setAttachmentMenuOpen] = useState(false);
+  const [selectedDocuments, setSelectedDocuments] = useState<string[]>([]);
+  const messageListRef = useRef<HTMLDivElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const handleTaskChange = (taskId: string, completed: boolean) => {
-    const newTasks = { ...tasks };
-    for (const category in newTasks) {
-      const taskIndex = newTasks[category].findIndex(t => t.id === taskId);
-      if (taskIndex !== -1) {
-        newTasks[category][taskIndex].completed = completed;
-        break;
+  const activeMission = missions[activeMissionId] ?? missions["1"];
+
+  useEffect(() => {
+    const container = messageListRef.current;
+    if (!container) return;
+
+    container.scrollTo({ top: container.scrollHeight, behavior: "auto" });
+  }, [activeMissionId, activeMission.messages]);
+
+  useEffect(() => {
+    setSelectedDocuments([]);
+  }, [activeMissionId]);
+
+  const addSelectedDocument = (documentName: string) => {
+    setSelectedDocuments((currentDocuments) => {
+      if (currentDocuments.includes(documentName)) {
+        return currentDocuments;
       }
-    }
-    setTasks(newTasks);
+
+      return [...currentDocuments, documentName];
+    });
+
+    setAttachmentMenuOpen(false);
   };
 
-  const handleSimulateChange = () => {
-    // 1. Create a new reasoning message
-    const newMessage: Message = {
-        id: `msg-${Date.now()}`,
-        type: "reasoning",
-        text: "A delay in your visa application has been detected. I've adjusted the downstream 'Book Flight to Seoul' task to mitigate risk.",
-        timestamp: new Date().toLocaleString(),
+  const handleBrowseDevice = () => {
+    setAttachmentMenuOpen(false);
+    fileInputRef.current?.click();
+  };
+
+  const handleDeviceSelection = (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const files = event.target.files;
+    if (!files?.length) return;
+
+    const fileNames = Array.from(files).map((file) => file.name);
+    setSelectedDocuments((currentDocuments) => {
+      const uniqueNames = fileNames.filter(
+        (fileName) => !currentDocuments.includes(fileName)
+      );
+      return [...currentDocuments, ...uniqueNames];
+    });
+
+    event.target.value = "";
+  };
+
+  const removeSelectedDocument = (documentName: string) => {
+    setSelectedDocuments((currentDocuments) =>
+      currentDocuments.filter((currentDocument) => currentDocument !== documentName)
+    );
+  };
+
+  const handleSendMessage = () => {
+    const trimmed = draft.trim();
+    if (!trimmed && selectedDocuments.length === 0) return;
+
+    const attachmentSummary = selectedDocuments.length
+      ? `Attached documents: ${selectedDocuments.join(", ")}.`
+      : "";
+    const userText =
+      trimmed && attachmentSummary
+        ? `${trimmed}\n\n${attachmentSummary}`
+        : trimmed || attachmentSummary;
+
+    const userMessage: Message = {
+      id: `msg-${Date.now()}`,
+      type: "user",
+      text: userText,
+      timestamp: new Date().toLocaleString(),
     };
 
-    // 2. Update the flight booking task's due date
-    const newTasks = { ...tasks };
-    const travelTaskIndex = newTasks["Travel & Housing"].findIndex(t => t.id === "task-6");
-    if (travelTaskIndex !== -1) {
-        newTasks["Travel & Housing"][travelTaskIndex].dueDate = "2026-07-25"; // Pushed back 10 days
-    }
+    const assistantMessage: Message = {
+      id: `msg-${Date.now()}-reply`,
+      type: "reasoning",
+      text:
+        selectedDocuments.length > 0
+          ? `I’ve attached ${selectedDocuments.length} document${selectedDocuments.length === 1 ? "" : "s"} to this mission context and I’ll include them in follow-up reasoning.`
+          : "I’ve attached that to the active mission context and I’ll keep the timeline focused on this thread.",
+      timestamp: new Date().toLocaleString(),
+    };
 
-    // 3. Update state
-    setFeedMessages([newMessage, ...feedMessages]);
-    setTasks(newTasks);
+    setMissions((currentMissions) => {
+      const currentMission = currentMissions[activeMissionId];
+
+      return {
+        ...currentMissions,
+        [activeMissionId]: {
+          ...currentMission,
+          messages: [...currentMission.messages, userMessage, assistantMessage],
+        },
+      };
+    });
+
+    setDraft("");
+    setSelectedDocuments([]);
   };
 
+  const missionSwitcher = useMemo(
+    () => missionOrder.map((id) => missions[id]),
+    [missions]
+  );
+
+  const MissionPanel = (
+    <div className="flex flex-col gap-1">
+      {missionSwitcher.map((mission) => {
+        const isActive = mission.id === activeMissionId;
+
+        return (
+          <Link
+            key={mission.id}
+            href={`/mission/${mission.id}`}
+            className={`rounded-md px-0 py-1 text-left transition-colors hover:text-foreground ${
+              isActive ? "font-medium text-foreground" : "text-muted-foreground"
+            }`}
+          >
+            <p className="font-medium">{mission.title}</p>
+          </Link>
+        );
+      })}
+
+      <Link
+        href="/onboarding"
+        className="mt-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+      >
+        + New mission
+      </Link>
+    </div>
+  );
+
   return (
-    <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
-      {/* AI Coordination Feed */}
-      <div className="lg:col-span-2 flex flex-col gap-6">
-        <div className="flex items-start justify-between">
-            <div>
-                <h1 className="text-3xl font-bold tracking-tight">
-                Mission: Relocate to South Korea
-                </h1>
-                <p className="text-muted-foreground">
-                Here is your AI-powered transition plan.
-                </p>
+    <div className="grid min-h-[calc(100dvh-3.5rem)] gap-8 xl:grid-cols-[minmax(0,1fr)_260px]">
+      <div className="flex min-h-0 flex-col gap-8">
+        <section className="flex min-h-0 flex-col gap-4">
+          <div className="flex items-start justify-between gap-3">
+            <div className="space-y-1">
+              <h1 className="text-3xl font-bold tracking-tight">
+                {activeMission.title}
+              </h1>
             </div>
-            <Button onClick={handleSimulateChange} variant="outline">Simulate Change</Button>
-        </div>
-        <Card>
-          <CardHeader>
-            <CardTitle>AI Coordination Feed</CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-4">
-            <AnimatePresence>
-              {feedMessages.map((message) => (
-                <motion.div
-                  key={message.id}
-                  layout
-                  initial={{ opacity: 0, y: -20, scale: 0.95 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.95 }}
-                  transition={{ duration: 0.3, ease: "easeOut" }}
+            <Sheet>
+              <SheetTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="fixed top-16 right-4 z-50 gap-2 shadow-sm xl:hidden"
                 >
-                  <AiMessage message={message} />
-                </motion.div>
-              ))}
-            </AnimatePresence>
-          </CardContent>
-        </Card>
+                  <Menu className="h-4 w-4" />
+                  Missions
+                </Button>
+              </SheetTrigger>
+              <SheetContent
+                side="right"
+                hideOverlay
+                className="right-3! top-26! bottom-3! max-h-[70vh]! w-[min(16rem,calc(100vw-1.5rem))]! overflow-hidden rounded-2xl p-4 bg-background backdrop-blur-none"
+              >
+                <SheetHeader>
+                  <SheetTitle>All missions</SheetTitle>
+                  <SheetDescription className="sr-only">
+                    Switch between active missions or create a new one.
+                  </SheetDescription>
+                </SheetHeader>
+                <div className="mt-4 max-h-[calc(100%-3rem)] overflow-y-auto pr-1">
+                  {MissionPanel}
+                </div>
+              </SheetContent>
+            </Sheet>
+          </div>
+
+          <div className="flex h-[calc(100dvh-19rem)] min-h-96 max-h-168 flex-col gap-3 overflow-hidden rounded-2xl bg-background px-3 pt-3 pb-2 md:px-4 md:pt-4 md:pb-2">
+            <div
+              ref={messageListRef}
+              className="min-h-0 flex-1 space-y-3 overflow-x-hidden overflow-y-auto pr-1"
+            >
+              <AnimatePresence initial={false}>
+                {activeMission.messages.map((message) => (
+                  <motion.div
+                    key={message.id}
+                    layout
+                    initial={{ opacity: 0, y: -10, scale: 0.98 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.98 }}
+                    transition={{ duration: 0.25, ease: "easeOut" }}
+                  >
+                    <AiMessage message={message} />
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+            </div>
+
+            <div className="shrink-0 border-t border-border/60 pt-2 md:pt-3">
+              {selectedDocuments.length > 0 && (
+                <div className="mb-3 flex flex-wrap gap-2">
+                  {selectedDocuments.map((documentName) => (
+                    <div
+                      key={documentName}
+                      className="inline-flex max-w-full items-center gap-1 rounded-md border border-border/70 bg-muted/60 px-2 py-1 text-xs"
+                    >
+                      <span className="max-w-40 truncate">{documentName}</span>
+                      <button
+                        type="button"
+                        onClick={() => removeSelectedDocument(documentName)}
+                        aria-label={`Remove ${documentName}`}
+                        className="inline-flex h-4 w-4 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:text-foreground"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <Textarea
+                value={draft}
+                onChange={(event) => setDraft(event.target.value)}
+                placeholder="Ask about deadlines, dependencies, documents, or what should happen next..."
+                className="min-h-12 resize-none border-0 bg-transparent px-0 py-0 text-base leading-5 shadow-none focus-visible:ring-0 md:text-base"
+              />
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                className="hidden"
+                onChange={handleDeviceSelection}
+              />
+
+              <div className="mt-2 flex items-center justify-between gap-2">
+                <Popover open={attachmentMenuOpen} onOpenChange={setAttachmentMenuOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="h-9 w-9 shrink-0"
+                      aria-label="Add documents"
+                    >
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent align="start" className="w-72 p-3">
+                    <div className="space-y-3">
+                      <div>
+                        <p className="text-sm font-medium">Add documents</p>
+                        <p className="text-xs text-muted-foreground">
+                          Attach from this mission or your device.
+                        </p>
+                      </div>
+
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="w-full justify-start"
+                        onClick={handleBrowseDevice}
+                      >
+                        From this device
+                      </Button>
+
+                      <div className="space-y-2">
+                        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                          From uploaded documents
+                        </p>
+                        <div className="max-h-40 space-y-1 overflow-y-auto pr-1">
+                          {activeMission.documents.map((document) => {
+                            const isSelected = selectedDocuments.includes(document.name);
+
+                            return (
+                              <button
+                                key={document.name}
+                                type="button"
+                                onClick={() => addSelectedDocument(document.name)}
+                                className={`w-full rounded-md px-2 py-1.5 text-left text-sm transition-colors ${
+                                  isSelected
+                                    ? "bg-muted text-foreground"
+                                    : "hover:bg-muted/70"
+                                }`}
+                              >
+                                <p className="truncate font-medium">{document.name}</p>
+                                <p className="truncate text-xs text-muted-foreground">
+                                  {document.note}
+                                </p>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+
+                <Button onClick={handleSendMessage} className="gap-2">
+                  <Send className="h-4 w-4" />
+                  Send
+                </Button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="space-y-4 border-t pt-6">
+          <div className="space-y-1">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+              Action history
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              Recorded AI actions linked to the active mission.
+            </p>
+          </div>
+
+          <div className="space-y-4">
+            {activeMission.actions.map((action) => (
+              <div key={action.id} className="flex items-start gap-3">
+                <span className="mt-1 h-2.5 w-2.5 rounded-full bg-primary/70" />
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium">{action.title}</p>
+                  <p className="text-sm text-muted-foreground">{action.details}</p>
+                </div>
+                <time className="shrink-0 text-xs text-muted-foreground">
+                  {action.timestamp}
+                </time>
+              </div>
+            ))}
+          </div>
+        </section>
       </div>
 
-      {/* Task List */}
-      <div className="lg:col-span-1 flex flex-col gap-6">
-        <Card>
-            <CardHeader>
-                <CardTitle>Your Tasks</CardTitle>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-4">
-                <motion.div
-                  variants={{
-                    hidden: { opacity: 0 },
-                    show: {
-                      opacity: 1,
-                      transition: {
-                        staggerChildren: 0.2,
-                      },
-                    },
-                  }}
-                  initial="hidden"
-                  animate="show"
-                >
-                  {Object.entries(tasks).map(([category, taskList]) => (
-                  <motion.div key={category} variants={{ hidden: { opacity: 0, y: 20 }, show: { opacity: 1, y: 0 } }} transition={{ duration: 0.3 }}>
-                      <h3 className="text-lg font-semibold mb-2">{category}</h3>
-                      <div className="flex flex-col gap-3">
-                      {taskList.map((task) => (
-                          <div key={task.id} className="flex items-start gap-3 p-3 rounded-md bg-secondary/50">
-                          <Checkbox 
-                              id={task.id} 
-                              checked={task.completed} 
-                              onCheckedChange={(checked) => handleTaskChange(task.id, !!checked)}
-                              className="mt-1" 
-                          />
-                          <div className="grid gap-0.5">
-                              <label htmlFor={task.id} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                              {task.label}
-                              </label>
-                              <p className="text-xs text-muted-foreground">
-                              Due: {task.dueDate}
-                              </p>
-                          </div>
-                          </div>
-                      ))}
-                      </div>
-                  </motion.div>
-                  ))}
-                </motion.div>
-            </CardContent>
-        </Card>
-      </div>
+      <aside className="hidden h-fit xl:sticky xl:top-24 xl:flex xl:flex-col rounded-2xl bg-muted/20 p-4">
+        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+          Missions
+        </h2>
+        <div className="max-h-[calc(100vh-8rem)] overflow-y-auto pr-1">
+          {MissionPanel}
+        </div>
+      </aside>
     </div>
   );
 }

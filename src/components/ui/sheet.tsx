@@ -49,17 +49,21 @@ function SheetOverlay({
 
 type SheetContentProps = React.ComponentProps<typeof DialogPrimitive.Content> & {
   side?: "top" | "right" | "bottom" | "left"
+  hideOverlay?: boolean
+  overlayClassName?: string
 }
 
 function SheetContent({
   side = "right",
+  hideOverlay = false,
+  overlayClassName,
   className,
   children,
   ...props
 }: SheetContentProps) {
   return (
     <SheetPortal>
-      <SheetOverlay />
+      {!hideOverlay && <SheetOverlay className={overlayClassName} />}
       <DialogPrimitive.Content
         data-slot="sheet-content"
         className={cn(

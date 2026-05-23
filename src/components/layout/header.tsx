@@ -4,6 +4,7 @@ import {
   Sheet,
   SheetContent,
   SheetHeader,
+  SheetDescription,
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
@@ -43,7 +44,7 @@ export function Header() {
   ];
 
   return (
-    <header className="flex h-14 items-center gap-4 border-b bg-background px-4 lg:h-15 lg:px-6">
+    <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background/90 px-4 shadow-sm supports-backdrop-filter:backdrop-blur lg:h-15 lg:px-6">
       <Link href="/" className="flex items-center gap-2 font-semibold md:hidden">
         <Package2 className="h-6 w-6 text-primary" />
         <span>Velora</span>
@@ -61,6 +62,9 @@ export function Header() {
           <SheetContent side="left" className="flex flex-col">
             <SheetHeader>
               <SheetTitle className="sr-only">Navigation menu</SheetTitle>
+              <SheetDescription className="sr-only">
+                Navigate between dashboard, timeline, and documents.
+              </SheetDescription>
             </SheetHeader>
             <nav className="grid gap-2 text-lg font-medium">
               <Link
