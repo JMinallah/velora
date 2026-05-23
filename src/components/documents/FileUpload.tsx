@@ -37,6 +37,9 @@ export function FileUpload() {
           </p>
         )}
         <p className="text-xs text-muted-foreground">PDF, PNG, JPG, or DOCX</p>
+        {files.length > 0 ? (
+          <p className="text-xs text-foreground">{files.length} file(s) selected</p>
+        ) : null}
       </div>
     </div>
   );

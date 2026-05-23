@@ -28,15 +28,15 @@ export default function OnboardingPage() {
           <CardHeader className="text-center">
             <CardTitle className="text-2xl">Welcome to Velora</CardTitle>
             <CardDescription>
-              Let's start by defining your mission. Describe the life transition
-              you're navigating.
+              Let&apos;s start by defining your mission. Describe the life transition
+              you&apos;re navigating.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="flex flex-col gap-4">
               <Textarea
                 placeholder="For example: 'I’m moving from Uganda to South Korea for university in 3 months. I need to handle my visa, find housing, and manage my budget.'"
-                className="min-h-[120px] resize-none"
+                className="min-h-30 resize-none"
               />
               <Button type="submit" className="w-full">
                 Generate My Transition Plan
