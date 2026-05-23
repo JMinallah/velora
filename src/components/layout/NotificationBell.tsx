@@ -47,7 +47,12 @@ export function NotificationBell() {
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button variant="outline" size="icon" className="relative ml-auto h-8 w-8">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="relative h-9 w-9 rounded-full"
+          aria-label="Open notifications"
+        >
           <Bell className="h-4 w-4" />
           {unreadCount > 0 && (
             <span className="absolute top-0 right-0 flex h-2 w-2">
@@ -58,7 +63,7 @@ export function NotificationBell() {
           <span className="sr-only">Toggle notifications</span>
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-[350px]">
+      <PopoverContent align="end" className="w-80">
         <div className="flex items-center justify-between mb-4">
             <h4 className="font-medium text-sm">Notifications</h4>
             <Button variant="link" size="sm" className="text-xs">Mark all as read</Button>
