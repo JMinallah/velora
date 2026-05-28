@@ -21,9 +21,9 @@ export default function RootLayout({
       <body className="min-h-full">
         <div className="grid min-h-screen w-full md:grid-cols-[220px_1fr] lg:grid-cols-[280px_1fr]">
           <Sidebar />
-          <div className="flex flex-col">
+          <div className="flex flex-col bg-background">
             <Header />
-            <main className="flex min-h-0 flex-1 flex-col gap-4 p-4 lg:gap-6 lg:p-6">
+            <main className="flex min-h-0 flex-1 flex-col gap-4 bg-muted/35 p-4 lg:gap-6 lg:p-6">
               {children}
             </main>
           </div>

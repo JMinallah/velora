@@ -11,12 +11,32 @@ import {
 import { NotificationBell } from "./NotificationBell";
 import { Home, LineChart, Menu, Package2, Users } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { useState, type MouseEvent } from "react";
 
 export function Header() {
   const pathname = usePathname();
+  const router = useRouter();
   const [open, setOpen] = useState(false);
+
+  const handleNavClick = (
+    event: MouseEvent<HTMLAnchorElement>,
+    href: string,
+  ) => {
+    if (
+      event.button !== 0 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey
+    ) {
+      return;
+    }
+
+    event.preventDefault();
+    setOpen(false);
+    router.push(href);
+  };
 
   const isDashboardActive = pathname === "/";
   const isTimelineActive = pathname.startsWith("/mission");
@@ -44,7 +64,7 @@ export function Header() {
   ];
 
   return (
-    <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background/90 px-4 shadow-sm supports-backdrop-filter:backdrop-blur lg:h-15 lg:px-6">
+    <header className="sticky top-0 flex h-14 items-center gap-4 bg-sidebar/95 px-4 shadow-sm supports-backdrop-filter:backdrop-blur lg:h-15 lg:px-6">
       <Link href="/" className="flex items-center gap-2 font-semibold md:hidden">
         <Package2 className="h-6 w-6 text-primary" />
         <span>Velora</span>
@@ -69,7 +89,7 @@ export function Header() {
             <nav className="grid gap-2 text-lg font-medium">
               <Link
                 href="/"
-                onClick={() => setOpen(false)}
+                onClick={(event) => handleNavClick(event, "/")}
                 className="flex items-center gap-2 text-lg font-semibold"
               >
                 <Package2 className="h-6 w-6 text-primary" />
@@ -82,7 +102,7 @@ export function Header() {
                   <Link
                     key={item.href}
                     href={item.href}
-                    onClick={() => setOpen(false)}
+                    onClick={(event) => handleNavClick(event, item.href)}
                       className={`mx-[-0.65rem] flex items-center gap-4 rounded-xl px-3 py-2 hover:text-foreground ${
                         index === 0 ? "mt-3" : ""
                       } ${
