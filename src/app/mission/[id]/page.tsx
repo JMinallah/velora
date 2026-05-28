@@ -37,11 +37,17 @@ export default function MissionPage() {
   const [draft, setDraft] = useState("");
   const [missions, setMissions] = useState(missionSeeds);
   const [attachmentMenuOpen, setAttachmentMenuOpen] = useState(false);
-  const [selectedDocuments, setSelectedDocuments] = useState<string[]>([]);
+  const [selectedDocumentsByMission, setSelectedDocumentsByMission] = useState(
+    () =>
+      Object.fromEntries(
+        missionOrder.map((id) => [id, [] as string[]])
+      ) as Record<MissionId, string[]>
+  );
   const messageListRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const activeMission = missions[activeMissionId] ?? missions["1"];
+  const selectedDocuments = selectedDocumentsByMission[activeMissionId] ?? [];
 
   useEffect(() => {
     const container = messageListRef.current;
@@ -50,17 +56,18 @@ export default function MissionPage() {
     container.scrollTo({ top: container.scrollHeight, behavior: "auto" });
   }, [activeMissionId, activeMission.messages]);
 
-  useEffect(() => {
-    setSelectedDocuments([]);
-  }, [activeMissionId]);
-
   const addSelectedDocument = (documentName: string) => {
-    setSelectedDocuments((currentDocuments) => {
+    setSelectedDocumentsByMission((currentDocumentsByMission) => {
+      const currentDocuments = currentDocumentsByMission[activeMissionId] ?? [];
+
       if (currentDocuments.includes(documentName)) {
-        return currentDocuments;
+        return currentDocumentsByMission;
       }
 
-      return [...currentDocuments, documentName];
+      return {
+        ...currentDocumentsByMission,
+        [activeMissionId]: [...currentDocuments, documentName],
+      };
     });
 
     setAttachmentMenuOpen(false);
@@ -78,20 +85,28 @@ export default function MissionPage() {
     if (!files?.length) return;
 
     const fileNames = Array.from(files).map((file) => file.name);
-    setSelectedDocuments((currentDocuments) => {
+    setSelectedDocumentsByMission((currentDocumentsByMission) => {
+      const currentDocuments = currentDocumentsByMission[activeMissionId] ?? [];
       const uniqueNames = fileNames.filter(
         (fileName) => !currentDocuments.includes(fileName)
       );
-      return [...currentDocuments, ...uniqueNames];
+
+      return {
+        ...currentDocumentsByMission,
+        [activeMissionId]: [...currentDocuments, ...uniqueNames],
+      };
     });
 
     event.target.value = "";
   };
 
   const removeSelectedDocument = (documentName: string) => {
-    setSelectedDocuments((currentDocuments) =>
-      currentDocuments.filter((currentDocument) => currentDocument !== documentName)
-    );
+    setSelectedDocumentsByMission((currentDocumentsByMission) => ({
+      ...currentDocumentsByMission,
+      [activeMissionId]: (currentDocumentsByMission[activeMissionId] ?? []).filter(
+        (currentDocument) => currentDocument !== documentName
+      ),
+    }));
   };
 
   const handleSendMessage = () => {
@@ -136,7 +151,10 @@ export default function MissionPage() {
     });
 
     setDraft("");
-    setSelectedDocuments([]);
+    setSelectedDocumentsByMission((currentDocumentsByMission) => ({
+      ...currentDocumentsByMission,
+      [activeMissionId]: [],
+    }));
   };
 
   const missionSwitcher = useMemo(
@@ -172,9 +190,9 @@ export default function MissionPage() {
   );
 
   return (
-    <div className="grid min-h-[calc(100dvh-3.5rem)] gap-8 xl:grid-cols-[minmax(0,1fr)_260px]">
-      <div className="flex min-h-0 flex-col gap-8">
-        <section className="flex min-h-0 flex-col gap-4">
+    <div className="grid gap-8 xl:min-h-[calc(100dvh-3.5rem)] xl:grid-cols-[minmax(0,1fr)_260px]">
+      <div className="flex min-h-0 flex-col gap-8 xl:min-h-[calc(100dvh-3.5rem)]">
+        <section className="flex min-h-0 flex-col gap-4 xl:flex-1">
           <div className="flex items-start justify-between gap-3">
             <div className="space-y-1">
               <h1 className="text-3xl font-bold tracking-tight">
@@ -210,7 +228,7 @@ export default function MissionPage() {
             </Sheet>
           </div>
 
-          <div className="flex h-[calc(100dvh-19rem)] min-h-96 max-h-168 flex-col gap-3 overflow-hidden rounded-2xl bg-background px-3 pt-3 pb-2 md:px-4 md:pt-4 md:pb-2">
+          <div className="flex min-h-0 max-h-[calc(100dvh-16rem)] flex-col gap-3 overflow-hidden rounded-2xl bg-background px-3 pt-3 pb-2 md:max-h-[calc(100dvh-17rem)] md:px-4 md:pt-4 md:pb-2 xl:max-h-none xl:flex-1">
             <div
               ref={messageListRef}
               className="min-h-0 flex-1 space-y-3 overflow-x-hidden overflow-y-auto pr-1"
@@ -339,7 +357,7 @@ export default function MissionPage() {
           </div>
         </section>
 
-        <section className="space-y-4 border-t pt-6">
+        <section className="space-y-4 pt-2 xl:mt-auto">
           <div className="space-y-1">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
               Action history
