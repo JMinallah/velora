@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
 import { buildMissionChatContext, sendGeminiChat } from "@/lib/gemini-chat";
+import type { DocumentRecord, MessageRecord, MissionRecord, TaskRecord } from "@/lib/mongodb/models";
 import { Message } from "@/types";
 import { Menu, Plus, Send, X } from "lucide-react";
 import Link from "next/link";
@@ -31,10 +32,23 @@ function resolveMissionId(value: string | string[] | undefined, availableIds: st
   return availableIds.includes(candidate) ? candidate : availableIds[0] ?? candidate
 }
 
+type MissionViewModel = MissionRecord & {
+  tasks: TaskRecord[];
+  messages: MessageRecord[];
+  documents: DocumentRecord[];
+};
+
+function formatTaskLabel(task: TaskRecord) {
+  const bits = [task.category, task.priority ? task.priority : null].filter(Boolean)
+  return bits.join(" · ")
+}
+
 export default function MissionPage() {
   const params = useParams();
   const [draft, setDraft] = useState("");
-  const [missions, setMissions] = useState<Record<string, any>>({});
+  const [missions, setMissions] = useState<Record<string, MissionViewModel>>({});
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const paramsForResolve = params.id
   const availableIds = Object.keys(missions)
   const activeMissionId = resolveMissionId(paramsForResolve, availableIds)
@@ -45,7 +59,7 @@ export default function MissionPage() {
   const messageListRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const activeMission = missions[activeMissionId] ?? Object.values(missions)[0] ?? { id: "", title: "", subtitle: "", messages: [] };
+  const activeMission = missions[activeMissionId] ?? Object.values(missions)[0] ?? { id: "", title: "", subtitle: "", messages: [], tasks: [], documents: [], createdAt: "", updatedAt: "" };
   const selectedDocuments = selectedDocumentsByMission[activeMissionId] ?? [];
 
   useEffect(() => {
@@ -61,17 +75,27 @@ export default function MissionPage() {
 
     async function loadMissions() {
       try {
+        setIsLoading(true)
+        setError(null)
+
         const res = await fetch(`/api/missions`)
-        const json = await res.json()
+        const json = await res.json().catch(() => ({}))
         if (!json?.success) throw new Error(json?.error || 'failed')
 
         const map = Object.fromEntries(
-          (json.data || []).map((m: any) => [m.id, { ...m, messages: [], tasks: [] }])
-        )
+          (json.data || []).map((m: MissionRecord) => [m.id, { ...m, messages: [], tasks: [], documents: [] }])
+        ) as Record<string, MissionViewModel>
 
         if (!cancelled) setMissions(map)
       } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : 'Failed to load missions')
+        }
         console.error('Failed to load missions', err)
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false)
+        }
       }
     }
 
@@ -88,16 +112,19 @@ export default function MissionPage() {
 
     async function loadDetails(id: string) {
       try {
-        const [tasksRes, messagesRes] = await Promise.all([
+        const [tasksRes, messagesRes, documentsRes] = await Promise.all([
           fetch(`/api/missions/${id}/tasks`),
           fetch(`/api/missions/${id}/messages`),
+          fetch(`/api/missions/${id}/documents`),
         ])
 
         const tasksJson = await tasksRes.json()
         const messagesJson = await messagesRes.json()
+        const documentsJson = await documentsRes.json()
 
         if (!tasksJson?.success && tasksRes.ok) throw new Error('Failed to fetch tasks')
         if (!messagesJson?.success && messagesRes.ok) throw new Error('Failed to fetch messages')
+        if (!documentsJson?.success && documentsRes.ok) throw new Error('Failed to fetch documents')
 
         if (cancelled) return
 
@@ -107,10 +134,14 @@ export default function MissionPage() {
             ...(current[id] ?? {}),
             tasks: tasksJson?.data ?? [],
             messages: messagesJson?.data ?? [],
+            documents: documentsJson?.data ?? [],
           },
         }))
       } catch (err) {
         console.error('Failed to load mission details', err)
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : 'Failed to load mission details')
+        }
       }
     }
 
@@ -203,16 +234,6 @@ export default function MissionPage() {
       timestamp: new Date().toLocaleString(),
     };
 
-    const assistantMessage: Message = {
-      id: `msg-${Date.now()}-reply`,
-      type: "reasoning",
-      text:
-        selectedDocuments.length > 0
-          ? `I’ve attached ${selectedDocuments.length} document${selectedDocuments.length === 1 ? "" : "s"} to this mission context and I’ll include them in follow-up reasoning.`
-          : "I’ve attached that to the active mission context and I’ll keep the timeline focused on this thread.",
-      timestamp: new Date().toLocaleString(),
-    };
-
     setMissions((currentMissions) => {
       const currentMission = currentMissions[activeMissionId];
 
@@ -220,7 +241,7 @@ export default function MissionPage() {
         ...currentMissions,
         [activeMissionId]: {
           ...currentMission,
-          messages: [...currentMission.messages, userMessage, assistantMessage],
+          messages: [...currentMission.messages, userMessage],
         },
       };
     });
@@ -234,6 +255,20 @@ export default function MissionPage() {
     setIsSending(true);
 
     try {
+      const userResponse = await fetch(`/api/missions/${missionId}/messages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "user",
+          text: userText,
+        }),
+      })
+
+      const userData = await userResponse.json().catch(() => ({}))
+      if (!userResponse.ok || !userData?.success) {
+        throw new Error(userData?.error || "Failed to save user message")
+      }
+
       const assistantText = await sendGeminiChat({
         message: trimmed || attachmentSummary,
         history: missionSnapshot.messages.map((message) => ({
@@ -249,6 +284,20 @@ export default function MissionPage() {
         text: assistantText,
         timestamp: new Date().toLocaleString(),
       };
+
+      const assistantResponse = await fetch(`/api/missions/${missionId}/messages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "reasoning",
+          text: assistantText,
+        }),
+      })
+
+      const assistantData = await assistantResponse.json().catch(() => ({}))
+      if (!assistantResponse.ok || !assistantData?.success) {
+        throw new Error(assistantData?.error || "Failed to save assistant message")
+      }
 
       setMissions((currentMissions) => {
         const currentMission = currentMissions[missionId];
@@ -291,6 +340,9 @@ export default function MissionPage() {
     () => Object.values(missions),
     [missions]
   );
+
+  const activeMissionDocuments = activeMission.documents;
+  const activeMissionTasks = activeMission.tasks;
 
   const MissionPanel = (
     <div className="flex flex-col gap-1">
@@ -357,6 +409,18 @@ export default function MissionPage() {
               </SheetContent>
             </Sheet>
           </div>
+
+          {isLoading ? (
+            <div className="rounded-2xl border border-border/20 bg-muted/20 p-4 text-sm text-muted-foreground">
+              Loading mission data...
+            </div>
+          ) : null}
+
+          {error ? (
+            <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300">
+              {error}
+            </div>
+          ) : null}
 
           {latestPlan && (
             <div className="rounded-2xl border border-border/20 bg-muted/20 p-4 text-sm text-muted-foreground">
@@ -460,7 +524,7 @@ export default function MissionPage() {
                           From uploaded documents
                         </p>
                         <div className="max-h-40 space-y-1 overflow-y-auto pr-1">
-                          {activeMission.documents.map((document) => {
+                          {activeMissionDocuments.map((document) => {
                             const isSelected = selectedDocuments.includes(document.name);
 
                             return (
@@ -499,24 +563,25 @@ export default function MissionPage() {
         <section className="space-y-4 pt-2 xl:mt-auto">
           <div className="space-y-1">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-              Action history
+              Mission tasks
             </h2>
             <p className="text-sm text-muted-foreground">
-              Recorded AI actions linked to the active mission.
+              Recorded work items linked to the active mission.
             </p>
           </div>
 
           <div className="space-y-4">
-            {activeMission.actions.map((action) => (
+            {activeMissionTasks.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No tasks yet.</p>
+            ) : null}
+            {activeMissionTasks.map((action) => (
               <div key={action.id} className="flex items-start gap-3">
                 <span className="mt-1 h-2.5 w-2.5 rounded-full bg-primary/70" />
                 <div className="min-w-0 flex-1">
-                  <p className="font-medium">{action.title}</p>
-                  <p className="text-sm text-muted-foreground">{action.details}</p>
+                  <p className="font-medium">{action.label}</p>
+                  <p className="text-sm text-muted-foreground">{formatTaskLabel(action)}</p>
                 </div>
-                <time className="shrink-0 text-xs text-muted-foreground">
-                  {action.timestamp}
-                </time>
+                <time className="shrink-0 text-xs text-muted-foreground">{action.createdAt}</time>
               </div>
             ))}
           </div>

@@ -1,26 +1,26 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FileText, ImageIcon, File as FileIcon } from "lucide-react";
+import type { DocumentRecord } from "@/lib/mongodb/models";
 
-type Document = {
-  name: string;
-  type: "pdf" | "image" | "other";
-  size: string;
-};
+function getDocumentIcon(mimeType: string) {
+  if (mimeType.startsWith("image/")) {
+    return <ImageIcon className="h-6 w-6 text-blue-500" />;
+  }
 
-const mockDocuments: Document[] = [
-  { name: "acceptance_letter.pdf", type: "pdf", size: "1.2 MB" },
-  { name: "passport_scan.jpg", type: "image", size: "850 KB" },
-  { name: "financial_statement.pdf", type: "pdf", size: "2.5 MB" },
-  { name: "visa_requirements.docx", type: "other", size: "300 KB" },
-];
+  if (mimeType.includes("pdf")) {
+    return <FileText className="h-6 w-6 text-red-500" />;
+  }
 
-const iconMap = {
-  pdf: <FileText className="h-6 w-6 text-red-500" />,
-  image: <ImageIcon className="h-6 w-6 text-blue-500" />,
-  other: <FileIcon className="h-6 w-6 text-gray-500" />,
-};
+  return <FileIcon className="h-6 w-6 text-gray-500" />;
+}
 
-export function DocumentList() {
+function getDocumentKind(mimeType: string) {
+  if (mimeType.startsWith("image/")) return "Image";
+  if (mimeType.includes("pdf")) return "PDF";
+  return "File";
+}
+
+export function DocumentList({ documents }: { documents: DocumentRecord[] }) {
   return (
     <Card>
       <CardHeader>
@@ -28,15 +28,20 @@ export function DocumentList() {
       </CardHeader>
       <CardContent>
         <div className="grid gap-4">
-          {mockDocuments.map((doc, index) => (
-            <div key={index} className="flex items-center gap-4 p-3 rounded-lg bg-secondary/50">
-              <div className="flex-shrink-0">{iconMap[doc.type]}</div>
+          {documents.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No documents attached yet.</p>
+          ) : (
+            documents.map((doc) => (
+            <div key={doc.id} className="flex items-center gap-4 rounded-lg bg-secondary/50 p-3">
+              <div className="flex-shrink-0">{getDocumentIcon(doc.mimeType)}</div>
               <div className="flex-1">
                 <p className="text-sm font-medium">{doc.name}</p>
-                <p className="text-xs text-muted-foreground">{doc.size}</p>
+                <p className="text-xs text-muted-foreground">{getDocumentKind(doc.mimeType)}</p>
+                {doc.summary ? <p className="mt-1 text-xs text-muted-foreground">{doc.summary}</p> : null}
               </div>
             </div>
-          ))}
+            ))
+          )}
         </div>
       </CardContent>
     </Card>

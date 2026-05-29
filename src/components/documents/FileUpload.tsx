@@ -1,17 +1,59 @@
 "use client";
 
+import { useState } from "react";
 import { UploadCloud } from "lucide-react";
-import { useMemo, useState } from "react";
 import { useDropzone } from "react-dropzone";
+import type { DocumentRecord } from "@/lib/mongodb/models";
 
-export function FileUpload() {
+export function FileUpload({
+  missionId,
+  onUploaded,
+}: {
+  missionId: string;
+  onUploaded?: (document: DocumentRecord) => void;
+}) {
   const [files, setFiles] = useState<File[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  function inferStorageUrl(file: File) {
+    return `local://${encodeURIComponent(file.name)}`;
+  }
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    onDrop: (acceptedFiles) => {
+    onDrop: async (acceptedFiles) => {
+      setError(null);
       setFiles(acceptedFiles);
-      // Here you would typically handle the file upload to your server
-      console.log(acceptedFiles);
+
+      if (!missionId || acceptedFiles.length === 0) return;
+
+      setIsUploading(true);
+      try {
+        for (const file of acceptedFiles) {
+          const response = await fetch(`/api/missions/${missionId}/documents`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: file.name,
+              mimeType: file.type || "application/octet-stream",
+              storageUrl: inferStorageUrl(file),
+              summary: "Uploaded from Velora UI",
+            }),
+          });
+
+          const data = await response.json().catch(() => ({}));
+
+          if (!response.ok || !data?.success) {
+            throw new Error(data?.error || "Failed to upload document")
+          }
+
+          onUploaded?.(data.data);
+        }
+      } catch (uploadError) {
+        setError(uploadError instanceof Error ? uploadError.message : "Upload failed");
+      } finally {
+        setIsUploading(false);
+      }
     },
   });
 
@@ -19,10 +61,7 @@ export function FileUpload() {
   const inactiveStyle = "border-border hover:border-primary/50 bg-secondary/30 hover:bg-secondary/60";
   const activeStyle = "border-primary bg-primary/10";
 
-  const style = useMemo(
-    () => `${baseStyle} ${isDragActive ? activeStyle : inactiveStyle}`,
-    [isDragActive, baseStyle, activeStyle, inactiveStyle]
-  );
+  const style = `${baseStyle} ${isDragActive ? activeStyle : inactiveStyle}`;
 
   return (
     <div {...getRootProps({ className: style })}>
@@ -40,6 +79,8 @@ export function FileUpload() {
         {files.length > 0 ? (
           <p className="text-xs text-foreground">{files.length} file(s) selected</p>
         ) : null}
+        {isUploading ? <p className="text-xs text-muted-foreground">Uploading...</p> : null}
+        {error ? <p className="text-xs text-red-500">{error}</p> : null}
       </div>
     </div>
   );
