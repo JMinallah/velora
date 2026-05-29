@@ -17,7 +17,6 @@ import {
 } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
 import { buildMissionChatContext, sendGeminiChat } from "@/lib/gemini-chat";
-import { missionOrder, missionSeeds, type MissionId } from "@/lib/missions";
 import { Message } from "@/types";
 import { Menu, Plus, Send, X } from "lucide-react";
 import Link from "next/link";
@@ -26,31 +25,27 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { loadLatestTransitionPlan } from "@/lib/coordination/session";
 
-function resolveMissionId(value: string | string[] | undefined): MissionId {
+function resolveMissionId(value: string | string[] | undefined, availableIds: string[]) {
   const candidate = Array.isArray(value) ? value[0] : value;
-  return missionOrder.includes(candidate as MissionId)
-    ? (candidate as MissionId)
-    : "1";
+  if (!candidate) return availableIds[0] ?? ""
+  return availableIds.includes(candidate) ? candidate : availableIds[0] ?? candidate
 }
 
 export default function MissionPage() {
   const params = useParams();
-  const activeMissionId = resolveMissionId(params.id);
   const [draft, setDraft] = useState("");
-  const [missions, setMissions] = useState(missionSeeds);
+  const [missions, setMissions] = useState<Record<string, any>>({});
+  const paramsForResolve = params.id
+  const availableIds = Object.keys(missions)
+  const activeMissionId = resolveMissionId(paramsForResolve, availableIds)
   const [attachmentMenuOpen, setAttachmentMenuOpen] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [latestPlan, setLatestPlan] = useState("");
-  const [selectedDocumentsByMission, setSelectedDocumentsByMission] = useState(
-    () =>
-      Object.fromEntries(
-        missionOrder.map((id) => [id, [] as string[]])
-      ) as Record<MissionId, string[]>
-  );
+  const [selectedDocumentsByMission, setSelectedDocumentsByMission] = useState<Record<string, string[]>>(() => ({}));
   const messageListRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const activeMission = missions[activeMissionId] ?? missions["1"];
+  const activeMission = missions[activeMissionId] ?? Object.values(missions)[0] ?? { id: "", title: "", subtitle: "", messages: [] };
   const selectedDocuments = selectedDocumentsByMission[activeMissionId] ?? [];
 
   useEffect(() => {
@@ -59,6 +54,70 @@ export default function MissionPage() {
 
     container.scrollTo({ top: container.scrollHeight, behavior: "auto" });
   }, [activeMissionId, activeMission.messages]);
+
+  // Fetch missions list on mount
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadMissions() {
+      try {
+        const res = await fetch(`/api/missions`)
+        const json = await res.json()
+        if (!json?.success) throw new Error(json?.error || 'failed')
+
+        const map = Object.fromEntries(
+          (json.data || []).map((m: any) => [m.id, { ...m, messages: [], tasks: [] }])
+        )
+
+        if (!cancelled) setMissions(map)
+      } catch (err) {
+        console.error('Failed to load missions', err)
+      }
+    }
+
+    loadMissions()
+
+    return () => { cancelled = true }
+  }, [])
+
+  // Load tasks and messages for active mission
+  useEffect(() => {
+    if (!activeMissionId) return
+
+    let cancelled = false
+
+    async function loadDetails(id: string) {
+      try {
+        const [tasksRes, messagesRes] = await Promise.all([
+          fetch(`/api/missions/${id}/tasks`),
+          fetch(`/api/missions/${id}/messages`),
+        ])
+
+        const tasksJson = await tasksRes.json()
+        const messagesJson = await messagesRes.json()
+
+        if (!tasksJson?.success && tasksRes.ok) throw new Error('Failed to fetch tasks')
+        if (!messagesJson?.success && messagesRes.ok) throw new Error('Failed to fetch messages')
+
+        if (cancelled) return
+
+        setMissions((current) => ({
+          ...current,
+          [id]: {
+            ...(current[id] ?? {}),
+            tasks: tasksJson?.data ?? [],
+            messages: messagesJson?.data ?? [],
+          },
+        }))
+      } catch (err) {
+        console.error('Failed to load mission details', err)
+      }
+    }
+
+    loadDetails(activeMissionId)
+
+    return () => { cancelled = true }
+  }, [activeMissionId])
 
   useEffect(() => {
     setLatestPlan(loadLatestTransitionPlan());
@@ -229,7 +288,7 @@ export default function MissionPage() {
   };
 
   const missionSwitcher = useMemo(
-    () => missionOrder.map((id) => missions[id]),
+    () => Object.values(missions),
     [missions]
   );
 
