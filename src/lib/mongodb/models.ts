@@ -1,4 +1,4 @@
-import type { MissionAction, Message, Task, TaskCategory } from "@/types"
+import type { Message } from "@/types"
 
 export const COLLECTIONS = {
   missions: "missions",
@@ -77,5 +77,5 @@ export type EventRecord = {
     | "replan-generated"
   actor: "user" | "agent" | "system"
   payload: Record<string, unknown>
-  createdAt: string
+  createdAt: string | Date
 }

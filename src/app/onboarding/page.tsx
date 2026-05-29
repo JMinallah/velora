@@ -45,7 +45,46 @@ export default function OnboardingPage() {
       const generatedPlan = data.response || "No plan returned.";
       setPlan(generatedPlan);
       saveLatestTransitionPlan(generatedPlan);
-      router.push("/mission/1");
+
+      // Create a mission from the onboarding result
+      try {
+        const missionRes = await fetch(`/api/missions`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: trimmedGoal,
+            subtitle: deadline.trim() || undefined,
+            overview: generatedPlan,
+            nextStep: "Review plan and begin execution",
+            source: "onboarding",
+          }),
+        })
+
+        const missionData = await missionRes.json().catch(() => ({}))
+        if (!missionRes.ok || !missionData?.success) {
+          throw new Error(missionData?.error || "Failed to create mission")
+        }
+
+        const mission = missionData.data
+
+        // Create initial tasks by splitting the plan into lines (pick up to 3)
+        const lines = generatedPlan.split("\n").map((l) => l.trim()).filter(Boolean)
+        const initialTasks = lines.slice(0, 3)
+
+        for (const line of (initialTasks.length ? initialTasks : ["Review the generated plan"])) {
+          await fetch(`/api/missions/${mission.id}/tasks`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ label: line, category: "Initial", priority: "medium" }),
+          })
+        }
+
+        router.push(`/mission/${mission.id}`)
+      } catch (err) {
+        console.error("Failed to create mission/tasks from onboarding", err)
+        // fallback: go to default mission page
+        router.push("/mission/1")
+      }
     } catch (error) {
       console.error("Onboarding error:", error);
       setPlan(error instanceof Error ? error.message : "Failed to generate plan.");

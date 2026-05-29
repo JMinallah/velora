@@ -1,4 +1,5 @@
 import { MongoClient, Db } from "mongodb"
+import { ensureIndexes } from "./indexes"
 
 const uri = process.env.MONGODB_URI || ""
 const dbName = process.env.MONGODB_DB || "velora_dev"
@@ -20,6 +21,12 @@ export async function getDb(): Promise<Db> {
   const client = await getClient()
   const db = client.db(dbName)
   cachedDb = db
+  // ensure indexes once when we first create the db reference
+  try {
+    await ensureIndexes(db)
+  } catch (err) {
+    console.error("Error ensuring indexes:", err)
+  }
   return db
 }
 

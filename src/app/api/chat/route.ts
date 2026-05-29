@@ -82,11 +82,12 @@ export async function POST(request: Request) {
         headers: { "Content-Type": "application/json" },
       }
     )
-  } catch (error: any) {
-    console.error("Gemini API Error:", error)
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error)
+    console.error("Gemini API Error:", message)
     return new Response(
       JSON.stringify({
-        error: error?.message || "Failed to get response from Gemini",
+        error: message || "Failed to get response from Gemini",
       }),
       {
         status: 500,

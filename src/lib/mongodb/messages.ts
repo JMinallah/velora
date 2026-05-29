@@ -18,7 +18,7 @@ export async function createMessage(input: Partial<MessageRecord>): Promise<Mess
   const msg: MessageRecord = {
     id: input.id ?? uuidv4(),
     missionId: input.missionId as string,
-    type: input.type as any,
+    type: (input.type as MessageRecord['type']) ?? "reasoning",
     text: input.text ?? "",
     timestamp: input.timestamp ?? now,
     extractedData: input.extractedData,

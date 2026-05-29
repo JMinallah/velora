@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
 import { buildMissionChatContext, sendGeminiChat } from "@/lib/gemini-chat";
-import type { DocumentRecord, MessageRecord, MissionRecord, TaskRecord } from "@/lib/mongodb/models";
+import type { DocumentRecord, MessageRecord, MissionRecord, TaskRecord, EventRecord } from "@/lib/mongodb/models";
 import { Message } from "@/types";
 import { Menu, Plus, Send, X } from "lucide-react";
 import Link from "next/link";
@@ -36,6 +36,7 @@ type MissionViewModel = MissionRecord & {
   tasks: TaskRecord[];
   messages: MessageRecord[];
   documents: DocumentRecord[];
+  events?: EventRecord[];
 };
 
 function formatTaskLabel(task: TaskRecord) {
@@ -54,7 +55,7 @@ export default function MissionPage() {
   const activeMissionId = resolveMissionId(paramsForResolve, availableIds)
   const [attachmentMenuOpen, setAttachmentMenuOpen] = useState(false);
   const [isSending, setIsSending] = useState(false);
-  const [latestPlan, setLatestPlan] = useState("");
+  const latestPlan = useMemo(() => loadLatestTransitionPlan(), []);
   const [selectedDocumentsByMission, setSelectedDocumentsByMission] = useState<Record<string, string[]>>(() => ({}));
   const messageListRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -112,15 +113,17 @@ export default function MissionPage() {
 
     async function loadDetails(id: string) {
       try {
-        const [tasksRes, messagesRes, documentsRes] = await Promise.all([
+        const [tasksRes, messagesRes, documentsRes, eventsRes] = await Promise.all([
           fetch(`/api/missions/${id}/tasks`),
           fetch(`/api/missions/${id}/messages`),
           fetch(`/api/missions/${id}/documents`),
+          fetch(`/api/missions/${id}/events`),
         ])
 
         const tasksJson = await tasksRes.json()
         const messagesJson = await messagesRes.json()
         const documentsJson = await documentsRes.json()
+        const eventsJson = await eventsRes.json()
 
         if (!tasksJson?.success && tasksRes.ok) throw new Error('Failed to fetch tasks')
         if (!messagesJson?.success && messagesRes.ok) throw new Error('Failed to fetch messages')
@@ -135,6 +138,7 @@ export default function MissionPage() {
             tasks: tasksJson?.data ?? [],
             messages: messagesJson?.data ?? [],
             documents: documentsJson?.data ?? [],
+            events: eventsJson?.data ?? [],
           },
         }))
       } catch (err) {
@@ -150,9 +154,7 @@ export default function MissionPage() {
     return () => { cancelled = true }
   }, [activeMissionId])
 
-  useEffect(() => {
-    setLatestPlan(loadLatestTransitionPlan());
-  }, []);
+  // latestPlan is initialized lazily above to avoid synchronous setState in an effect
 
   const addSelectedDocument = (documentName: string) => {
     setSelectedDocumentsByMission((currentDocumentsByMission) => {
@@ -337,22 +339,27 @@ export default function MissionPage() {
   };
 
   const missionSwitcher = useMemo(
-    () => Object.values(missions),
+    () => Object.values(missions).filter(Boolean),
     [missions]
   );
 
   const activeMissionDocuments = activeMission.documents;
   const activeMissionTasks = activeMission.tasks;
+  const [newTaskLabel, setNewTaskLabel] = useState("");
+  const [newTaskPriority, setNewTaskPriority] = useState<"low" | "medium" | "high">("medium");
+  const [newTaskCategory, setNewTaskCategory] = useState("General");
+  const [isCreatingTask, setIsCreatingTask] = useState(false);
 
   const MissionPanel = (
     <div className="flex flex-col gap-1">
-      {missionSwitcher.map((mission) => {
+      {missionSwitcher.map((mission, idx) => {
         const isActive = mission.id === activeMissionId;
+        const key = mission.id ?? `mission-${idx}`;
 
         return (
           <Link
-            key={mission.id}
-            href={`/mission/${mission.id}`}
+            key={key}
+            href={`/mission/${mission.id ?? ""}`}
             className={`rounded-md px-0 py-1 text-left transition-colors hover:text-foreground ${
               isActive ? "font-medium text-foreground" : "text-muted-foreground"
             }`}
@@ -367,6 +374,13 @@ export default function MissionPage() {
         className="mt-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
       >
         + New mission
+      </Link>
+
+      <Link
+        href={`/mission/${activeMissionId}/events`}
+        className="mt-1 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+      >
+        View mission events
       </Link>
     </div>
   );
@@ -571,17 +585,87 @@ export default function MissionPage() {
           </div>
 
           <div className="space-y-4">
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault()
+                if (!newTaskLabel.trim()) return
+                setIsCreatingTask(true)
+                try {
+                  const res = await fetch(`/api/missions/${activeMissionId}/tasks`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ label: newTaskLabel.trim(), category: newTaskCategory, priority: newTaskPriority }),
+                  })
+
+                  const data = await res.json().catch(() => ({}))
+                  if (!res.ok || !data?.success) throw new Error(data?.error || "Failed to create task")
+
+                  setMissions((cur) => ({
+                    ...cur,
+                    [activeMissionId]: {
+                      ...(cur[activeMissionId] ?? {}),
+                      tasks: [data.data, ...(cur[activeMissionId]?.tasks ?? [])],
+                    },
+                  }))
+
+                  setNewTaskLabel("")
+                } catch (err) {
+                  console.error("Create task failed", err)
+                } finally {
+                  setIsCreatingTask(false)
+                }
+              }}
+            >
+              <div className="flex gap-2">
+                <input value={newTaskLabel} onChange={(e) => setNewTaskLabel(e.target.value)} placeholder="New task" className="flex-1 rounded-md border px-2 py-1" />
+                <select value={newTaskPriority} onChange={(e) => setNewTaskPriority(e.target.value as any)} className="rounded-md border px-2 py-1">
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                </select>
+                <button type="submit" disabled={isCreatingTask} className="rounded-md bg-primary px-3 py-1 text-white">
+                  {isCreatingTask ? "Adding..." : "Add"}
+                </button>
+              </div>
+            </form>
+
             {activeMissionTasks.length === 0 ? (
               <p className="text-sm text-muted-foreground">No tasks yet.</p>
             ) : null}
-            {activeMissionTasks.map((action) => (
-              <div key={action.id} className="flex items-start gap-3">
-                <span className="mt-1 h-2.5 w-2.5 rounded-full bg-primary/70" />
+            {activeMissionTasks.map((task) => (
+              <div key={task.id} className="flex items-start gap-3">
+                <input
+                  type="checkbox"
+                  checked={Boolean(task.completed)}
+                  onChange={async (e) => {
+                    const checked = e.target.checked
+                    try {
+                      const res = await fetch(`/api/missions/${activeMissionId}/tasks/${task.id}`, {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ completed: checked }),
+                      })
+
+                      const data = await res.json().catch(() => ({}))
+                      if (!res.ok || !data?.success) throw new Error(data?.error || "Failed to update task")
+
+                      setMissions((cur) => ({
+                        ...cur,
+                        [activeMissionId]: {
+                          ...(cur[activeMissionId] ?? {}),
+                          tasks: (cur[activeMissionId]?.tasks ?? []).map((t) => (t.id === task.id ? data.data : t)),
+                        },
+                      }))
+                    } catch (err) {
+                      console.error("Failed to toggle task", err)
+                    }
+                  }}
+                />
                 <div className="min-w-0 flex-1">
-                  <p className="font-medium">{action.label}</p>
-                  <p className="text-sm text-muted-foreground">{formatTaskLabel(action)}</p>
+                  <p className={`font-medium ${task.completed ? 'line-through text-muted-foreground' : ''}`}>{task.label}</p>
+                  <p className="text-sm text-muted-foreground">{formatTaskLabel(task)}</p>
                 </div>
-                <time className="shrink-0 text-xs text-muted-foreground">{action.createdAt}</time>
+                <time className="shrink-0 text-xs text-muted-foreground">{task.createdAt}</time>
               </div>
             ))}
           </div>
@@ -590,6 +674,18 @@ export default function MissionPage() {
 
       <aside className="hidden h-fit xl:sticky xl:top-24 xl:flex xl:flex-col rounded-2xl bg-muted/20 p-4">
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+          Recent activity
+        </h2>
+        <div className="mb-3 max-h-48 overflow-y-auto pr-1 text-sm text-muted-foreground">
+          {(activeMission.events ?? []).slice().reverse().slice(0, 8).map((ev) => (
+            <div key={ev.id} className="mb-2">
+              <p className="truncate font-medium">{ev.type.replace(/-/g, ' ')}</p>
+              <p className="truncate text-xs">{JSON.stringify(ev.payload)}</p>
+            </div>
+          ))}
+        </div>
+
+        <h2 className="mb-3 mt-4 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
           Missions
         </h2>
         <div className="max-h-[calc(100vh-8rem)] overflow-y-auto pr-1">

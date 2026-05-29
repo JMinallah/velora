@@ -97,8 +97,13 @@ export default function Dashboard() {
       }
 
       setMessages((prev) => [...prev, assistantMessage])
-    } catch (error: any) {
-      if (error.name === "AbortError") return
+    } catch (error: unknown) {
+      let name: string | undefined
+      if (typeof error === 'object' && error !== null && 'name' in error) {
+        const maybeName = (error as Record<string, unknown>).name
+        if (typeof maybeName === 'string') name = maybeName
+      }
+      if (name === 'AbortError') return
 
       console.error("Chat error:", error)
 
