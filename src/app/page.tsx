@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type KeyboardEvent } from "react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Camera, File, Send } from "lucide-react"
+import { sendGeminiChat } from "@/lib/gemini-chat"
 
 const PLACEHOLDERS = [
   "Ask anything...",
@@ -80,30 +81,18 @@ export default function Dashboard() {
     assistantAbortRef.current = new AbortController()
 
     try {
-      const response = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      const assistantText = await sendGeminiChat(
+        {
           message: messageText,
           history: messages,
-        }),
-        signal: assistantAbortRef.current.signal,
-      })
-
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to get response from Gemini")
-      }
-
-      if (data.error) {
-        throw new Error(data.error)
-      }
+        },
+        { signal: assistantAbortRef.current.signal }
+      )
 
       const assistantMessage: ChatMessage = {
         id: `a-${Date.now()}`,
         sender: "assistant",
-        text: data.response || "I couldn't generate a response. Please try again.",
+        text: assistantText,
         timestamp: new Date().toLocaleTimeString(),
       }
 
@@ -233,10 +222,10 @@ export default function Dashboard() {
                 </div>
 
                 <div className="absolute right-3 bottom-3">
-                  <Button 
-                    onClick={handleSend} 
+                  <Button
+                    onClick={handleSend}
                     disabled={isLoading}
-                    className="h-9 w-9 rounded-full p-0" 
+                    className="h-9 w-9 rounded-full p-0"
                     aria-label="Send"
                   >
                     <Send className={`h-4 w-4 ${isLoading ? "animate-pulse" : ""}`} />

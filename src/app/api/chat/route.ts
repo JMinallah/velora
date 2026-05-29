@@ -10,9 +10,56 @@ if (!apiKey) {
 const genAI = new GoogleGenerativeAI(apiKey)
 const model = genAI.getGenerativeModel({ model: modelName })
 
+type ChatHistoryTurn = {
+  sender?: string
+  text: string
+}
+
+function isTransientGeminiError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error)
+  return message.includes("503") || message.includes("high demand") || message.includes("temporarily")
+}
+
+function toModelHistory(history: ChatHistoryTurn[]) {
+  const firstUserIndex = history.findIndex((turn) => turn.sender === "user")
+
+  return history
+    .slice(firstUserIndex >= 0 ? firstUserIndex : history.length)
+    .filter((turn) => typeof turn.text === "string" && turn.text.trim().length > 0)
+    .map((turn) => ({
+      role: turn.sender === "user" ? "user" : "model",
+      parts: [{ text: turn.text }],
+    }))
+}
+
+async function generateWithRetry(prompt: string, history: ChatHistoryTurn[]) {
+  let lastError: unknown
+  const modelHistory = toModelHistory(history)
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const chat = model.startChat({ history: modelHistory })
+      const result = await chat.sendMessage(prompt)
+      const response = await result.response
+      return response.text()
+    } catch (error) {
+      lastError = error
+
+      if (attempt === 0 && isTransientGeminiError(error)) {
+        await new Promise((resolve) => setTimeout(resolve, 700))
+        continue
+      }
+
+      throw error
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error("Failed to get response from Gemini")
+}
+
 export async function POST(request: Request) {
   try {
-    const { message, history = [] } = await request.json()
+    const { message, history = [], context = "" } = await request.json()
 
     if (!message || typeof message !== "string") {
       return new Response(JSON.stringify({ error: "Invalid message" }), {
@@ -21,20 +68,9 @@ export async function POST(request: Request) {
       })
     }
 
-    const conversationHistory = Array.isArray(history)
-      ? history.map((msg: any) => ({
-          role: msg.sender === "user" ? "user" : "model",
-          parts: [{ text: msg.text }],
-        }))
-      : []
-
-    const chat = model.startChat({
-      history: conversationHistory,
-    })
-
-    const result = await chat.sendMessage(message)
-    const response = await result.response
-    const responseText = response.text()
+    const conversationHistory = Array.isArray(history) ? history : []
+    const prompt = [context.trim(), message.trim()].filter(Boolean).join("\n\n") || message
+    const responseText = await generateWithRetry(prompt, conversationHistory)
 
     return new Response(
       JSON.stringify({

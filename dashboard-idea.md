@@ -1,291 +1,509 @@
-## Minimal AI Assistant Dashboard Layout (Centered Design)
+YESSSS 😭
+Now we enter full builder mode.
 
-### Overall Design Style
+And don’t worry — I’ll guide you realistically, not with “enterprise architecture fantasy” nonsense.
 
-A **clean, modern, centered AI dashboard** with lots of breathing space, soft rounded corners, subtle shadows, and a calm professional feel.
-The design should follow the **project theme colors** consistently throughout all buttons, highlights, borders, hover states, and icons.
+Your mission now is:
 
-The page should feel:
+# turn Velora from a beautiful UI into a believable intelligent coordination system.
 
-* Minimal
-* Friendly
-* Lightweight
-* Modern SaaS-style
-* Mobile responsive
-* Focused entirely on conversation
+And yes:
+the hackathon specifically wants you to use:
 
----
+# Google Cloud Agent Builder + Gemini
 
-# Layout Structure
-
-## 1. Main Container
-
-The entire dashboard content should be perfectly centered both horizontally and visually balanced vertically.
-
-### Container Characteristics
-
-* Max width: around **700px–900px**
-* Responsive on mobile/tablet
-* Soft rounded corners (`20px+`)
-* Subtle shadow or glassmorphism effect
-* Background should follow:
-
-  * either plain neutral color
-  * or very light gradient using project theme colors
+So we’ll structure around that.
 
 ---
 
-# 2. Top Greeting Section
+# YOUR REALISTIC ARCHITECTURE
 
-Centered at the top.
+# Frontend
 
-### Contains:
+* Next.js
+* Tailwind
+* shadcn/ui
 
-#### Logo Area
-
-* Small modern logo/icon
-* Circular or minimal geometric design
-* Should use the project theme color
-
-#### Greeting Text
-
-Example:
-
-> “Hey, Jovia 👋”
-
-Secondary text:
-
-> “What would you like to create today?”
-
-Typography:
-
-* Bold modern font
-* Large heading
-* Softer smaller subtitle underneath
-* High spacing for clean appearance
+(Already mostly done)
 
 ---
 
-# 3. Chat Input Card (Main Focus)
+# Backend
 
-This should be the largest visual element on the page.
-
-### Input Container
-
-A modern rounded rectangle card centered on the page.
-
-Features:
-
-* Multi-line expandable textarea
-* Placeholder text:
-
-  > “Ask anything...”
-* Rounded corners (`24px+`)
-* Soft border
-* Very subtle shadow
-* Smooth hover/focus animations
-
-### Inside the Input Area
-
-#### Left Bottom Actions
-
-Small minimal icon buttons:
-
-* 📷 Image upload
-* 📄 File upload
-
-Design:
-
-* Outline style icons
-* Circular background on hover
-* Small tooltip labels
-
-#### Right Bottom Action
-
-Main send button:
-
-* Floating circular send button
-* Uses project theme primary color
-* Arrow/send icon centered
-* Slight glow or elevation effect
+* Next.js API routes
+* Gemini API
+* MongoDB Atlas
+* basic agent orchestration logic
 
 ---
 
-# 4. Suggested Prompt Cards Section
+# Google Stack
 
-Below the chat box.
-
-### Layout
-
-Three centered minimal cards.
-
-Example prompts:
-
-* “Generate UI ideas”
-* “Summarize a document”
-* “Help me write code”
-
-### Card Style
-
-* Small rounded cards
-* Equal spacing
-* Hover animation:
-
-  * slight lift
-  * border glow
-* Minimal icons optional
-* Use muted neutral colors with project accent highlights
+* Gemini
+* Vertex AI / Agent Builder
+* Google Cloud Run
 
 ---
 
-# 5. Background & Visual Feel
+# IMPORTANT REALITY CHECK
 
-Keep the background extremely clean.
+For hackathons:
+you do NOT need to deeply use every Google enterprise feature.
 
-Suggestions:
+What matters is:
 
-* Soft gradient blur shapes in corners
-* Faint grid/noise texture
-* Large whitespace
-* Avoid clutter
-
-The assistant area should feel:
-
-* intelligent
-* calm
-* productive
-* futuristic without overdoing effects
+* meaningful Gemini usage,
+* agentic workflows,
+* adaptive coordination,
+* and Google ecosystem integration.
 
 ---
 
-# Recommended UI Details
+# MASTER ROADMAP
 
-## Typography
+# PHASE 1
 
-Use modern fonts like:
+## Get Gemini Working
 
-* Inter
-* Poppins
-* Manrope
-* SF Pro
+FIRST PRIORITY.
 
----
-
-# Spacing Suggestions
-
-Use generous spacing:
-
-* `24px–40px` section gaps
-* Avoid crowded elements
-* Keep everything breathable
+Without this:
+Velora is just UI.
 
 ---
 
-# Animations
+# STEP 1 — Create Google AI Studio Account
 
-Very subtle only:
+Go to:
 
-* Fade-in on page load
-* Smooth hover transitions
-* Input glow on focus
-* Prompt cards slightly scale on hover
+[Google AI Studio](https://aistudio.google.com?utm_source=chatgpt.com)
 
----
-
-# Minimal Feature Suggestions
-
-## Optional Features
-
-You can add:
-
-* Voice input icon
-* Dark/light mode toggle
-* Typing indicator animation
-* Recent chats sidebar (collapsible)
-* AI model selector dropdown
-
-But:
-
-> Keep them hidden/minimal so the interface stays clean.
+Sign in with Google account.
 
 ---
 
-# Responsive Mobile Behavior
+# STEP 2 — Get Gemini API Key
 
-On mobile:
+Inside AI Studio:
 
-* Stack prompt cards vertically
-* Keep send/upload icons inside input area
-* Maintain centered layout
-* Reduce padding slightly
+* Click:
+
+  # “Get API Key”
+* Then:
+
+  # “Create API Key”
+
+Copy it.
 
 ---
 
-# Suggested Component Hierarchy
+# STEP 3 — Store API Key
 
-```text
-Dashboard Wrapper
- └── Centered Main Container
-      ├── Logo
-      ├── Greeting Section
-      ├── Chat Input Card
-      │     ├── Textarea
-      │     ├── Image Upload Button
-      │     ├── File Upload Button
-      │     └── Send Button
-      └── Suggested Prompt Cards
+Inside your project root:
+
+Create:
+
+```plaintext id="ukmecx"
+.env.local
+```
+
+Add:
+
+```env id="y5bthk"
+GEMINI_API_KEY=your_api_key_here
+```
+
+IMPORTANT:
+Never push this to GitHub.
+
+---
+
+# STEP 4 — Install Gemini SDK
+
+Inside project:
+
+```bash id="o8v7mz"
+npm install @google/generative-ai
 ```
 
 ---
 
-# Suggested UX Improvements
+# STEP 5 — Create API Route
 
-## 1. Smart Placeholder Rotation
+Create:
 
-Rotate placeholder text every few seconds:
-
-* “Ask anything...”
-* “Generate ideas...”
-* “Upload a file to analyze...”
-* “Create something amazing...”
-
----
-
-## 2. Empty State Design
-
-When there are no chats yet:
-
-* Keep interface vertically centered
-* Avoid showing unnecessary panels
-
-This creates a premium AI experience similar to modern assistants.
-
----
-
-## 3. Upload Interaction
-
-When user uploads a file/image:
-
-* Show tiny rounded preview chips below input
-* Minimal removable tags
-
-Example:
-
-```text
-[ design.png ✕ ]   [ report.pdf ✕ ]
+```plaintext id="44ts91"
+src/app/api/plan/route.ts
 ```
 
 ---
 
-# Final Design Direction
+# STEP 6 — Basic Gemini Connection
 
-The dashboard should feel like:
+Inside:
 
-* ChatGPT + Notion AI + Linear combined
-* Simple at first glance
-* Powerful underneath
-* Elegant and distraction-free
+```ts id="cq2kdb"
+import { GoogleGenerativeAI } from "@google/generative-ai";
+import { NextResponse } from "next/server";
 
-The key principle:
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
-> “Minimal, centered, intelligent, and smooth.”
+export async function POST(req: Request) {
+  try {
+    const body = await req.json();
+
+    const { goal, deadline, concerns } = body;
+
+    const model = genAI.getGenerativeModel({
+      model: "gemini-1.5-flash",
+    });
+
+    const prompt = `
+    User Goal: ${goal}
+    Deadline: ${deadline}
+    Concerns: ${concerns}
+
+    Generate:
+    - transition roadmap
+    - prioritized tasks
+    - risks
+    - recommendations
+    `;
+
+    const result = await model.generateContent(prompt);
+
+    const response = result.response.text();
+
+    return NextResponse.json({
+      success: true,
+      response,
+    });
+  } catch (error) {
+    console.error(error);
+
+    return NextResponse.json({
+      success: false,
+    });
+  }
+}
+```
+
+---
+
+# STEP 7 — Connect Frontend
+
+Your frontend sends:
+
+```ts id="rq3o0y"
+fetch("/api/plan", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    goal,
+    deadline,
+    concerns,
+  }),
+});
+```
+
+---
+
+# RESULT
+
+Now Velora can:
+
+* accept user transition goals,
+* send to Gemini,
+* generate intelligent plans.
+
+THIS is your first major milestone.
+
+---
+
+# PHASE 2
+
+# MongoDB Setup
+
+NOW we add memory.
+
+---
+
+# STEP 1 — Create MongoDB Atlas
+
+Go to:
+
+[MongoDB Atlas](https://www.mongodb.com/cloud/atlas?utm_source=chatgpt.com)
+
+Create free cluster.
+
+---
+
+# STEP 2 — Get Connection String
+
+Looks like:
+
+```plaintext id="csyu4f"
+mongodb+srv://username:password@cluster.mongodb.net/
+```
+
+---
+
+# STEP 3 — Add To ENV
+
+```env id="q8v4vb"
+MONGODB_URI=your_connection_string
+```
+
+---
+
+# STEP 4 — Install MongoDB
+
+```bash id="84n1l5"
+npm install mongodb
+```
+
+---
+
+# STEP 5 — Create Database Helper
+
+```plaintext id="jj87q8"
+src/lib/mongodb.ts
+```
+
+---
+
+# STEP 6 — Store Missions
+
+Now when Gemini generates tasks:
+store them.
+
+Collections:
+
+* missions
+* tasks
+* reminders
+* users
+
+NOW Velora has memory.
+
+---
+
+# PHASE 3
+
+# Make It FEEL Like An Agent
+
+THIS is the important part.
+
+---
+
+# Agent Loop
+
+Every:
+
+* login,
+* refresh,
+* or periodic check,
+
+Velora evaluates:
+
+```plaintext id="5r62fc"
+Are tasks overdue?
+Are deadlines near?
+Did the user delay something?
+Did dependencies break?
+```
+
+Then:
+Gemini generates:
+
+* follow-ups,
+* urgency updates,
+* replanning.
+
+---
+
+# Example
+
+User misses visa appointment.
+
+Velora:
+
+* increases urgency,
+* updates risk score,
+* reprioritizes dependent tasks,
+* generates adaptive reminder.
+
+THAT is the agent behavior.
+
+---
+
+# PHASE 4
+
+# Document Upload
+
+IMPORTANT for demo quality.
+
+---
+
+# Install UploadThing or use simple upload.
+
+Then:
+
+* extract PDF text,
+* send extracted content to Gemini.
+
+Example:
+Acceptance letter uploaded →
+Gemini extracts:
+
+* deadlines,
+* tuition,
+* reporting dates.
+
+THIS will impress judges A LOT.
+
+---
+
+# PHASE 5
+
+# Adaptive Notification System
+
+This is your differentiator.
+
+Modes:
+
+* Calm
+* Focus
+* Adaptive
+
+Store preference in MongoDB.
+
+Then:
+Gemini changes tone dynamically.
+
+---
+
+# PHASE 6
+
+# Simulated Monitoring Loop
+
+(IMPORTANT)
+
+You do NOT need real-time AI orchestration.
+
+Simplify.
+
+Example:
+When dashboard loads:
+
+* backend evaluates tasks,
+* generates updated coordination insights.
+
+Feels agentic WITHOUT overengineering.
+
+---
+
+# PHASE 7
+
+# Google Cloud Agent Builder
+
+NOW we connect deeper Google tooling.
+
+---
+
+# Why Wait Until Later?
+
+Because:
+
+* your core product must work FIRST,
+* Agent Builder becomes easier after logic exists.
+
+---
+
+# What To Use It For
+
+Use Agent Builder to:
+
+* orchestrate workflows,
+* manage multi-step reasoning,
+* demonstrate Google ecosystem usage.
+
+This helps hackathon scoring.
+
+---
+
+# PHASE 8
+
+# Deployment
+
+Frontend:
+
+* Vercel
+
+Backend:
+
+* Google Cloud Run
+
+---
+
+# PHASE 9
+
+# Demo Polish
+
+VERY IMPORTANT.
+
+Your demo matters almost more than code.
+
+---
+
+# DEMO STRUCTURE
+
+## Show:
+
+1. onboarding
+2. upload documents
+3. generated roadmap
+4. adaptive reminders
+5. dynamic replanning
+
+THAT is enough.
+
+---
+
+# MOST IMPORTANT ADVICE
+
+# Finish vertical slices.
+
+Meaning:
+build COMPLETE flows.
+
+NOT:
+
+* 20 half-built systems.
+
+For example:
+✅ upload → analyze → roadmap → reminders
+
+is FAR better than:
+❌ 15 unfinished AI features.
+
+---
+
+# Your Current Priorities
+
+# RIGHT NOW:
+
+## Do these in order:
+
+1. Gemini API working
+2. API routes
+3. MongoDB memory
+4. Save missions/tasks
+5. Reminder logic
+6. Document extraction
+7. Dynamic replanning
+8. Polish/demo
+
+THAT should be your path.

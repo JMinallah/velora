@@ -16,6 +16,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
+import { buildMissionChatContext, sendGeminiChat } from "@/lib/gemini-chat";
 import { missionOrder, missionSeeds, type MissionId } from "@/lib/missions";
 import { Message } from "@/types";
 import { Menu, Plus, Send, X } from "lucide-react";
@@ -37,6 +38,7 @@ export default function MissionPage() {
   const [draft, setDraft] = useState("");
   const [missions, setMissions] = useState(missionSeeds);
   const [attachmentMenuOpen, setAttachmentMenuOpen] = useState(false);
+  const [isSending, setIsSending] = useState(false);
   const [selectedDocumentsByMission, setSelectedDocumentsByMission] = useState(
     () =>
       Object.fromEntries(
@@ -109,7 +111,7 @@ export default function MissionPage() {
     }));
   };
 
-  const handleSendMessage = () => {
+  const handleSendMessage = async () => {
     const trimmed = draft.trim();
     if (!trimmed && selectedDocuments.length === 0) return;
 
@@ -120,6 +122,14 @@ export default function MissionPage() {
       trimmed && attachmentSummary
         ? `${trimmed}\n\n${attachmentSummary}`
         : trimmed || attachmentSummary;
+
+    const missionSnapshot = activeMission;
+    const missionId = activeMissionId;
+    const context = buildMissionChatContext({
+      missionTitle: missionSnapshot.title,
+      missionSubtitle: missionSnapshot.subtitle,
+      documents: selectedDocuments,
+    });
 
     const userMessage: Message = {
       id: `msg-${Date.now()}`,
@@ -155,6 +165,61 @@ export default function MissionPage() {
       ...currentDocumentsByMission,
       [activeMissionId]: [],
     }));
+
+    setIsSending(true);
+
+    try {
+      const assistantText = await sendGeminiChat({
+        message: trimmed || attachmentSummary,
+        history: missionSnapshot.messages.map((message) => ({
+          sender: message.type === "user" ? "user" : "assistant",
+          text: message.text,
+        })),
+        context,
+      });
+
+      const assistantMessage: Message = {
+        id: `msg-${Date.now()}-reply`,
+        type: "reasoning",
+        text: assistantText,
+        timestamp: new Date().toLocaleString(),
+      };
+
+      setMissions((currentMissions) => {
+        const currentMission = currentMissions[missionId];
+
+        return {
+          ...currentMissions,
+          [missionId]: {
+            ...currentMission,
+            messages: [...currentMission.messages, assistantMessage],
+          },
+        };
+      });
+    } catch (error) {
+      console.error("Mission chat error:", error);
+
+      const fallbackMessage: Message = {
+        id: `msg-${Date.now()}-error`,
+        type: "alert",
+        text: "I couldn’t get a response right now. Please try again.",
+        timestamp: new Date().toLocaleString(),
+      };
+
+      setMissions((currentMissions) => {
+        const currentMission = currentMissions[missionId];
+
+        return {
+          ...currentMissions,
+          [missionId]: {
+            ...currentMission,
+            messages: [...currentMission.messages, fallbackMessage],
+          },
+        };
+      });
+    } finally {
+      setIsSending(false);
+    }
   };
 
   const missionSwitcher = useMemo(
@@ -348,9 +413,9 @@ export default function MissionPage() {
                   </PopoverContent>
                 </Popover>
 
-                <Button onClick={handleSendMessage} className="gap-2">
+                <Button onClick={handleSendMessage} className="gap-2" disabled={isSending}>
                   <Send className="h-4 w-4" />
-                  Send
+                  {isSending ? "Sending..." : "Send"}
                 </Button>
               </div>
             </div>
