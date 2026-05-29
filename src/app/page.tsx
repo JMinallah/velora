@@ -57,12 +57,13 @@ export default function Dashboard() {
 
   async function handleSend() {
     const text = draft.trim()
-    if (!text && files.length === 0) return
+    const messageText = text || (files.length > 0 ? `Uploaded ${files.length} file${files.length === 1 ? "" : "s"}` : "")
+    if (!messageText) return
 
     const userMessage: ChatMessage = {
       id: `u-${Date.now()}`,
       sender: "user",
-      text: text || `Uploaded ${files.length} file${files.length === 1 ? "" : "s"}`,
+      text: messageText,
       timestamp: new Date().toLocaleTimeString(),
     }
 
@@ -83,17 +84,17 @@ export default function Dashboard() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          message: text,
+          message: messageText,
           history: messages,
         }),
         signal: assistantAbortRef.current.signal,
       })
 
-      if (!response.ok) {
-        throw new Error("Failed to get response from Gemini")
-      }
-
       const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to get response from Gemini")
+      }
 
       if (data.error) {
         throw new Error(data.error)
@@ -136,7 +137,7 @@ export default function Dashboard() {
     <main className="flex h-[calc(100dvh-2rem)] min-h-0 flex-col items-center px-4 py-4 sm:py-6 lg:py-8">
       <div className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-72 bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.06),transparent_38%),radial-gradient(circle_at_top_right,rgba(16,185,129,0.05),transparent_32%)]" />
 
-      <div className="flex h-full min-h-0 w-full max-w-[820px] flex-col">
+      <div className="flex h-full min-h-0 w-full max-w-205 flex-col">
         <header className="shrink-0 text-center">
           <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
             V
@@ -194,7 +195,7 @@ export default function Dashboard() {
                       key={file.name}
                       className="inline-flex items-center gap-2 rounded-full bg-muted/10 px-3 py-1 text-sm"
                     >
-                      <span className="max-w-[160px] truncate">{file.name}</span>
+                      <span className="max-w-40 truncate">{file.name}</span>
                       <button onClick={() => removeFile(file.name)} className="text-muted-foreground">
                         ✕
                       </button>
@@ -209,7 +210,7 @@ export default function Dashboard() {
                   onChange={(e) => setDraft(e.target.value)}
                   onKeyDown={handleKeyDown}
                   placeholder={placeholder}
-                  className="min-h-[92px] max-h-[28vh] w-full resize-none rounded-[20px] border border-border/20 bg-transparent px-4 py-4 pr-16 text-base shadow-none focus:border-border/40 focus:ring-0"
+                  className="min-h-23 max-h-[28vh] w-full resize-none rounded-[20px] border border-border/20 bg-transparent px-4 py-4 pr-16 text-base shadow-none focus:border-border/40 focus:ring-0"
                 />
 
                 <div className="absolute left-3 bottom-3 flex items-center gap-2">

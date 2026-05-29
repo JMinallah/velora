@@ -1,16 +1,18 @@
 import { GoogleGenerativeAI } from "@google/generative-ai"
 
-const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY
+const apiKey = process.env.GEMINI_API_KEY
+const modelName = process.env.GEMINI_MODEL ?? "gemini-2.5-flash"
 
 if (!apiKey) {
-  throw new Error("NEXT_PUBLIC_GEMINI_API_KEY is not set")
+  throw new Error("GEMINI_API_KEY is not set")
 }
 
 const genAI = new GoogleGenerativeAI(apiKey)
+const model = genAI.getGenerativeModel({ model: modelName })
 
 export async function POST(request: Request) {
   try {
-    const { message, history } = await request.json()
+    const { message, history = [] } = await request.json()
 
     if (!message || typeof message !== "string") {
       return new Response(JSON.stringify({ error: "Invalid message" }), {
@@ -19,26 +21,17 @@ export async function POST(request: Request) {
       })
     }
 
-    const model = genAI.getGenerativeModel({ model: "gemini-pro" })
+    const conversationHistory = Array.isArray(history)
+      ? history.map((msg: any) => ({
+          role: msg.sender === "user" ? "user" : "model",
+          parts: [{ text: msg.text }],
+        }))
+      : []
 
-    // Build conversation history for context
-    const conversationHistory = history.map((msg: any) => ({
-      role: msg.sender === "user" ? "user" : "model",
-      parts: [{ text: msg.text }],
-    }))
-
-    // Add the new message
-    conversationHistory.push({
-      role: "user",
-      parts: [{ text: message }],
-    })
-
-    // Start a chat session with history
     const chat = model.startChat({
-      history: conversationHistory.slice(0, -1), // Exclude the current message from history
+      history: conversationHistory,
     })
 
-    // Send the message and get response
     const result = await chat.sendMessage(message)
     const response = await result.response
     const responseText = response.text()
