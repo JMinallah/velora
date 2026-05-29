@@ -24,6 +24,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
+import { loadLatestTransitionPlan } from "@/lib/coordination/session";
 
 function resolveMissionId(value: string | string[] | undefined): MissionId {
   const candidate = Array.isArray(value) ? value[0] : value;
@@ -39,6 +40,7 @@ export default function MissionPage() {
   const [missions, setMissions] = useState(missionSeeds);
   const [attachmentMenuOpen, setAttachmentMenuOpen] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [latestPlan, setLatestPlan] = useState("");
   const [selectedDocumentsByMission, setSelectedDocumentsByMission] = useState(
     () =>
       Object.fromEntries(
@@ -57,6 +59,10 @@ export default function MissionPage() {
 
     container.scrollTo({ top: container.scrollHeight, behavior: "auto" });
   }, [activeMissionId, activeMission.messages]);
+
+  useEffect(() => {
+    setLatestPlan(loadLatestTransitionPlan());
+  }, []);
 
   const addSelectedDocument = (documentName: string) => {
     setSelectedDocumentsByMission((currentDocumentsByMission) => {
@@ -292,6 +298,15 @@ export default function MissionPage() {
               </SheetContent>
             </Sheet>
           </div>
+
+          {latestPlan && (
+            <div className="rounded-2xl border border-border/20 bg-muted/20 p-4 text-sm text-muted-foreground">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-foreground">
+                Latest generated plan
+              </p>
+              <p className="whitespace-pre-wrap">{latestPlan}</p>
+            </div>
+          )}
 
           <div className="flex min-h-0 max-h-[calc(100dvh-16rem)] flex-col gap-3 overflow-hidden rounded-2xl bg-background px-3 pt-3 pb-2 md:max-h-[calc(100dvh-17rem)] md:px-4 md:pt-4 md:pb-2 xl:max-h-none xl:flex-1">
             <div

@@ -5,15 +5,53 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
+import { useState } from "react";
+import { saveLatestTransitionPlan } from "@/lib/coordination/session";
 
 export default function OnboardingPage() {
   const router = useRouter();
+  const [goal, setGoal] = useState("");
+  const [deadline, setDeadline] = useState("");
+  const [concerns, setConcerns] = useState("");
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [plan, setPlan] = useState("");
 
-  const handleSubmit = (event: React.FormEvent) => {
+  const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
-    // In a real app, you'd create a mission and get an ID.
-    // For this prototype, we'll navigate to a static mission ID.
-    router.push("/mission/123");
+    const trimmedGoal = goal.trim();
+    if (!trimmedGoal) return;
+
+    setIsGenerating(true);
+
+    try {
+      const response = await fetch("/api/plan", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          goal: trimmedGoal,
+          deadline: deadline.trim(),
+          concerns: concerns.trim(),
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to generate plan");
+      }
+
+      const generatedPlan = data.response || "No plan returned.";
+      setPlan(generatedPlan);
+      saveLatestTransitionPlan(generatedPlan);
+      router.push("/mission/1");
+    } catch (error) {
+      console.error("Onboarding error:", error);
+      setPlan(error instanceof Error ? error.message : "Failed to generate plan.");
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   return (
@@ -35,13 +73,33 @@ export default function OnboardingPage() {
           <CardContent>
             <form onSubmit={handleSubmit} className="flex flex-col gap-4">
               <Textarea
-                placeholder="For example: 'I’m moving from Uganda to South Korea for university in 3 months. I need to handle my visa, find housing, and manage my budget.'"
-                className="min-h-30 resize-none"
+                value={goal}
+                onChange={(event) => setGoal(event.target.value)}
+                placeholder="What are you trying to coordinate?"
+                className="min-h-24 resize-none"
               />
-              <Button type="submit" className="w-full">
-                Generate My Transition Plan
+              <Textarea
+                value={deadline}
+                onChange={(event) => setDeadline(event.target.value)}
+                placeholder="Deadline or target date"
+                className="min-h-16 resize-none"
+              />
+              <Textarea
+                value={concerns}
+                onChange={(event) => setConcerns(event.target.value)}
+                placeholder="Any risks, blockers, or concerns?"
+                className="min-h-20 resize-none"
+              />
+              <Button type="submit" className="w-full" disabled={isGenerating}>
+                {isGenerating ? "Generating..." : "Generate My Transition Plan"}
               </Button>
             </form>
+
+            {plan && (
+              <div className="mt-6 rounded-lg border border-border/20 bg-muted/20 p-4 text-sm whitespace-pre-wrap">
+                {plan}
+              </div>
+            )}
           </CardContent>
         </Card>
       </motion.div>
