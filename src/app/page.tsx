@@ -1,224 +1,278 @@
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { missionSummaries } from "@/lib/missions";
-import {
-  ArrowRight,
-  Clock3,
-  FileText,
-  Layers3,
-  Sparkles,
-} from "lucide-react";
-import Link from "next/link";
+"use client"
 
-const sharedDocuments = Array.from(
-  new Map(
-    missionSummaries.flatMap((mission) =>
-      mission.documents.map((document) => [document.name, document])
-    )
-  ).values()
-);
+import { useEffect, useRef, useState, type KeyboardEvent } from "react"
+import { Button } from "@/components/ui/button"
+import { Textarea } from "@/components/ui/textarea"
+import { Camera, File, Send } from "lucide-react"
+
+const PLACEHOLDERS = [
+  "Ask anything...",
+  "Generate ideas...",
+  "Upload a file to analyze...",
+  "Create something amazing...",
+]
+
+type ChatMessage = {
+  id: string
+  sender: "user" | "assistant"
+  text: string
+  timestamp: string
+}
 
 export default function Dashboard() {
-  const activeMissionCount = missionSummaries.length;
-  const documentCount = sharedDocuments.length;
+  const [draft, setDraft] = useState("")
+  const [files, setFiles] = useState<File[]>([])
+  const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [placeholder, setPlaceholder] = useState(PLACEHOLDERS[0])
+  const [isLoading, setIsLoading] = useState(false)
+  const idx = useRef(0)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const messageListRef = useRef<HTMLDivElement | null>(null)
+  const assistantAbortRef = useRef<AbortController | null>(null)
+
+  useEffect(() => {
+    const t = setInterval(() => {
+      idx.current = (idx.current + 1) % PLACEHOLDERS.length
+      setPlaceholder(PLACEHOLDERS[idx.current])
+    }, 3500)
+
+    return () => clearInterval(t)
+  }, [])
+
+  useEffect(() => {
+    const el = messageListRef.current
+    if (!el) return
+
+    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" })
+  }, [messages])
+
+  function handleFiles(selected: FileList | null) {
+    if (!selected) return
+    setFiles((prev) => [...prev, ...Array.from(selected)])
+  }
+
+  function removeFile(name: string) {
+    setFiles((prev) => prev.filter((file) => file.name !== name))
+  }
+
+  async function handleSend() {
+    const text = draft.trim()
+    if (!text && files.length === 0) return
+
+    const userMessage: ChatMessage = {
+      id: `u-${Date.now()}`,
+      sender: "user",
+      text: text || `Uploaded ${files.length} file${files.length === 1 ? "" : "s"}`,
+      timestamp: new Date().toLocaleTimeString(),
+    }
+
+    setMessages((prev) => [...prev, userMessage])
+    setDraft("")
+    setFiles([])
+    setIsLoading(true)
+
+    // Cancel any previous request
+    if (assistantAbortRef.current) {
+      assistantAbortRef.current.abort()
+    }
+
+    assistantAbortRef.current = new AbortController()
+
+    try {
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: text,
+          history: messages,
+        }),
+        signal: assistantAbortRef.current.signal,
+      })
+
+      if (!response.ok) {
+        throw new Error("Failed to get response from Gemini")
+      }
+
+      const data = await response.json()
+
+      if (data.error) {
+        throw new Error(data.error)
+      }
+
+      const assistantMessage: ChatMessage = {
+        id: `a-${Date.now()}`,
+        sender: "assistant",
+        text: data.response || "I couldn't generate a response. Please try again.",
+        timestamp: new Date().toLocaleTimeString(),
+      }
+
+      setMessages((prev) => [...prev, assistantMessage])
+    } catch (error: any) {
+      if (error.name === "AbortError") return
+
+      console.error("Chat error:", error)
+
+      const errorMessage: ChatMessage = {
+        id: `a-${Date.now()}`,
+        sender: "assistant",
+        text: "Sorry, I encountered an error. Please try again.",
+        timestamp: new Date().toLocaleTimeString(),
+      }
+
+      setMessages((prev) => [...prev, errorMessage])
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault()
+      handleSend()
+    }
+  }
 
   return (
-    <div className="relative overflow-hidden">
-      <div className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-72 bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.18),transparent_38%),radial-gradient(circle_at_top_right,rgba(16,185,129,0.12),transparent_32%),linear-gradient(to_bottom,rgba(255,255,255,0.8),transparent)] dark:bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.15),transparent_38%),radial-gradient(circle_at_top_right,rgba(16,185,129,0.12),transparent_32%),linear-gradient(to_bottom,rgba(255,255,255,0.04),transparent)]" />
+    <main className="flex h-[calc(100dvh-2rem)] min-h-0 flex-col items-center px-4 py-4 sm:py-6 lg:py-8">
+      <div className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-72 bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.06),transparent_38%),radial-gradient(circle_at_top_right,rgba(16,185,129,0.05),transparent_32%)]" />
 
-      <div className="flex flex-col gap-8">
-        <section className="relative overflow-hidden rounded-[2rem] border border-border/60 bg-card/90 p-6 shadow-[0_20px_60px_-28px_rgba(15,23,42,0.45)] backdrop-blur-sm md:p-8">
-          <div className="absolute -right-20 -top-16 h-44 w-44 rounded-full bg-primary/10 blur-3xl" />
-          <div className="absolute -bottom-16 left-1/2 h-40 w-40 rounded-full bg-emerald-400/10 blur-3xl" />
+      <div className="flex h-full min-h-0 w-full max-w-[820px] flex-col">
+        <header className="shrink-0 text-center">
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
+            V
+          </div>
+          <h1 className="text-3xl font-semibold">Hey, Jovia 👋</h1>
+          <p className="mt-2 text-sm text-muted-foreground">What would you like to do today?</p>
+        </header>
 
-          <div className="relative grid gap-8 lg:grid-cols-[minmax(0,1.5fr)_minmax(280px,0.9fr)] lg:items-end">
-            <div className="space-y-5">
-              <Badge variant="outline" className="w-fit gap-2 border-border/70 bg-background/80">
-                <Sparkles className="h-3.5 w-3.5" />
-                Mission control
-              </Badge>
-
-              <div className="max-w-3xl space-y-4">
-                <h1 className="text-4xl font-semibold tracking-tight md:text-5xl">
-                  A single place to see what matters, what&apos;s next, and what can wait.
-                </h1>
-                <p className="max-w-2xl text-base leading-7 text-muted-foreground md:text-lg">
-                  Velora keeps your missions linked to the documents and decisions
-                  behind them, so the dashboard feels like an operations table instead
-                  of a stack of generic cards.
-                </p>
-              </div>
-
-              <div className="flex flex-wrap gap-3">
-                <Link href="/mission/1">
-                  <Button className="gap-2 rounded-full px-5">
-                    Open workbench
-                    <ArrowRight className="h-4 w-4" />
-                  </Button>
-                </Link>
-                <Link href="/onboarding">
-                  <Button variant="outline" className="rounded-full px-5">
-                    Create mission
-                  </Button>
-                </Link>
-              </div>
+        <section className="flex min-h-0 flex-1 flex-col pt-6">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <div ref={messageListRef} className="min-h-0 flex-1 overflow-y-auto px-1 py-2">
+              {messages.length === 0 ? (
+                <div className="flex h-full items-center justify-center px-6 py-8 text-center text-sm text-muted-foreground">
+                  Start a conversation. Messages will appear here.
+                </div>
+              ) : (
+                <>
+                  {messages.map((message) => (
+                    <div
+                      key={message.id}
+                      className={`mb-2 flex ${message.sender === "user" ? "justify-end" : "justify-start"}`}
+                    >
+                      <div
+                        className={`max-w-[85%] rounded-xl px-3 py-2 text-sm ${
+                          message.sender === "user"
+                            ? "bg-primary/10 text-foreground"
+                            : "bg-muted/10 text-muted-foreground"
+                        }`}
+                      >
+                        <div>{message.text}</div>
+                        <div className="mt-1 text-xs opacity-70">{message.timestamp}</div>
+                      </div>
+                    </div>
+                  ))}
+                  {isLoading && (
+                    <div className="mb-2 flex justify-start">
+                      <div className="rounded-xl bg-muted/10 px-3 py-2 text-sm text-muted-foreground">
+                        <div className="flex gap-1">
+                          <div className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground" />
+                          <div className="animation-delay-200 h-2 w-2 animate-bounce rounded-full bg-muted-foreground" />
+                          <div className="animation-delay-400 h-2 w-2 animate-bounce rounded-full bg-muted-foreground" />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
 
-            <div className="grid gap-3 rounded-[1.5rem] border border-border/70 bg-background/85 p-4 shadow-sm">
-              <div className="flex items-center gap-3 rounded-2xl bg-muted/50 p-4">
-                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                  <Layers3 className="h-5 w-5" />
+            <div className="shrink-0 border-t border-border/10 p-3 sm:p-4">
+              {files.length > 0 && (
+                <div className="mb-3 flex flex-wrap gap-2">
+                  {files.map((file) => (
+                    <div
+                      key={file.name}
+                      className="inline-flex items-center gap-2 rounded-full bg-muted/10 px-3 py-1 text-sm"
+                    >
+                      <span className="max-w-[160px] truncate">{file.name}</span>
+                      <button onClick={() => removeFile(file.name)} className="text-muted-foreground">
+                        ✕
+                      </button>
+                    </div>
+                  ))}
                 </div>
-                <div>
-                  <p className="text-sm font-medium">{activeMissionCount} active missions</p>
-                  <p className="text-sm text-muted-foreground">Tracked across planning, compliance, and arrival.</p>
-                </div>
-              </div>
+              )}
 
-              <div className="flex items-center gap-3 rounded-2xl bg-muted/50 p-4">
-                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-600">
-                  <Clock3 className="h-5 w-5" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium">Timeline-first workflow</p>
-                  <p className="text-sm text-muted-foreground">Chat, actions, and tasks stay attached to the same mission.</p>
-                </div>
-              </div>
+              <div className="relative">
+                <Textarea
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder={placeholder}
+                  className="min-h-[92px] max-h-[28vh] w-full resize-none rounded-[20px] border border-border/20 bg-transparent px-4 py-4 pr-16 text-base shadow-none focus:border-border/40 focus:ring-0"
+                />
 
-              <div className="flex items-center gap-3 rounded-2xl bg-muted/50 p-4">
-                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-500/10 text-blue-600">
-                  <FileText className="h-5 w-5" />
+                <div className="absolute left-3 bottom-3 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-transparent text-muted-foreground transition hover:bg-muted/10"
+                    aria-label="Upload file"
+                  >
+                    <File className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-transparent text-muted-foreground transition hover:bg-muted/10"
+                    aria-label="Upload image"
+                  >
+                    <Camera className="h-4 w-4" />
+                  </button>
                 </div>
-                <div>
-                  <p className="text-sm font-medium">{documentCount} shared documents</p>
-                  <p className="text-sm text-muted-foreground">Reusable across missions, but still referenced in context.</p>
+
+                <div className="absolute right-3 bottom-3">
+                  <Button 
+                    onClick={handleSend} 
+                    disabled={isLoading}
+                    className="h-9 w-9 rounded-full p-0" 
+                    aria-label="Send"
+                  >
+                    <Send className={`h-4 w-4 ${isLoading ? "animate-pulse" : ""}`} />
+                  </Button>
                 </div>
+
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => handleFiles(e.target.files)}
+                />
               </div>
             </div>
           </div>
         </section>
 
-        <section className="grid gap-6 lg:grid-cols-[minmax(0,1.45fr)_minmax(280px,0.8fr)]">
-          <div className="rounded-[1.75rem] border border-border/60 bg-background/80 p-5 shadow-sm md:p-6">
-            <div className="flex items-end justify-between gap-4 border-b border-border/60 pb-4">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-                  Missions
-                </p>
-                <h2 className="mt-1 text-xl font-semibold tracking-tight">
-                  What&apos;s active right now
-                </h2>
-              </div>
-              <p className="hidden text-sm text-muted-foreground md:block">
-                Click any mission to jump into its workbench.
-              </p>
-            </div>
-
-            <div className="mt-5 space-y-3">
-              {missionSummaries.map((mission, index) => (
-                <Link
-                  key={mission.id}
-                  href={`/mission/${mission.id}`}
-                  className="group block rounded-[1.35rem] border border-border/60 bg-card/70 p-4 transition-all duration-200 hover:-translate-y-0.5 hover:border-border hover:bg-card hover:shadow-md"
-                >
-                  <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                    <div className="min-w-0 space-y-2">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-muted text-xs font-semibold text-muted-foreground">
-                          0{index + 1}
-                        </span>
-                        <Badge variant="secondary" className="rounded-full px-2.5">
-                          {mission.phase}
-                        </Badge>
-                        <Badge variant="outline" className="rounded-full px-2.5">
-                          {mission.status}
-                        </Badge>
-                      </div>
-                      <div className="min-w-0">
-                        <p className="truncate text-lg font-semibold">{mission.title}</p>
-                        <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
-                          {mission.subtitle}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex shrink-0 items-center gap-3 text-sm text-muted-foreground">
-                      <div className="rounded-2xl bg-muted/60 px-3 py-2 text-right">
-                        <p className="text-xs uppercase tracking-wide">Next</p>
-                        <p className="max-w-56 text-sm text-foreground">{mission.nextStep}</p>
-                      </div>
-                      <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
-                    </div>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          </div>
-
-          <div className="grid gap-6">
-            <div className="rounded-[1.75rem] border border-border/60 bg-card/80 p-5 shadow-sm md:p-6">
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-                    Quick start
-                  </p>
-                  <h2 className="mt-1 text-xl font-semibold tracking-tight">
-                    Open the mission workspace
-                  </h2>
-                </div>
-                <Sparkles className="h-5 w-5 text-primary" />
-              </div>
-
-              <p className="mt-4 text-sm leading-6 text-muted-foreground">
-                Ask about deadlines, upload a document, or jump straight into a mission
-                without hunting through nested dashboards.
-              </p>
-
-              <div className="mt-5 space-y-3">
-                <Link href="/mission/1" className="block">
-                  <Button className="w-full rounded-full">Ask in Timeline</Button>
-                </Link>
-                <Link href="/onboarding" className="block">
-                  <Button variant="outline" className="w-full rounded-full">
-                    Create a new mission
-                  </Button>
-                </Link>
-              </div>
-            </div>
-
-            <div className="rounded-[1.75rem] border border-border/60 bg-card/80 p-5 shadow-sm md:p-6">
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-                    Documents
-                  </p>
-                  <h2 className="mt-1 text-xl font-semibold tracking-tight">
-                    Shared across missions
-                  </h2>
-                </div>
-                <FileText className="h-5 w-5 text-muted-foreground" />
-              </div>
-
-              <div className="mt-4 space-y-3">
-                {sharedDocuments.map((document) => (
-                  <div
-                    key={document.name}
-                    className="flex items-start justify-between gap-3 rounded-2xl bg-muted/50 p-3"
-                  >
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium">{document.name}</p>
-                      <p className="mt-1 text-sm text-muted-foreground">{document.note}</p>
-                    </div>
-                    <Link href={document.href} className="shrink-0 text-sm font-medium text-primary transition-colors hover:text-primary/80">
-                      Open
-                    </Link>
-                  </div>
-                ))}
-              </div>
-            </div>
+        <section className="shrink-0 pt-5 text-center">
+          <div className="mx-auto flex max-w-md flex-wrap justify-center gap-3">
+            {[
+              "Generate UI ideas",
+              "Summarize a document",
+              "Help me write code",
+            ].map((prompt) => (
+              <button
+                key={prompt}
+                type="button"
+                onClick={() => setDraft(prompt)}
+                className="rounded-lg border border-border/20 px-4 py-2 text-sm transition hover:-translate-y-0.5 hover:shadow-sm"
+              >
+                {prompt}
+              </button>
+            ))}
           </div>
         </section>
       </div>
-    </div>
-  );
+    </main>
+  )
 }
