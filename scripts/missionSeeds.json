@@ -1,0 +1,24 @@
+{
+  "missions": [
+    {
+      "id": "1",
+      "title": "Relocate to South Korea",
+      "subtitle": "Visa setup, arrival logistics, and first month planning.",
+      "phase": "Preparation",
+      "status": "At risk",
+      "overview": "This mission tracks the core relocation timeline, including visa paperwork, finances, and travel booking.",
+      "nextStep": "Confirm visa submission timing and lock the travel date.",
+      "tasks": {
+        "Visa & Documents": [
+          { "id": "task-1", "label": "Apply for Student Visa", "completed": false, "dueDate": "2026-06-15" },
+          { "id": "task-2", "label": "Gather University Admission Documents", "completed": true, "dueDate": "2026-05-30" }
+        ],
+        "Finances": [
+          { "id": "task-4", "label": "Pay First Semester Tuition Fees", "completed": false, "dueDate": "2026-07-01" }
+        ]
+      },
+      "messages": [],
+      "documents": []
+    }
+  ]
+}

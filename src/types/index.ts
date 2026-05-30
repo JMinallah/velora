@@ -5,10 +5,12 @@ export type ExtractedData = {
 
 export type Message = {
   id: string;
+  missionId?: string;
   type: "suggestion" | "alert" | "update" | "reasoning" | "user";
   text: string;
   timestamp: string;
   extractedData?: ExtractedData;
+  source?: "agent" | "user" | "system";
 };
 
 export type MissionAction = {

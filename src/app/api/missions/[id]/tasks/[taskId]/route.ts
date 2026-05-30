@@ -1,10 +1,10 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { updateTaskStatus } from "@/lib/mongodb/tasks"
 import { createEvent } from "@/lib/mongodb/events"
 
-export async function PATCH(_req: Request, { params }: { params: { id: string; taskId: string } }) {
+export async function PATCH(_req: NextRequest, { params }: { params: Promise<{ id: string; taskId: string }> }) {
   try {
-    const { id, taskId } = params
+    const { id, taskId } = await params
     const body = await _req.json()
     if (typeof body.completed !== "boolean") {
       return NextResponse.json({ success: false, error: "completed boolean required" }, { status: 400 })

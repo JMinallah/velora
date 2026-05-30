@@ -1,10 +1,10 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { listTasksForMission, createTask } from "@/lib/mongodb/tasks"
 import { createEvent } from "@/lib/mongodb/events"
 
-export async function GET(req: Request, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const { id } = params
+    const { id } = await params
     const tasks = await listTasksForMission(id)
     return NextResponse.json({ success: true, data: tasks })
   } catch (err) {
@@ -13,9 +13,9 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
   }
 }
 
-export async function POST(req: Request, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const { id } = params
+    const { id } = await params
     const body = await req.json()
     if (!body.label) return NextResponse.json({ success: false, error: "label required" }, { status: 400 })
     const created = await createTask({ missionId: id, category: body.category ?? "General", label: body.label, dueDate: body.dueDate ?? null, priority: body.priority ?? "medium", source: body.source ?? "agent" })

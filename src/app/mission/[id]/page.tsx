@@ -347,7 +347,6 @@ export default function MissionPage() {
   const activeMissionTasks = activeMission.tasks;
   const [newTaskLabel, setNewTaskLabel] = useState("");
   const [newTaskPriority, setNewTaskPriority] = useState<"low" | "medium" | "high">("medium");
-  const [newTaskCategory, setNewTaskCategory] = useState("General");
   const [isCreatingTask, setIsCreatingTask] = useState(false);
 
   const MissionPanel = (
@@ -554,7 +553,7 @@ export default function MissionPage() {
                               >
                                 <p className="truncate font-medium">{document.name}</p>
                                 <p className="truncate text-xs text-muted-foreground">
-                                  {document.note}
+                                  {document.summary ?? document.extractedText ?? "No document summary yet"}
                                 </p>
                               </button>
                             );
@@ -594,7 +593,7 @@ export default function MissionPage() {
                   const res = await fetch(`/api/missions/${activeMissionId}/tasks`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ label: newTaskLabel.trim(), category: newTaskCategory, priority: newTaskPriority }),
+                    body: JSON.stringify({ label: newTaskLabel.trim(), category: "General", priority: newTaskPriority }),
                   })
 
                   const data = await res.json().catch(() => ({}))
@@ -618,7 +617,11 @@ export default function MissionPage() {
             >
               <div className="flex gap-2">
                 <input value={newTaskLabel} onChange={(e) => setNewTaskLabel(e.target.value)} placeholder="New task" className="flex-1 rounded-md border px-2 py-1" />
-                <select value={newTaskPriority} onChange={(e) => setNewTaskPriority(e.target.value as any)} className="rounded-md border px-2 py-1">
+                <select
+                  value={newTaskPriority}
+                  onChange={(e) => setNewTaskPriority(e.target.value as "low" | "medium" | "high")}
+                  className="rounded-md border px-2 py-1"
+                >
                   <option value="low">Low</option>
                   <option value="medium">Medium</option>
                   <option value="high">High</option>

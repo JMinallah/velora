@@ -1,9 +1,9 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { getMission, updateMission } from "@/lib/mongodb/missions"
 
-export async function GET(req: Request, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const { id } = params
+    const { id } = await params
     const mission = await getMission(id)
     if (!mission) return NextResponse.json({ success: false, error: "not found" }, { status: 404 })
     return NextResponse.json({ success: true, data: mission })
@@ -13,9 +13,9 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
   }
 }
 
-export async function PATCH(req: Request, { params }: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const { id } = params
+    const { id } = await params
     const body = await req.json()
     const updated = await updateMission(id, body)
     if (!updated) return NextResponse.json({ success: false, error: "not found" }, { status: 404 })

@@ -1,0 +1,2464 @@
+{
+  "auditReportVersion": 2,
+  "vulnerabilities": {
+    "@ampproject/toolbox-optimizer": {
+      "name": "@ampproject/toolbox-optimizer",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "terser"
+      ],
+      "effects": [
+        "next"
+      ],
+      "range": "2.0.0-alpha.0 - 2.7.1-alpha.0",
+      "nodes": [
+        "node_modules/@ampproject/toolbox-optimizer"
+      ],
+      "fixAvailable": {
+        "name": "next",
+        "version": "16.2.6",
+        "isSemVerMajor": true
+      }
+    },
+    "@babel/runtime": {
+      "name": "@babel/runtime",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1104000,
+          "name": "@babel/runtime",
+          "dependency": "@babel/runtime",
+          "title": "Babel has inefficient RegExp complexity in generated code with .replace when transpiling named capturing groups",
+          "url": "https://github.com/advisories/GHSA-968p-4wvh-cqc8",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-1333"
+          ],
+          "cvss": {
+            "score": 6.2,
+            "vectorString": "CVSS:3.1/AV:L/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+          },
+          "range": "<7.26.10"
+        }
+      ],
+      "effects": [
+        "next"
+      ],
+      "range": "<7.26.10",
+      "nodes": [
+        "node_modules/@babel/runtime"
+      ],
+      "fixAvailable": {
+        "name": "next",
+        "version": "16.2.6",
+        "isSemVerMajor": true
+      }
+    },
+    "adjust-sourcemap-loader": {
+      "name": "adjust-sourcemap-loader",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "loader-utils",
+        "object-path"
+      ],
+      "effects": [
+        "resolve-url-loader"
+      ],
+      "range": "0.1.0 - 2.0.0",
+      "nodes": [
+        "node_modules/adjust-sourcemap-loader"
+      ],
+      "fixAvailable": {
+        "name": "next",
+        "version": "16.2.6",
+        "isSemVerMajor": true
+      }
+    },
+    "ansi-html": {
+      "name": "ansi-html",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1102319,
+          "name": "ansi-html",
+          "dependency": "ansi-html",
+          "title": "Uncontrolled Resource Consumption in ansi-html",
+          "url": "https://github.com/advisories/GHSA-whgm-jr23-g3j9",
+          "severity": "high",
+          "cwe": [
+            "CWE-400"
+          ],
+          "cvss": {
+            "score": 7.5,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+          },
+          "range": "<0.0.8"
+        }
+      ],
+      "effects": [
+        "webpack-hot-middleware"
+      ],
+      "range": "<0.0.8",
+      "nodes": [
+        "node_modules/ansi-html"
+      ],
+      "fixAvailable": true
+    },
+    "anymatch": {
+      "name": "anymatch",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "micromatch"
+      ],
+      "effects": [
+        "chokidar"
+      ],
+      "range": "1.2.0 - 2.0.0",
+      "nodes": [
+        "node_modules/watchpack-chokidar2/node_modules/anymatch"
+      ],
+      "fixAvailable": true
+    },
+    "autoprefixer": {
+      "name": "autoprefixer",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "postcss"
+      ],
+      "effects": [
+        "postcss-preset-env"
+      ],
+      "range": "1.0.20131222 - 9.8.8",
+      "nodes": [
+        "node_modules/autoprefixer"
+      ],
+      "fixAvailable": true
+    },
+    "braces": {
+      "name": "braces",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1098094,
+          "name": "braces",
+          "dependency": "braces",
+          "title": "Uncontrolled resource consumption in braces",
+          "url": "https://github.com/advisories/GHSA-grv7-fg5c-xmjg",
+          "severity": "high",
+          "cwe": [
+            "CWE-400",
+            "CWE-1050"
+          ],
+          "cvss": {
+            "score": 7.5,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+          },
+          "range": "<3.0.3"
+        }
+      ],
+      "effects": [
+        "chokidar",
+        "micromatch"
+      ],
+      "range": "<3.0.3",
+      "nodes": [
+        "node_modules/fork-ts-checker-webpack-plugin/node_modules/braces",
+        "node_modules/watchpack-chokidar2/node_modules/braces",
+        "node_modules/webpack/node_modules/braces"
+      ],
+      "fixAvailable": {
+        "name": "next",
+        "version": "16.2.6",
+        "isSemVerMajor": true
+      }
+    },
+    "browserify-sign": {
+      "name": "browserify-sign",
+      "severity": "low",
+      "isDirect": false,
+      "via": [
+        "elliptic"
+      ],
+      "effects": [
+        "crypto-browserify"
+      ],
+      "range": ">=2.4.0",
+      "nodes": [
+        "node_modules/browserify-sign"
+      ],
+      "fixAvailable": {
+        "name": "next",
+        "version": "16.2.6",
+        "isSemVerMajor": true
+      }
+    },
+    "browserslist": {
+      "name": "browserslist",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1093035,
+          "name": "browserslist",
+          "dependency": "browserslist",
+          "title": "Regular Expression Denial of Service in browserslist",
+          "url": "https://github.com/advisories/GHSA-w8qv-6jwh-64r5",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-400",
+            "CWE-1333"
+          ],
+          "cvss": {
+            "score": 5.3,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L"
+          },
+          "range": ">=4.0.0 <4.16.5"
+        }
+      ],
+      "effects": [
+        "next"
+      ],
+      "range": "4.0.0 - 4.16.4",
+      "nodes": [
+        "node_modules/next/node_modules/browserslist"
+      ],
+      "fixAvailable": {
+        "name": "next",
+        "version": "16.2.6",
+        "isSemVerMajor": true
+      }
+    },
+    "cache-loader": {
+      "name": "cache-loader",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "webpack"
+      ],
+      "effects": [
+        "next"
+      ],
+      "range": ">=2.0.0",
+      "nodes": [
+        "node_modules/cache-loader"
+      ],
+      "fixAvailable": {
+        "name": "next",
+        "version": "16.2.6",
+        "isSemVerMajor": true
+      }
+    },
+    "chokidar": {
+      "name": "chokidar",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "anymatch",
+        "braces",
+        "readdirp"
+      ],
+      "effects": [
+        "watchpack-chokidar2"
+      ],
+      "range": "1.3.0 - 2.1.8",
+      "nodes": [
+        "node_modules/watchpack-chokidar2/node_modules/chokidar"
+      ],
+      "fixAvailable": true
+    },
+    "compression": {
+      "name": "compression",
+      "severity": "low",
+      "isDirect": false,
+      "via": [
+        "on-headers"
+      ],
+      "effects": [
+        "next"
+      ],
+      "range": "1.0.3 - 1.8.0",
+      "nodes": [
+        "node_modules/compression"
+      ],
+      "fixAvailable": {
+        "name": "next",
+        "version": "16.2.6",
+        "isSemVerMajor": true
+      }
+    },
+    "cookie": {
+      "name": "cookie",
+      "severity": "low",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1103907,
+          "name": "cookie",
+          "dependency": "cookie",
+          "title": "cookie accepts cookie name, path, and domain with out of bounds characters",
+          "url": "https://github.com/advisories/GHSA-pxg6-pf52-xh8x",
+          "severity": "low",
+          "cwe": [
+            "CWE-74"
+          ],
+          "cvss": {
+            "score": 0,
+            "vectorString": null
+          },
+          "range": "<0.7.0"
+        }
+      ],
+      "effects": [
+        "next"
+      ],
+      "range": "<0.7.0",
+      "nodes": [
+        "node_modules/next/node_modules/cookie"
+      ],
+      "fixAvailable": {
+        "name": "next",
+        "version": "16.2.6",
+        "isSemVerMajor": true
+      }
+    },
+    "create-ecdh": {
+      "name": "create-ecdh",
+      "severity": "low",
+      "isDirect": false,
+      "via": [
+        "elliptic"
+      ],
+      "effects": [
+        "crypto-browserify"
+      ],
+      "range": "*",
+      "nodes": [
+        "node_modules/create-ecdh"
+      ],
+      "fixAvailable": {
+        "name": "next",
+        "version": "16.2.6",
+        "isSemVerMajor": true
+      }
+    },
+    "crypto-browserify": {
+      "name": "crypto-browserify",
+      "severity": "low",
+      "isDirect": false,
+      "via": [
+        "browserify-sign",
+        "create-ecdh"
+      ],
+      "effects": [
+        "node-libs-browser"
+      ],
+      "range": ">=3.4.0",
+      "nodes": [
+        "node_modules/crypto-browserify"
+      ],
+      "fixAvailable": {
+        "name": "next",
+        "version": "16.2.6",
+        "isSemVerMajor": true
+      }
+    },
+    "css-blank-pseudo": {
+      "name": "css-blank-pseudo",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "postcss"
+      ],
+      "effects": [
+        "postcss-preset-env"
+      ],
+      "range": "<=1.0.0",
+      "nodes": [
+        "node_modules/css-blank-pseudo"
+      ],
+      "fixAvailable": true
+    },
+    "css-has-pseudo": {
+      "name": "css-has-pseudo",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "postcss"
+      ],
+      "effects": [],
+      "range": "<=1.0.0",
+      "nodes": [
+        "node_modules/css-has-pseudo"
+      ],
+      "fixAvailable": true
+    },
+    "css-loader": {
+      "name": "css-loader",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "icss-utils",
+        "postcss",
+        "postcss-modules-extract-imports",
+        "postcss-modules-local-by-default",
+        "postcss-modules-scope",
+        "postcss-modules-values",
+        "webpack"
+      ],
+      "effects": [
+        "next"
+      ],
+      "range": "0.15.0 - 4.3.0",
+      "nodes": [
+        "node_modules/css-loader"
+      ],
+      "fixAvailable": {
+        "name": "next",
+        "version": "16.2.6",
+        "isSemVerMajor": true
+      }
+    },
+    "css-prefers-color-scheme": {
+      "name": "css-prefers-color-scheme",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "postcss"
+      ],
+      "effects": [
+        "postcss-preset-env"
+      ],
+      "range": "<=4.0.0",
+      "nodes": [
+        "node_modules/css-prefers-color-scheme"
+      ],
+      "fixAvailable": true
+    },
+    "cssnano-preset-simple": {
+      "name": "cssnano-preset-simple",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "postcss"
+      ],
+      "effects": [],
+      "range": "<=1.2.2 || 1.3.1",
+      "nodes": [
+        "node_modules/cssnano-preset-simple"
+      ],
+      "fixAvailable": true
+    },
+    "cssnano-simple": {
+      "name": "cssnano-simple",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "postcss"
+      ],
+      "effects": [
+        "next"
+      ],
+      "range": "<=1.2.2",
+      "nodes": [
+        "node_modules/cssnano-simple"
+      ],
+      "fixAvailable": {
+        "name": "next",
+        "version": "16.2.6",
+        "isSemVerMajor": true
+      }
+    },
+    "devalue": {
+      "name": "devalue",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1106997,
+          "name": "devalue",
+          "dependency": "devalue",
+          "title": "devalue prototype pollution vulnerability",
+          "url": "https://github.com/advisories/GHSA-vj54-72f3-p5jv",
+          "severity": "high",
+          "cwe": [
+            "CWE-1321"
+          ],
+          "cvss": {
+            "score": 0,
+            "vectorString": null
+          },
+          "range": "<5.3.2"
+        },
+        {
+          "source": 1113319,
+          "name": "devalue",
+          "dependency": "devalue",
+          "title": "devalue affected by CPU and memory amplification from sparse arrays",
+          "url": "https://github.com/advisories/GHSA-33hq-fvwr-56pm",
+          "severity": "low",
+          "cwe": [
+            "CWE-770"
+          ],
+          "cvss": {
+            "score": 0,
+            "vectorString": null
+          },
+          "range": "<=5.6.2"
+        },
+        {
+          "source": 1113320,
+          "name": "devalue",
+          "dependency": "devalue",
+          "title": "devalue `uneval`ed code can create objects with polluted prototypes when `eval`ed",
+          "url": "https://github.com/advisories/GHSA-8qm3-746x-r74r",
+          "severity": "low",
+          "cwe": [
+            "CWE-1321"
+          ],
+          "cvss": {
+            "score": 0,
+            "vectorString": null
+          },
+          "range": "<=5.6.2"
+        },
+        {
+          "source": 1114438,
+          "name": "devalue",
+          "dependency": "devalue",
+          "title": "devalue has prototype pollution in devalue.parse and devalue.unflatten",
+          "url": "https://github.com/advisories/GHSA-cfw5-2vxh-hr84",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-1321"
+          ],
+          "cvss": {
+            "score": 0,
+            "vectorString": null
+          },
+          "range": "<5.6.4"
+        }
+      ],
+      "effects": [
+        "next"
+      ],
+      "range": "<=5.6.3",
+      "nodes": [
+        "node_modules/devalue"
+      ],
+      "fixAvailable": {
+        "name": "next",
+        "version": "16.2.6",
+        "isSemVerMajor": true
+      }
+    },
+    "elliptic": {
+      "name": "elliptic",
+      "severity": "low",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1112030,
+          "name": "elliptic",
+          "dependency": "elliptic",
+          "title": "Elliptic Uses a Cryptographic Primitive with a Risky Implementation",
+          "url": "https://github.com/advisories/GHSA-848j-6mx2-7j84",
+          "severity": "low",
+          "cwe": [
+            "CWE-1240"
+          ],
+          "cvss": {
+            "score": 5.6,
+            "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:L/I:L/A:L"
+          },
+          "range": "<=6.6.1"
+        }
+      ],
+      "effects": [
+        "browserify-sign",
+        "create-ecdh"
+      ],
+      "range": "*",
+      "nodes": [
+        "node_modules/elliptic"
+      ],
+      "fixAvailable": {
+        "name": "next",
+        "version": "16.2.6",
+        "isSemVerMajor": true
+      }
+    },
+    "file-loader": {
+      "name": "file-loader",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "webpack"
+      ],
+      "effects": [],
+      "range": "3.0.0 - 4.3.0",
+      "nodes": [
+        "node_modules/file-loader"
+      ],
+      "fixAvailable": true
+    },
+    "fork-ts-checker-webpack-plugin": {
+      "name": "fork-ts-checker-webpack-plugin",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "micromatch"
+      ],
+      "effects": [
+        "next"
+      ],
+      "range": "0.4.14 - 4.1.6",
+      "nodes": [
+        "node_modules/fork-ts-checker-webpack-plugin"
+      ],
+      "fixAvailable": {
+        "name": "next",
+        "version": "16.2.6",
+        "isSemVerMajor": true
+      }
+    },
+    "http-proxy": {
+      "name": "http-proxy",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1096334,
+          "name": "http-proxy",
+          "dependency": "http-proxy",
+          "title": "Denial of Service in http-proxy",
+          "url": "https://github.com/advisories/GHSA-6x33-pw7p-hmpq",
+          "severity": "high",
+          "cwe": [
+            "CWE-184",
+            "CWE-693"
+          ],
+          "cvss": {
+            "score": 7.5,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+          },
+          "range": "<1.18.1"
+        }
+      ],
+      "effects": [
+        "next"
+      ],
+      "range": "<1.18.1",
+      "nodes": [
+        "node_modules/http-proxy"
+      ],
+      "fixAvailable": {
+        "name": "next",
+        "version": "16.2.6",
+        "isSemVerMajor": true
+      }
+    },
+    "icss-utils": {
+      "name": "icss-utils",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "postcss"
+      ],
+      "effects": [
+        "css-loader",
+        "postcss-modules-local-by-default",
+        "postcss-modules-values"
+      ],
+      "range": "<=4.1.1",
+      "nodes": [
+        "node_modules/icss-utils"
+      ],
+      "fixAvailable": {
+        "name": "next",
+        "version": "16.2.6",
+        "isSemVerMajor": true
+      }
+    },
+    "json5": {
+      "name": "json5",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1096544,
+          "name": "json5",
+          "dependency": "json5",
+          "title": "Prototype Pollution in JSON5 via Parse Method",
+          "url": "https://github.com/advisories/GHSA-9c47-m6qq-7p4h",
+          "severity": "high",
+          "cwe": [
+            "CWE-1321"
+          ],
+          "cvss": {
+            "score": 7.1,
+            "vectorString": "CVSS:3.1/AV:N/AC:H/PR:L/UI:N/S:U/C:H/I:L/A:H"
+          },
+          "range": ">=2.0.0 <2.2.2"
+        }
+      ],
+      "effects": [
+        "next"
+      ],
+      "range": "2.0.0 - 2.2.1",
+      "nodes": [
+        "node_modules/next/node_modules/json5"
+      ],
+      "fixAvailable": {
+        "name": "next",
+        "version": "16.2.6",
+        "isSemVerMajor": true
+      }
+    },
+    "jsonwebtoken": {
+      "name": "jsonwebtoken",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1097690,
+          "name": "jsonwebtoken",
+          "dependency": "jsonwebtoken",
+          "title": "jsonwebtoken unrestricted key type could lead to legacy keys usage ",
+          "url": "https://github.com/advisories/GHSA-8cf7-32gw-wr33",
+          "severity": "high",
+          "cwe": [
+            "CWE-327"
+          ],
+          "cvss": {
+            "score": 8.1,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:N"
+          },
+          "range": "<=8.5.1"
+        },
+        {
+          "source": 1097694,
+          "name": "jsonwebtoken",
+          "dependency": "jsonwebtoken",
+          "title": "jsonwebtoken's insecure implementation of key retrieval function could lead to Forgeable Public/Private Tokens from RSA to HMAC",
+          "url": "https://github.com/advisories/GHSA-hjrf-2m68-5959",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-287",
+            "CWE-1259"
+          ],
+          "cvss": {
+            "score": 5,
+            "vectorString": "CVSS:3.1/AV:N/AC:H/PR:L/UI:N/S:U/C:L/I:L/A:L"
+          },
+          "range": "<=8.5.1"
+        },
+        {
+          "source": 1102458,
+          "name": "jsonwebtoken",
+          "dependency": "jsonwebtoken",
+          "title": "jsonwebtoken vulnerable to signature validation bypass due to insecure default algorithm in jwt.verify()",
+          "url": "https://github.com/advisories/GHSA-qwph-4952-7xr6",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-287",
+            "CWE-327",
+            "CWE-347"
+          ],
+          "cvss": {
+            "score": 6.4,
+            "vectorString": "CVSS:3.1/AV:N/AC:H/PR:L/UI:N/S:U/C:L/I:H/A:L"
+          },
+          "range": "<9.0.0"
+        }
+      ],
+      "effects": [],
+      "range": "<=8.5.1",
+      "nodes": [
+        "node_modules/jsonwebtoken"
+      ],
+      "fixAvailable": true
+    },
+    "loader-utils": {
+      "name": "loader-utils",
+      "severity": "critical",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1094088,
+          "name": "loader-utils",
+          "dependency": "loader-utils",
+          "title": "Prototype pollution in webpack loader-utils",
+          "url": "https://github.com/advisories/GHSA-76p3-8jx3-jpfq",
+          "severity": "critical",
+          "cwe": [
+            "CWE-1321"
+          ],
+          "cvss": {
+            "score": 9.8,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"
+          },
+          "range": "<1.4.1"
+        },
+        {
+          "source": 1094089,
+          "name": "loader-utils",
+          "dependency": "loader-utils",
+          "title": "Prototype pollution in webpack loader-utils",
+          "url": "https://github.com/advisories/GHSA-76p3-8jx3-jpfq",
+          "severity": "critical",
+          "cwe": [
+            "CWE-1321"
+          ],
+          "cvss": {
+            "score": 9.8,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"
+          },
+          "range": ">=2.0.0 <2.0.3"
+        },
+        {
+          "source": 1095054,
+          "name": "loader-utils",
+          "dependency": "loader-utils",
+          "title": "loader-utils is vulnerable to Regular Expression Denial of Service (ReDoS) via url variable",
+          "url": "https://github.com/advisories/GHSA-3rfm-jhwj-7488",
+          "severity": "high",
+          "cwe": [
+            "CWE-1333"
+          ],
+          "cvss": {
+            "score": 7.5,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+          },
+          "range": ">=2.0.0 <2.0.4"
+        },
+        {
+          "source": 1095055,
+          "name": "loader-utils",
+          "dependency": "loader-utils",
+          "title": "loader-utils is vulnerable to Regular Expression Denial of Service (ReDoS) via url variable",
+          "url": "https://github.com/advisories/GHSA-3rfm-jhwj-7488",
+          "severity": "high",
+          "cwe": [
+            "CWE-1333"
+          ],
+          "cvss": {
+            "score": 7.5,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+          },
+          "range": ">=1.0.0 <1.4.2"
+        },
+        {
+          "source": 1109587,
+          "name": "loader-utils",
+          "dependency": "loader-utils",
+          "title": "loader-utils is vulnerable to Regular Expression Denial of Service (ReDoS)",
+          "url": "https://github.com/advisories/GHSA-hhq3-ff78-jv3g",
+          "severity": "high",
+          "cwe": [
+            "CWE-400",
+            "CWE-1333"
+          ],
+          "cvss": {
+            "score": 7.5,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+          },
+          "range": ">=2.0.0 <2.0.4"
+        },
+        {
+          "source": 1109588,
+          "name": "loader-utils",
+          "dependency": "loader-utils",
+          "title": "loader-utils is vulnerable to Regular Expression Denial of Service (ReDoS)",
+          "url": "https://github.com/advisories/GHSA-hhq3-ff78-jv3g",
+          "severity": "high",
+          "cwe": [
+            "CWE-400",
+            "CWE-1333"
+          ],
+          "cvss": {
+            "score": 7.5,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+          },
+          "range": ">=1.0.0 <1.4.2"
+        }
+      ],
+      "effects": [
+        "adjust-sourcemap-loader",
+        "next",
+        "resolve-url-loader",
+        "styled-jsx"
+      ],
+      "range": "<=1.4.1 || 2.0.0 - 2.0.3",
+      "nodes": [
+        "node_modules/adjust-sourcemap-loader/node_modules/loader-utils",
+        "node_modules/loader-utils",
+        "node_modules/next/node_modules/styled-jsx/node_modules/loader-utils",
+        "node_modules/resolve-url-loader/node_modules/loader-utils"
+      ],
+      "fixAvailable": {
+        "name": "next",
+        "version": "16.2.6",
+        "isSemVerMajor": true
+      }
+    },
+    "micromatch": {
+      "name": "micromatch",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1098681,
+          "name": "micromatch",
+          "dependency": "micromatch",
+          "title": "Regular Expression Denial of Service (ReDoS) in micromatch",
+          "url": "https://github.com/advisories/GHSA-952p-6rrq-rcjv",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-1333"
+          ],
+          "cvss": {
+            "score": 5.3,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L"
+          },
+          "range": "<4.0.8"
+        },
+        "braces"
+      ],
+      "effects": [
+        "anymatch",
+        "fork-ts-checker-webpack-plugin",
+        "readdirp",
+        "webpack"
+      ],
+      "range": "<=4.0.7",
+      "nodes": [
+        "node_modules/fork-ts-checker-webpack-plugin/node_modules/micromatch",
+        "node_modules/watchpack-chokidar2/node_modules/micromatch",
+        "node_modules/webpack/node_modules/micromatch"
+      ],
+      "fixAvailable": {
+        "name": "next",
+        "version": "16.2.6",
+        "isSemVerMajor": true
+      }
+    },
+    "mini-css-extract-plugin": {
+      "name": "mini-css-extract-plugin",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "webpack"
+      ],
+      "effects": [
+        "next"
+      ],
+      "range": "<=0.9.0",
+      "nodes": [
+        "node_modules/mini-css-extract-plugin"
+      ],
+      "fixAvailable": {
+        "name": "next",
+        "version": "16.2.6",
+        "isSemVerMajor": true
+      }
+    },
+    "next": {
+      "name": "next",
+      "severity": "high",
+      "isDirect": true,
+      "via": [
+        "@ampproject/toolbox-optimizer",
+        "@babel/runtime",
+        {
+          "source": 1089544,
+          "name": "next",
+          "dependency": "next",
+          "title": "Open Redirect in Next.js",
+          "url": "https://github.com/advisories/GHSA-vxf5-wxwp-m7g9",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-601"
+          ],
+          "cvss": {
+            "score": 6.9,
+            "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:C/C:H/I:L/A:N"
+          },
+          "range": ">=0.9.9 <11.1.0"
+        },
+        {
+          "source": 1094729,
+          "name": "next",
+          "dependency": "next",
+          "title": "Next.js missing cache-control header may lead to CDN caching empty reply",
+          "url": "https://github.com/advisories/GHSA-c59h-r6p8-q9wc",
+          "severity": "low",
+          "cwe": [],
+          "cvss": {
+            "score": 0,
+            "vectorString": null
+          },
+          "range": ">=0.9.9 <13.4.20-canary.13"
+        },
+        {
+          "source": 1096688,
+          "name": "next",
+          "dependency": "next",
+          "title": "Unexpected server crash in Next.js.",
+          "url": "https://github.com/advisories/GHSA-25mp-g6fv-mqxx",
+          "severity": "high",
+          "cwe": [
+            "CWE-20"
+          ],
+          "cvss": {
+            "score": 7.5,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+          },
+          "range": ">=0.9.9 <11.1.3"
+        },
+        {
+          "source": 1107226,
+          "name": "next",
+          "dependency": "next",
+          "title": "Next.js Affected by Cache Key Confusion for Image Optimization API Routes",
+          "url": "https://github.com/advisories/GHSA-g5qg-72qw-gw5v",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-524"
+          ],
+          "cvss": {
+            "score": 6.2,
+            "vectorString": "CVSS:3.1/AV:L/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N"
+          },
+          "range": ">=0.9.9 <14.2.31"
+        },
+        {
+          "source": 1107512,
+          "name": "next",
+          "dependency": "next",
+          "title": "Next.js Improper Middleware Redirect Handling Leads to SSRF",
+          "url": "https://github.com/advisories/GHSA-4342-x723-ch2f",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-918"
+          ],
+          "cvss": {
+            "score": 6.5,
+            "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:L/A:N"
+          },
+          "range": ">=0.9.9 <14.2.32"
+        },
+        {
+          "source": 1107513,
+          "name": "next",
+          "dependency": "next",
+          "title": "Next.js Content Injection Vulnerability for Image Optimization",
+          "url": "https://github.com/advisories/GHSA-xv57-4mr9-wg8v",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-20"
+          ],
+          "cvss": {
+            "score": 4.3,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:N/I:L/A:N"
+          },
+          "range": ">=0.9.9 <14.2.31"
+        },
+        {
+          "source": 1108291,
+          "name": "next",
+          "dependency": "next",
+          "title": "Next.js Race Condition to Cache Poisoning",
+          "url": "https://github.com/advisories/GHSA-qpjv-v59x-3qc4",
+          "severity": "low",
+          "cwe": [
+            "CWE-362"
+          ],
+          "cvss": {
+            "score": 3.7,
+            "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:L/I:N/A:N"
+          },
+          "range": ">=0.9.9 <14.2.24"
+        },
+        "browserslist",
+        "cache-loader",
+        "compression",
+        "cookie",
+        "css-loader",
+        "cssnano-simple",
+        "devalue",
+        "file-loader",
+        "fork-ts-checker-webpack-plugin",
+        "http-proxy",
+        "json5",
+        "jsonwebtoken",
+        "loader-utils",
+        "mini-css-extract-plugin",
+        "node-fetch",
+        "path-to-regexp",
+        "postcss-flexbugs-fixes",
+        "postcss-loader",
+        "postcss-preset-env",
+        "resolve-url-loader",
+        "send",
+        "style-loader",
+        "styled-jsx",
+        "terser",
+        "webpack",
+        "webpack-dev-middleware",
+        "webpack-hot-middleware"
+      ],
+      "effects": [],
+      "range": "0.9.9 - 14.2.31",
+      "nodes": [
+        "node_modules/next"
+      ],
+      "fixAvailable": {
+        "name": "next",
+        "version": "16.2.6",
+        "isSemVerMajor": true
+      }
+    },
+    "node-fetch": {
+      "name": "node-fetch",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1095073,
+          "name": "node-fetch",
+          "dependency": "node-fetch",
+          "title": "node-fetch forwards secure headers to untrusted sites",
+          "url": "https://github.com/advisories/GHSA-r683-j2x4-v87g",
+          "severity": "high",
+          "cwe": [
+            "CWE-173",
+            "CWE-200",
+            "CWE-601"
+          ],
+          "cvss": {
+            "score": 8.8,
+            "vectorString": "CVSS:3.0/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H"
+          },
+          "range": "<2.6.7"
+        },
+        {
+          "source": 1098225,
+          "name": "node-fetch",
+          "dependency": "node-fetch",
+          "title": "The `size` option isn't honored after following a redirect in node-fetch",
+          "url": "https://github.com/advisories/GHSA-w7rc-rwvf-8q5r",
+          "severity": "low",
+          "cwe": [
+            "CWE-20",
+            "CWE-770"
+          ],
+          "cvss": {
+            "score": 2.6,
+            "vectorString": "CVSS:3.1/AV:N/AC:H/PR:L/UI:R/S:U/C:N/I:N/A:L"
+          },
+          "range": ">=2.0.0 <2.6.1"
+        }
+      ],
+      "effects": [],
+      "range": "<=2.6.6",
+      "nodes": [
+        "node_modules/next/node_modules/node-fetch"
+      ],
+      "fixAvailable": true
+    },
+    "node-libs-browser": {
+      "name": "node-libs-browser",
+      "severity": "low",
+      "isDirect": false,
+      "via": [
+        "crypto-browserify"
+      ],
+      "effects": [
+        "webpack"
+      ],
+      "range": "0.4.2 || >=1.0.0",
+      "nodes": [
+        "node_modules/node-libs-browser"
+      ],
+      "fixAvailable": {
+        "name": "next",
+        "version": "16.2.6",
+        "isSemVerMajor": true
+      }
+    },
+    "object-path": {
+      "name": "object-path",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1093573,
+          "name": "object-path",
+          "dependency": "object-path",
+          "title": "Prototype Pollution in object-path",
+          "url": "https://github.com/advisories/GHSA-v39p-96qg-c8rf",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-843",
+            "CWE-1321"
+          ],
+          "cvss": {
+            "score": 5.6,
+            "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:L/I:L/A:L"
+          },
+          "range": "<0.11.6"
+        },
+        {
+          "source": 1095139,
+          "name": "object-path",
+          "dependency": "object-path",
+          "title": "Prototype pollution in object-path",
+          "url": "https://github.com/advisories/GHSA-cwx2-736x-mf6w",
+          "severity": "high",
+          "cwe": [
+            "CWE-20",
+            "CWE-471"
+          ],
+          "cvss": {
+            "score": 7.7,
+            "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:L/I:H/A:H"
+          },
+          "range": "<0.11.5"
+        },
+        {
+          "source": 1095140,
+          "name": "object-path",
+          "dependency": "object-path",
+          "title": "Prototype Pollution in object-path",
+          "url": "https://github.com/advisories/GHSA-8v63-cqqc-6r2c",
+          "severity": "high",
+          "cwe": [
+            "CWE-915",
+            "CWE-1321"
+          ],
+          "cvss": {
+            "score": 7.5,
+            "vectorString": "CVSS:3.0/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+          },
+          "range": "<0.11.8"
+        }
+      ],
+      "effects": [
+        "adjust-sourcemap-loader"
+      ],
+      "range": "<=0.11.7",
+      "nodes": [
+        "node_modules/object-path"
+      ],
+      "fixAvailable": {
+        "name": "next",
+        "version": "16.2.6",
+        "isSemVerMajor": true
+      }
+    },
+    "on-headers": {
+      "name": "on-headers",
+      "severity": "low",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1106812,
+          "name": "on-headers",
+          "dependency": "on-headers",
+          "title": "on-headers is vulnerable to http response header manipulation",
+          "url": "https://github.com/advisories/GHSA-76c9-3jph-rj3q",
+          "severity": "low",
+          "cwe": [
+            "CWE-241"
+          ],
+          "cvss": {
+            "score": 3.4,
+            "vectorString": "CVSS:3.1/AV:L/AC:L/PR:H/UI:N/S:U/C:L/I:L/A:N"
+          },
+          "range": "<1.1.0"
+        }
+      ],
+      "effects": [
+        "compression"
+      ],
+      "range": "<1.1.0",
+      "nodes": [
+        "node_modules/on-headers"
+      ],
+      "fixAvailable": {
+        "name": "next",
+        "version": "16.2.6",
+        "isSemVerMajor": true
+      }
+    },
+    "path-to-regexp": {
+      "name": "path-to-regexp",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1101846,
+          "name": "path-to-regexp",
+          "dependency": "path-to-regexp",
+          "title": "path-to-regexp outputs backtracking regular expressions",
+          "url": "https://github.com/advisories/GHSA-9wv6-86v2-598j",
+          "severity": "high",
+          "cwe": [
+            "CWE-1333"
+          ],
+          "cvss": {
+            "score": 7.5,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+          },
+          "range": ">=4.0.0 <6.3.0"
+        }
+      ],
+      "effects": [],
+      "range": "4.0.0 - 6.2.2",
+      "nodes": [
+        "node_modules/next/node_modules/path-to-regexp"
+      ],
+      "fixAvailable": true
+    },
+    "postcss": {
+      "name": "postcss",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1089729,
+          "name": "postcss",
+          "dependency": "postcss",
+          "title": "Regular Expression Denial of Service in postcss",
+          "url": "https://github.com/advisories/GHSA-hwj9-h5mp-3pm3",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-400"
+          ],
+          "cvss": {
+            "score": 5.3,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L"
+          },
+          "range": ">=7.0.0 <7.0.36"
+        },
+        {
+          "source": 1093539,
+          "name": "postcss",
+          "dependency": "postcss",
+          "title": "Regular Expression Denial of Service in postcss",
+          "url": "https://github.com/advisories/GHSA-566m-qj78-rww5",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-400"
+          ],
+          "cvss": {
+            "score": 5.3,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L"
+          },
+          "range": "<7.0.36"
+        },
+        {
+          "source": 1109574,
+          "name": "postcss",
+          "dependency": "postcss",
+          "title": "PostCSS line return parsing error",
+          "url": "https://github.com/advisories/GHSA-7fh5-64p2-3v2j",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-74",
+            "CWE-144"
+          ],
+          "cvss": {
+            "score": 5.3,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:L/A:N"
+          },
+          "range": "<8.4.31"
+        },
+        {
+          "source": 1117015,
+          "name": "postcss",
+          "dependency": "postcss",
+          "title": "PostCSS has XSS via Unescaped </style> in its CSS Stringify Output",
+          "url": "https://github.com/advisories/GHSA-qx2v-qp2m-jg93",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-79"
+          ],
+          "cvss": {
+            "score": 6.1,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N"
+          },
+          "range": "<8.5.10"
+        }
+      ],
+      "effects": [
+        "autoprefixer",
+        "css-blank-pseudo",
+        "css-has-pseudo",
+        "css-loader",
+        "css-prefers-color-scheme",
+        "cssnano-preset-simple",
+        "cssnano-simple",
+        "icss-utils",
+        "postcss-attribute-case-insensitive",
+        "postcss-color-functional-notation",
+        "postcss-color-gray",
+        "postcss-color-hex-alpha",
+        "postcss-color-mod-function",
+        "postcss-color-rebeccapurple",
+        "postcss-custom-media",
+        "postcss-custom-properties",
+        "postcss-custom-selectors",
+        "postcss-dir-pseudo-class",
+        "postcss-double-position-gradients",
+        "postcss-env-function",
+        "postcss-flexbugs-fixes",
+        "postcss-focus-visible",
+        "postcss-focus-within",
+        "postcss-font-variant",
+        "postcss-gap-properties",
+        "postcss-image-set-function",
+        "postcss-initial",
+        "postcss-lab-function",
+        "postcss-loader",
+        "postcss-logical",
+        "postcss-media-minmax",
+        "postcss-modules-extract-imports",
+        "postcss-modules-local-by-default",
+        "postcss-modules-scope",
+        "postcss-modules-values",
+        "postcss-nesting",
+        "postcss-overflow-shorthand",
+        "postcss-page-break",
+        "postcss-place",
+        "postcss-preset-env",
+        "postcss-pseudo-class-any-link",
+        "postcss-replace-overflow-wrap",
+        "postcss-selector-matches",
+        "postcss-selector-not",
+        "resolve-url-loader"
+      ],
+      "range": "<=8.5.9",
+      "nodes": [
+        "node_modules/autoprefixer/node_modules/postcss",
+        "node_modules/css-blank-pseudo/node_modules/postcss",
+        "node_modules/css-has-pseudo/node_modules/postcss",
+        "node_modules/css-loader/node_modules/postcss",
+        "node_modules/css-prefers-color-scheme/node_modules/postcss",
+        "node_modules/cssnano-preset-simple/node_modules/postcss",
+        "node_modules/cssnano-simple/node_modules/postcss",
+        "node_modules/icss-utils/node_modules/postcss",
+        "node_modules/postcss-attribute-case-insensitive/node_modules/postcss",
+        "node_modules/postcss-color-functional-notation/node_modules/postcss",
+        "node_modules/postcss-color-gray/node_modules/postcss",
+        "node_modules/postcss-color-hex-alpha/node_modules/postcss",
+        "node_modules/postcss-color-mod-function/node_modules/postcss",
+        "node_modules/postcss-color-rebeccapurple/node_modules/postcss",
+        "node_modules/postcss-custom-media/node_modules/postcss",
+        "node_modules/postcss-custom-properties/node_modules/postcss",
+        "node_modules/postcss-custom-selectors/node_modules/postcss",
+        "node_modules/postcss-dir-pseudo-class/node_modules/postcss",
+        "node_modules/postcss-double-position-gradients/node_modules/postcss",
+        "node_modules/postcss-env-function/node_modules/postcss",
+        "node_modules/postcss-flexbugs-fixes/node_modules/postcss",
+        "node_modules/postcss-focus-visible/node_modules/postcss",
+        "node_modules/postcss-focus-within/node_modules/postcss",
+        "node_modules/postcss-font-variant/node_modules/postcss",
+        "node_modules/postcss-gap-properties/node_modules/postcss",
+        "node_modules/postcss-image-set-function/node_modules/postcss",
+        "node_modules/postcss-initial/node_modules/postcss",
+        "node_modules/postcss-lab-function/node_modules/postcss",
+        "node_modules/postcss-loader/node_modules/postcss",
+        "node_modules/postcss-logical/node_modules/postcss",
+        "node_modules/postcss-media-minmax/node_modules/postcss",
+        "node_modules/postcss-modules-extract-imports/node_modules/postcss",
+        "node_modules/postcss-modules-local-by-default/node_modules/postcss",
+        "node_modules/postcss-modules-scope/node_modules/postcss",
+        "node_modules/postcss-modules-values/node_modules/postcss",
+        "node_modules/postcss-nesting/node_modules/postcss",
+        "node_modules/postcss-overflow-shorthand/node_modules/postcss",
+        "node_modules/postcss-page-break/node_modules/postcss",
+        "node_modules/postcss-place/node_modules/postcss",
+        "node_modules/postcss-preset-env/node_modules/postcss",
+        "node_modules/postcss-pseudo-class-any-link/node_modules/postcss",
+        "node_modules/postcss-replace-overflow-wrap/node_modules/postcss",
+        "node_modules/postcss-selector-matches/node_modules/postcss",
+        "node_modules/postcss-selector-not/node_modules/postcss",
+        "node_modules/resolve-url-loader/node_modules/postcss"
+      ],
+      "fixAvailable": {
+        "name": "next",
+        "version": "16.2.6",
+        "isSemVerMajor": true
+      }
+    },
+    "postcss-attribute-case-insensitive": {
+      "name": "postcss-attribute-case-insensitive",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "postcss"
+      ],
+      "effects": [],
+      "range": "<=4.0.2",
+      "nodes": [
+        "node_modules/postcss-attribute-case-insensitive"
+      ],
+      "fixAvailable": true
+    },
+    "postcss-color-functional-notation": {
+      "name": "postcss-color-functional-notation",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "postcss"
+      ],
+      "effects": [],
+      "range": "<=3.0.2",
+      "nodes": [
+        "node_modules/postcss-color-functional-notation"
+      ],
+      "fixAvailable": true
+    },
+    "postcss-color-gray": {
+      "name": "postcss-color-gray",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "postcss"
+      ],
+      "effects": [
+        "postcss-preset-env"
+      ],
+      "range": ">=3.0.0",
+      "nodes": [
+        "node_modules/postcss-color-gray"
+      ],
+      "fixAvailable": true
+    },
+    "postcss-color-hex-alpha": {
+      "name": "postcss-color-hex-alpha",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "postcss"
+      ],
+      "effects": [],
+      "range": "1.3.0 - 6.0.0",
+      "nodes": [
+        "node_modules/postcss-color-hex-alpha"
+      ],
+      "fixAvailable": true
+    },
+    "postcss-color-mod-function": {
+      "name": "postcss-color-mod-function",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "postcss"
+      ],
+      "effects": [
+        "postcss-preset-env"
+      ],
+      "range": "<=3.0.3",
+      "nodes": [
+        "node_modules/postcss-color-mod-function"
+      ],
+      "fixAvailable": true
+    },
+    "postcss-color-rebeccapurple": {
+      "name": "postcss-color-rebeccapurple",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "postcss"
+      ],
+      "effects": [],
+      "range": "1.2.0 - 6.0.0",
+      "nodes": [
+        "node_modules/postcss-color-rebeccapurple"
+      ],
+      "fixAvailable": true
+    },
+    "postcss-custom-media": {
+      "name": "postcss-custom-media",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "postcss"
+      ],
+      "effects": [],
+      "range": "4.0.0 - 7.0.8",
+      "nodes": [
+        "node_modules/postcss-custom-media"
+      ],
+      "fixAvailable": true
+    },
+    "postcss-custom-properties": {
+      "name": "postcss-custom-properties",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "postcss"
+      ],
+      "effects": [],
+      "range": "3.3.0 - 10.0.0",
+      "nodes": [
+        "node_modules/postcss-custom-properties"
+      ],
+      "fixAvailable": true
+    },
+    "postcss-custom-selectors": {
+      "name": "postcss-custom-selectors",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "postcss"
+      ],
+      "effects": [],
+      "range": "2.3.0 - 5.1.2",
+      "nodes": [
+        "node_modules/postcss-custom-selectors"
+      ],
+      "fixAvailable": true
+    },
+    "postcss-dir-pseudo-class": {
+      "name": "postcss-dir-pseudo-class",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "postcss"
+      ],
+      "effects": [],
+      "range": "<=5.0.0",
+      "nodes": [
+        "node_modules/postcss-dir-pseudo-class"
+      ],
+      "fixAvailable": true
+    },
+    "postcss-double-position-gradients": {
+      "name": "postcss-double-position-gradients",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "postcss"
+      ],
+      "effects": [
+        "postcss-preset-env"
+      ],
+      "range": "<=2.0.0",
+      "nodes": [
+        "node_modules/postcss-double-position-gradients"
+      ],
+      "fixAvailable": true
+    },
+    "postcss-env-function": {
+      "name": "postcss-env-function",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "postcss"
+      ],
+      "effects": [],
+      "range": "<=3.0.0",
+      "nodes": [
+        "node_modules/postcss-env-function"
+      ],
+      "fixAvailable": true
+    },
+    "postcss-flexbugs-fixes": {
+      "name": "postcss-flexbugs-fixes",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "postcss"
+      ],
+      "effects": [
+        "next"
+      ],
+      "range": "<=4.2.1",
+      "nodes": [
+        "node_modules/postcss-flexbugs-fixes"
+      ],
+      "fixAvailable": {
+        "name": "next",
+        "version": "16.2.6",
+        "isSemVerMajor": true
+      }
+    },
+    "postcss-focus-visible": {
+      "name": "postcss-focus-visible",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "postcss"
+      ],
+      "effects": [
+        "postcss-preset-env"
+      ],
+      "range": "<=5.0.0",
+      "nodes": [
+        "node_modules/postcss-focus-visible"
+      ],
+      "fixAvailable": true
+    },
+    "postcss-focus-within": {
+      "name": "postcss-focus-within",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "postcss"
+      ],
+      "effects": [
+        "postcss-preset-env"
+      ],
+      "range": "<=4.0.0",
+      "nodes": [
+        "node_modules/postcss-focus-within"
+      ],
+      "fixAvailable": true
+    },
+    "postcss-font-variant": {
+      "name": "postcss-font-variant",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "postcss"
+      ],
+      "effects": [],
+      "range": "1.2.0 - 4.0.1",
+      "nodes": [
+        "node_modules/postcss-font-variant"
+      ],
+      "fixAvailable": true
+    },
+    "postcss-gap-properties": {
+      "name": "postcss-gap-properties",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "postcss"
+      ],
+      "effects": [],
+      "range": "<=2.0.0",
+      "nodes": [
+        "node_modules/postcss-gap-properties"
+      ],
+      "fixAvailable": true
+    },
+    "postcss-image-set-function": {
+      "name": "postcss-image-set-function",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "postcss"
+      ],
+      "effects": [],
+      "range": "<=3.0.1",
+      "nodes": [
+        "node_modules/postcss-image-set-function"
+      ],
+      "fixAvailable": true
+    },
+    "postcss-initial": {
+      "name": "postcss-initial",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "postcss"
+      ],
+      "effects": [
+        "postcss-preset-env"
+      ],
+      "range": "<=3.0.4",
+      "nodes": [
+        "node_modules/postcss-initial"
+      ],
+      "fixAvailable": true
+    },
+    "postcss-lab-function": {
+      "name": "postcss-lab-function",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "postcss"
+      ],
+      "effects": [],
+      "range": "<=3.1.2",
+      "nodes": [
+        "node_modules/postcss-lab-function"
+      ],
+      "fixAvailable": true
+    },
+    "postcss-loader": {
+      "name": "postcss-loader",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "postcss"
+      ],
+      "effects": [
+        "next"
+      ],
+      "range": "<=4.0.1",
+      "nodes": [
+        "node_modules/postcss-loader"
+      ],
+      "fixAvailable": {
+        "name": "next",
+        "version": "16.2.6",
+        "isSemVerMajor": true
+      }
+    },
+    "postcss-logical": {
+      "name": "postcss-logical",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "postcss"
+      ],
+      "effects": [],
+      "range": "<=4.0.2",
+      "nodes": [
+        "node_modules/postcss-logical"
+      ],
+      "fixAvailable": true
+    },
+    "postcss-media-minmax": {
+      "name": "postcss-media-minmax",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "postcss"
+      ],
+      "effects": [],
+      "range": "1.2.0 - 4.0.0",
+      "nodes": [
+        "node_modules/postcss-media-minmax"
+      ],
+      "fixAvailable": true
+    },
+    "postcss-modules-extract-imports": {
+      "name": "postcss-modules-extract-imports",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "postcss"
+      ],
+      "effects": [],
+      "range": "<=2.0.0",
+      "nodes": [
+        "node_modules/postcss-modules-extract-imports"
+      ],
+      "fixAvailable": true
+    },
+    "postcss-modules-local-by-default": {
+      "name": "postcss-modules-local-by-default",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "icss-utils",
+        "postcss"
+      ],
+      "effects": [],
+      "range": "<=4.0.0-rc.4",
+      "nodes": [
+        "node_modules/postcss-modules-local-by-default"
+      ],
+      "fixAvailable": true
+    },
+    "postcss-modules-scope": {
+      "name": "postcss-modules-scope",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "postcss"
+      ],
+      "effects": [],
+      "range": "<=2.2.0",
+      "nodes": [
+        "node_modules/postcss-modules-scope"
+      ],
+      "fixAvailable": true
+    },
+    "postcss-modules-values": {
+      "name": "postcss-modules-values",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "icss-utils",
+        "postcss"
+      ],
+      "effects": [
+        "css-loader"
+      ],
+      "range": "<=4.0.0-rc.5",
+      "nodes": [
+        "node_modules/postcss-modules-values"
+      ],
+      "fixAvailable": {
+        "name": "next",
+        "version": "16.2.6",
+        "isSemVerMajor": true
+      }
+    },
+    "postcss-nesting": {
+      "name": "postcss-nesting",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "postcss"
+      ],
+      "effects": [],
+      "range": "<=7.0.1",
+      "nodes": [
+        "node_modules/postcss-nesting"
+      ],
+      "fixAvailable": true
+    },
+    "postcss-overflow-shorthand": {
+      "name": "postcss-overflow-shorthand",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "postcss"
+      ],
+      "effects": [],
+      "range": "<=2.0.0",
+      "nodes": [
+        "node_modules/postcss-overflow-shorthand"
+      ],
+      "fixAvailable": true
+    },
+    "postcss-page-break": {
+      "name": "postcss-page-break",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "postcss"
+      ],
+      "effects": [
+        "postcss-preset-env"
+      ],
+      "range": "<=2.0.0",
+      "nodes": [
+        "node_modules/postcss-page-break"
+      ],
+      "fixAvailable": true
+    },
+    "postcss-place": {
+      "name": "postcss-place",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "postcss"
+      ],
+      "effects": [],
+      "range": "<=5.0.0",
+      "nodes": [
+        "node_modules/postcss-place"
+      ],
+      "fixAvailable": true
+    },
+    "postcss-preset-env": {
+      "name": "postcss-preset-env",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "autoprefixer",
+        "css-blank-pseudo",
+        "css-has-pseudo",
+        "css-prefers-color-scheme",
+        "postcss",
+        "postcss-attribute-case-insensitive",
+        "postcss-color-functional-notation",
+        "postcss-color-gray",
+        "postcss-color-hex-alpha",
+        "postcss-color-mod-function",
+        "postcss-color-rebeccapurple",
+        "postcss-custom-media",
+        "postcss-custom-properties",
+        "postcss-custom-selectors",
+        "postcss-dir-pseudo-class",
+        "postcss-double-position-gradients",
+        "postcss-env-function",
+        "postcss-focus-visible",
+        "postcss-focus-within",
+        "postcss-font-variant",
+        "postcss-gap-properties",
+        "postcss-image-set-function",
+        "postcss-initial",
+        "postcss-lab-function",
+        "postcss-logical",
+        "postcss-media-minmax",
+        "postcss-nesting",
+        "postcss-overflow-shorthand",
+        "postcss-page-break",
+        "postcss-place",
+        "postcss-pseudo-class-any-link",
+        "postcss-replace-overflow-wrap",
+        "postcss-selector-matches",
+        "postcss-selector-not"
+      ],
+      "effects": [],
+      "range": "<=7.0.0",
+      "nodes": [
+        "node_modules/postcss-preset-env"
+      ],
+      "fixAvailable": true
+    },
+    "postcss-pseudo-class-any-link": {
+      "name": "postcss-pseudo-class-any-link",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "postcss"
+      ],
+      "effects": [],
+      "range": "<=6.0.0",
+      "nodes": [
+        "node_modules/postcss-pseudo-class-any-link"
+      ],
+      "fixAvailable": true
+    },
+    "postcss-replace-overflow-wrap": {
+      "name": "postcss-replace-overflow-wrap",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "postcss"
+      ],
+      "effects": [],
+      "range": "<=3.0.0",
+      "nodes": [
+        "node_modules/postcss-replace-overflow-wrap"
+      ],
+      "fixAvailable": true
+    },
+    "postcss-selector-matches": {
+      "name": "postcss-selector-matches",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "postcss"
+      ],
+      "effects": [],
+      "range": "*",
+      "nodes": [
+        "node_modules/postcss-selector-matches"
+      ],
+      "fixAvailable": true
+    },
+    "postcss-selector-not": {
+      "name": "postcss-selector-not",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "postcss"
+      ],
+      "effects": [],
+      "range": "<=4.0.1",
+      "nodes": [
+        "node_modules/postcss-selector-not"
+      ],
+      "fixAvailable": true
+    },
+    "readdirp": {
+      "name": "readdirp",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "micromatch"
+      ],
+      "effects": [
+        "chokidar"
+      ],
+      "range": "2.2.0 - 2.2.1",
+      "nodes": [
+        "node_modules/watchpack-chokidar2/node_modules/readdirp"
+      ],
+      "fixAvailable": true
+    },
+    "resolve-url-loader": {
+      "name": "resolve-url-loader",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "adjust-sourcemap-loader",
+        "loader-utils",
+        "postcss"
+      ],
+      "effects": [
+        "next"
+      ],
+      "range": "0.0.1-experiment-postcss || 3.0.0-alpha.1 - 4.0.0",
+      "nodes": [
+        "node_modules/resolve-url-loader"
+      ],
+      "fixAvailable": {
+        "name": "next",
+        "version": "16.2.6",
+        "isSemVerMajor": true
+      }
+    },
+    "send": {
+      "name": "send",
+      "severity": "low",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1109556,
+          "name": "send",
+          "dependency": "send",
+          "title": "send vulnerable to template injection that can lead to XSS",
+          "url": "https://github.com/advisories/GHSA-m6fv-jmcg-4jfg",
+          "severity": "low",
+          "cwe": [
+            "CWE-79"
+          ],
+          "cvss": {
+            "score": 5,
+            "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:U/C:L/I:L/A:L"
+          },
+          "range": "<0.19.0"
+        }
+      ],
+      "effects": [
+        "next"
+      ],
+      "range": "<0.19.0",
+      "nodes": [
+        "node_modules/next/node_modules/send"
+      ],
+      "fixAvailable": {
+        "name": "next",
+        "version": "16.2.6",
+        "isSemVerMajor": true
+      }
+    },
+    "serialize-javascript": {
+      "name": "serialize-javascript",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1113686,
+          "name": "serialize-javascript",
+          "dependency": "serialize-javascript",
+          "title": "Serialize JavaScript is Vulnerable to RCE via RegExp.flags and Date.prototype.toISOString()",
+          "url": "https://github.com/advisories/GHSA-5c6j-r48x-rmvq",
+          "severity": "high",
+          "cwe": [
+            "CWE-96"
+          ],
+          "cvss": {
+            "score": 8.1,
+            "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:H"
+          },
+          "range": "<=7.0.2"
+        }
+      ],
+      "effects": [
+        "terser-webpack-plugin"
+      ],
+      "range": "<=7.0.2",
+      "nodes": [
+        "node_modules/serialize-javascript"
+      ],
+      "fixAvailable": {
+        "name": "next",
+        "version": "16.2.6",
+        "isSemVerMajor": true
+      }
+    },
+    "style-loader": {
+      "name": "style-loader",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "webpack"
+      ],
+      "effects": [
+        "next"
+      ],
+      "range": "1.0.0 - 1.0.2",
+      "nodes": [
+        "node_modules/style-loader"
+      ],
+      "fixAvailable": {
+        "name": "next",
+        "version": "16.2.6",
+        "isSemVerMajor": true
+      }
+    },
+    "styled-jsx": {
+      "name": "styled-jsx",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "loader-utils"
+      ],
+      "effects": [
+        "next"
+      ],
+      "range": "3.0.0 - 5.0.0-beta.7",
+      "nodes": [
+        "node_modules/next/node_modules/styled-jsx"
+      ],
+      "fixAvailable": {
+        "name": "next",
+        "version": "16.2.6",
+        "isSemVerMajor": true
+      }
+    },
+    "terser": {
+      "name": "terser",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1091691,
+          "name": "terser",
+          "dependency": "terser",
+          "title": "Terser insecure use of regular expressions leads to ReDoS",
+          "url": "https://github.com/advisories/GHSA-4wf5-vphf-c2xc",
+          "severity": "high",
+          "cwe": [
+            "CWE-1333"
+          ],
+          "cvss": {
+            "score": 7.5,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+          },
+          "range": "<4.8.1"
+        }
+      ],
+      "effects": [
+        "@ampproject/toolbox-optimizer",
+        "next"
+      ],
+      "range": "<4.8.1",
+      "nodes": [
+        "node_modules/@ampproject/toolbox-optimizer/node_modules/terser",
+        "node_modules/terser"
+      ],
+      "fixAvailable": {
+        "name": "next",
+        "version": "16.2.6",
+        "isSemVerMajor": true
+      }
+    },
+    "terser-webpack-plugin": {
+      "name": "terser-webpack-plugin",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "serialize-javascript",
+        "webpack"
+      ],
+      "effects": [
+        "webpack"
+      ],
+      "range": "<=5.3.16",
+      "nodes": [
+        "node_modules/terser-webpack-plugin"
+      ],
+      "fixAvailable": {
+        "name": "next",
+        "version": "16.2.6",
+        "isSemVerMajor": true
+      }
+    },
+    "uuid": {
+      "name": "uuid",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1119441,
+          "name": "uuid",
+          "dependency": "uuid",
+          "title": "uuid: Missing buffer bounds check in v3/v5/v6 when buf is provided",
+          "url": "https://github.com/advisories/GHSA-w5hq-g745-h8pq",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-787",
+            "CWE-1285"
+          ],
+          "cvss": {
+            "score": 7.5,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:H/A:N"
+          },
+          "range": "<11.1.1"
+        }
+      ],
+      "effects": [
+        "webpack-log"
+      ],
+      "range": "<11.1.1",
+      "nodes": [
+        "node_modules/webpack-log/node_modules/uuid"
+      ],
+      "fixAvailable": {
+        "name": "next",
+        "version": "16.2.6",
+        "isSemVerMajor": true
+      }
+    },
+    "watchpack": {
+      "name": "watchpack",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "watchpack-chokidar2"
+      ],
+      "effects": [],
+      "range": "1.7.2 - 1.7.5",
+      "nodes": [
+        "node_modules/webpack/node_modules/watchpack"
+      ],
+      "fixAvailable": true
+    },
+    "watchpack-chokidar2": {
+      "name": "watchpack-chokidar2",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "chokidar"
+      ],
+      "effects": [
+        "watchpack"
+      ],
+      "range": "*",
+      "nodes": [
+        "node_modules/watchpack-chokidar2"
+      ],
+      "fixAvailable": true
+    },
+    "webpack": {
+      "name": "webpack",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "micromatch",
+        "node-libs-browser",
+        "terser-webpack-plugin"
+      ],
+      "effects": [
+        "cache-loader",
+        "css-loader",
+        "file-loader",
+        "mini-css-extract-plugin",
+        "next",
+        "style-loader",
+        "terser-webpack-plugin",
+        "webpack-dev-middleware"
+      ],
+      "range": "2.0.0-beta - 5.1.0",
+      "nodes": [
+        "node_modules/webpack"
+      ],
+      "fixAvailable": {
+        "name": "next",
+        "version": "16.2.6",
+        "isSemVerMajor": true
+      }
+    },
+    "webpack-dev-middleware": {
+      "name": "webpack-dev-middleware",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1096729,
+          "name": "webpack-dev-middleware",
+          "dependency": "webpack-dev-middleware",
+          "title": "Path traversal in webpack-dev-middleware",
+          "url": "https://github.com/advisories/GHSA-wr3j-pwj9-hqq6",
+          "severity": "high",
+          "cwe": [
+            "CWE-22"
+          ],
+          "cvss": {
+            "score": 7.4,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:H/I:N/A:N"
+          },
+          "range": "<=5.3.3"
+        },
+        "webpack",
+        "webpack-log"
+      ],
+      "effects": [
+        "next"
+      ],
+      "range": "<=5.3.3",
+      "nodes": [
+        "node_modules/webpack-dev-middleware"
+      ],
+      "fixAvailable": {
+        "name": "next",
+        "version": "16.2.6",
+        "isSemVerMajor": true
+      }
+    },
+    "webpack-hot-middleware": {
+      "name": "webpack-hot-middleware",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "ansi-html"
+      ],
+      "effects": [],
+      "range": "2.9.0 - 2.25.0",
+      "nodes": [
+        "node_modules/webpack-hot-middleware"
+      ],
+      "fixAvailable": true
+    },
+    "webpack-log": {
+      "name": "webpack-log",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "uuid"
+      ],
+      "effects": [
+        "webpack-dev-middleware"
+      ],
+      "range": "1.1.0 - 2.0.0",
+      "nodes": [
+        "node_modules/webpack-log"
+      ],
+      "fixAvailable": {
+        "name": "next",
+        "version": "16.2.6",
+        "isSemVerMajor": true
+      }
+    }
+  },
+  "metadata": {
+    "vulnerabilities": {
+      "info": 0,
+      "low": 9,
+      "moderate": 56,
+      "high": 24,
+      "critical": 1,
+      "total": 90
+    },
+    "dependencies": {
+      "prod": 1413,
+      "dev": 245,
+      "optional": 80,
+      "peer": 0,
+      "peerOptional": 0,
+      "total": 1687
+    }
+  }
+}

@@ -1,9 +1,9 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { listMessagesForMission, createMessage } from "@/lib/mongodb/messages"
 
-export async function GET(req: Request, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const { id } = params
+    const { id } = await params
     const messages = await listMessagesForMission(id)
     return NextResponse.json({ success: true, data: messages })
   } catch (err) {
@@ -12,9 +12,9 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
   }
 }
 
-export async function POST(req: Request, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const { id } = params
+    const { id } = await params
     const body = await req.json()
     if (!body.type || !body.text) {
       return NextResponse.json({ success: false, error: "type and text required" }, { status: 400 })

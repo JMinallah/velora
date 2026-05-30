@@ -68,7 +68,7 @@ export default function OnboardingPage() {
         const mission = missionData.data
 
         // Create initial tasks by splitting the plan into lines (pick up to 3)
-        const lines = generatedPlan.split("\n").map((l) => l.trim()).filter(Boolean)
+        const lines = generatedPlan.split("\n").map((line: string) => line.trim()).filter(Boolean)
         const initialTasks = lines.slice(0, 3)
 
         for (const line of (initialTasks.length ? initialTasks : ["Review the generated plan"])) {

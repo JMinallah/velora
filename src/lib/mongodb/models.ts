@@ -7,6 +7,7 @@ export const COLLECTIONS = {
   reminders: "reminders",
   documents: "documents",
   events: "events",
+  users: "users",
 }
 
 export type MissionRecord = {
@@ -78,4 +79,13 @@ export type EventRecord = {
   actor: "user" | "agent" | "system"
   payload: Record<string, unknown>
   createdAt: string | Date
+}
+
+export type UserRecord = {
+  id: string
+  email: string
+  name?: string
+  passwordHash: string
+  role?: "user" | "admin"
+  createdAt: string
 }

@@ -1,0 +1,36 @@
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -t
+      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/velora-tools:$SHORT_SHA'
+      - .
+
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/velora-tools:$SHORT_SHA'
+
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - velora-tools
+      - --image=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/velora-tools:$SHORT_SHA
+      - --region=${_REGION}
+      - --platform=managed
+      - --allow-unauthenticated
+      - --set-env-vars=MONGODB_URI=${_MONGODB_URI},MONGODB_DB=${_MONGODB_DB},GEMINI_API_KEY=${_GEMINI_API_KEY},GEMINI_MODEL=${_GEMINI_MODEL},EVENT_RETENTION_DAYS=${_EVENT_RETENTION_DAYS}
+
+substitutions:
+  _REGION: us-central1
+  _REPO: velora
+  _MONGODB_URI: ''
+  _MONGODB_DB: velora
+  _GEMINI_API_KEY: ''
+  _GEMINI_MODEL: gemini-2.5-flash
+  _EVENT_RETENTION_DAYS: '90'
+
+images:
+  - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/velora-tools:$SHORT_SHA'

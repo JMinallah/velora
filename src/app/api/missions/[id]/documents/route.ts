@@ -1,9 +1,10 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { attachDocument, listDocumentsForMission } from "@/lib/mongodb/documents"
 
-export async function GET(_req: Request, { params }: { params: { id: string } }) {
+export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const documents = await listDocumentsForMission(params.id)
+    const { id } = await params
+    const documents = await listDocumentsForMission(id)
     return NextResponse.json({ success: true, data: documents })
   } catch (error) {
     console.error("GET /api/missions/[id]/documents", error)
@@ -17,8 +18,9 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   }
 }
 
-export async function POST(request: Request, { params }: { params: { id: string } }) {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const { id } = await params
     const body = await request.json()
 
     if (!body?.name) {
@@ -26,7 +28,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
     }
 
     const created = await attachDocument({
-      missionId: params.id,
+      missionId: id,
       name: body.name,
       mimeType: body.mimeType,
       storageUrl: body.storageUrl,

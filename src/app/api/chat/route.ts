@@ -1,23 +1,8 @@
-import { GoogleGenerativeAI } from "@google/generative-ai"
-
-const apiKey = process.env.GEMINI_API_KEY
-const modelName = process.env.GEMINI_MODEL ?? "gemini-2.5-flash"
-
-if (!apiKey) {
-  throw new Error("GEMINI_API_KEY is not set")
-}
-
-const genAI = new GoogleGenerativeAI(apiKey)
-const model = genAI.getGenerativeModel({ model: modelName })
+import { getGeminiModel, isTransientGeminiError } from "@/lib/ai/gemini"
 
 type ChatHistoryTurn = {
   sender?: string
   text: string
-}
-
-function isTransientGeminiError(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error)
-  return message.includes("503") || message.includes("high demand") || message.includes("temporarily")
 }
 
 function toModelHistory(history: ChatHistoryTurn[]) {
@@ -35,6 +20,7 @@ function toModelHistory(history: ChatHistoryTurn[]) {
 async function generateWithRetry(prompt: string, history: ChatHistoryTurn[]) {
   let lastError: unknown
   const modelHistory = toModelHistory(history)
+  const model = getGeminiModel()
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {

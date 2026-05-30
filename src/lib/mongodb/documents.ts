@@ -26,3 +26,20 @@ export async function listDocumentsForMission(missionId: string): Promise<Docume
   const db = await getDb()
   return await db.collection<DocumentRecord>(COLLECTIONS.documents).find({ missionId }).toArray()
 }
+
+export async function updateDocument(id: string, patch: Partial<DocumentRecord>): Promise<DocumentRecord | null> {
+  const db = await getDb()
+  const update: Partial<DocumentRecord> = {}
+  if (patch.name !== undefined) update.name = patch.name
+  if (patch.mimeType !== undefined) update.mimeType = patch.mimeType
+  if (patch.storageUrl !== undefined) update.storageUrl = patch.storageUrl
+  if (patch.extractedText !== undefined) update.extractedText = patch.extractedText
+  if (patch.summary !== undefined) update.summary = patch.summary
+  if (patch.extractedFields !== undefined) update.extractedFields = patch.extractedFields
+
+  const res = await db
+    .collection<DocumentRecord>(COLLECTIONS.documents)
+    .findOneAndUpdate({ id }, { $set: update }, { returnDocument: "after" })
+
+  return res.value ?? null
+}
