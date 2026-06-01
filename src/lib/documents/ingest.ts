@@ -4,13 +4,14 @@ import { getDb } from "@/lib/mongodb/client"
 import { COLLECTIONS } from "@/lib/mongodb/models"
 import type { DocumentRecord } from "@/lib/mongodb/models"
 
-export async function processDocumentRecord(documentId: string, filePath: string) {
+export async function processDocumentRecord(documentId: string, input: { filePath?: string; buffer?: Buffer }) {
   try {
     const db = await getDb()
     const doc = await db.collection<DocumentRecord>(COLLECTIONS.documents).findOne({ id: documentId })
     if (!doc) throw new Error("document not found")
 
-    const buffer = await fs.promises.readFile(filePath)
+    const buffer = input.buffer ?? (input.filePath ? await fs.promises.readFile(input.filePath) : null)
+    if (!buffer) throw new Error("document content is required")
     let extractedText = ""
 
     // Plain text
@@ -52,10 +53,12 @@ export async function processDocumentRecord(documentId: string, filePath: string
       .updateOne({ id: documentId }, { $set: { extractedText, summary } })
 
     // processed marker file
-    try {
-      await fs.promises.writeFile(path.join(path.dirname(filePath), `${path.basename(filePath)}.processed`), new Date().toISOString())
-    } catch {
-      // ignore
+    if (input.filePath) {
+      try {
+        await fs.promises.writeFile(path.join(path.dirname(input.filePath), `${path.basename(input.filePath)}.processed`), new Date().toISOString())
+      } catch {
+        // ignore
+      }
     }
 
     return { success: true }
@@ -76,7 +79,7 @@ export async function scanAndProcessPendingUploads() {
       const storageUrl = `/uploads/${file}`
       const doc = await db.collection<DocumentRecord>(COLLECTIONS.documents).findOne({ storageUrl })
       if (doc && !doc.extractedText) {
-        await processDocumentRecord(doc.id, filePath)
+        await processDocumentRecord(doc.id, { filePath })
       }
     }
   } catch {

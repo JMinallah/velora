@@ -12,12 +12,43 @@ import { NotificationBell } from "./NotificationBell";
 import { Home, LineChart, Menu, Package2, Users } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useState, type MouseEvent } from "react";
+import { useEffect, useState, type MouseEvent } from "react";
 
 export function Header() {
   const pathname = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [timelineHref, setTimelineHref] = useState("/onboarding");
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadMissionHref() {
+      try {
+        const response = await fetch("/api/missions");
+        const data = await response.json().catch(() => ({}));
+
+        if (!response.ok || !data?.success) {
+          return;
+        }
+
+        const latestMissionId = data.data?.[0]?.id;
+        if (!cancelled && latestMissionId) {
+          setTimelineHref(`/mission/${latestMissionId}`);
+        }
+      } catch {
+        if (!cancelled) {
+          setTimelineHref("/onboarding");
+        }
+      }
+    }
+
+    loadMissionHref();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleNavClick = (
     event: MouseEvent<HTMLAnchorElement>,
@@ -50,7 +81,7 @@ export function Header() {
       active: isDashboardActive,
     },
     {
-      href: "/mission/1",
+      href: timelineHref,
       label: "Timeline",
       icon: LineChart,
       active: isTimelineActive,

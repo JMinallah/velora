@@ -3,13 +3,13 @@ steps:
     args:
       - build
       - -t
-      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/velora-tools:$SHORT_SHA'
+      - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/velora-tools:$SHORT_SHA"
       - .
 
   - name: gcr.io/cloud-builders/docker
     args:
       - push
-      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/velora-tools:$SHORT_SHA'
+      - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/velora-tools:$SHORT_SHA"
 
   - name: gcr.io/google.com/cloudsdktool/cloud-sdk
     entrypoint: gcloud
@@ -21,16 +21,15 @@ steps:
       - --region=${_REGION}
       - --platform=managed
       - --allow-unauthenticated
-      - --set-env-vars=MONGODB_URI=${_MONGODB_URI},MONGODB_DB=${_MONGODB_DB},GEMINI_API_KEY=${_GEMINI_API_KEY},GEMINI_MODEL=${_GEMINI_MODEL},EVENT_RETENTION_DAYS=${_EVENT_RETENTION_DAYS}
+      - --set-env-vars=MONGODB_DB=${_MONGODB_DB},GEMINI_MODEL=${_GEMINI_MODEL},EVENT_RETENTION_DAYS=${_EVENT_RETENTION_DAYS}
+      - --set-secrets=MONGODB_URI=MONGODB_URI:latest,TOOLS_API_KEY=TOOL_API_KEY:latest,JWT_SECRET=JWT_SECRET:latest,GEMINI_API_KEY=GEMINI_API_KEY:latest,GCS_BUCKET=GCS_BUCKET:latest
 
 substitutions:
   _REGION: us-central1
   _REPO: velora
-  _MONGODB_URI: ''
   _MONGODB_DB: velora
-  _GEMINI_API_KEY: ''
   _GEMINI_MODEL: gemini-2.5-flash
-  _EVENT_RETENTION_DAYS: '90'
+  _EVENT_RETENTION_DAYS: "90"
 
 images:
-  - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/velora-tools:$SHORT_SHA'
+  - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/velora-tools:$SHORT_SHA"

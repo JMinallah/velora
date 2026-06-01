@@ -3,11 +3,42 @@
 import { Home, LineChart, Package2, Users } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { type MouseEvent } from "react";
+import { useEffect, useState, type MouseEvent } from "react";
 
 export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
+  const [timelineHref, setTimelineHref] = useState("/onboarding");
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadMissionHref() {
+      try {
+        const response = await fetch("/api/missions");
+        const data = await response.json().catch(() => ({}));
+
+        if (!response.ok || !data?.success) {
+          return;
+        }
+
+        const latestMissionId = data.data?.[0]?.id;
+        if (!cancelled && latestMissionId) {
+          setTimelineHref(`/mission/${latestMissionId}`);
+        }
+      } catch {
+        if (!cancelled) {
+          setTimelineHref("/onboarding");
+        }
+      }
+    }
+
+    loadMissionHref();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleNavClick = (
     event: MouseEvent<HTMLAnchorElement>,
@@ -59,8 +90,8 @@ export function Sidebar() {
               Dashboard
             </Link>
             <Link
-              href="/mission/1"
-              onClick={(event) => handleNavClick(event, "/mission/1")}
+              href={timelineHref}
+              onClick={(event) => handleNavClick(event, timelineHref)}
               className={`flex items-center gap-3 rounded-lg px-3 py-2 transition-all hover:text-primary ${
                 isTimelineActive
                   ? "bg-sidebar-accent text-sidebar-accent-foreground"

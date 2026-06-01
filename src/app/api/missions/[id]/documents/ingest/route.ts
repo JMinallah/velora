@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server"
-import path from "path"
 import { attachDocument } from "@/lib/mongodb/documents"
 import { createEvent } from "@/lib/mongodb/events"
 import { processDocumentRecord } from "@/lib/documents/ingest"
@@ -37,11 +36,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     await createEvent({ missionId: id, type: "document-attached", actor: "user", payload: { documentId: created.id, name: created.name, storageUrl: created.storageUrl } })
 
-    // Best-effort background processing only works for local uploads.
-    if (created.storageUrl.startsWith("/uploads/")) {
-      const localFilePath = path.join(process.cwd(), "public", "uploads", path.basename(created.storageUrl))
-      processDocumentRecord(created.id, localFilePath).catch((err) => console.error("background document processing failed", err))
-    }
+    processDocumentRecord(created.id, { buffer }).catch((err) => console.error("background document processing failed", err))
 
     return NextResponse.json({ success: true, data: created }, { status: 201 })
   } catch (error) {

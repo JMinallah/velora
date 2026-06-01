@@ -82,8 +82,7 @@ export default function OnboardingPage() {
         router.push(`/mission/${mission.id}`)
       } catch (err) {
         console.error("Failed to create mission/tasks from onboarding", err)
-        // fallback: go to default mission page
-        router.push("/mission/1")
+        setPlan((currentPlan) => currentPlan || "We generated a plan, but could not create the mission yet. Please try again.")
       }
     } catch (error) {
       console.error("Onboarding error:", error);

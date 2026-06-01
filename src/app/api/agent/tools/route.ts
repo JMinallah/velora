@@ -27,13 +27,14 @@ const tools = [
     inputSchema: {
       type: "object",
       properties: {
+        missionId: { type: "string" },
         label: { type: "string" },
         category: { type: "string" },
         dueDate: { type: ["string", "null"] },
         priority: { type: "string", enum: ["low", "medium", "high"] },
         source: { type: "string", enum: ["agent", "user", "import"] },
       },
-      required: ["label"],
+      required: ["missionId", "label"],
     },
     outputSchema: { type: "object", properties: { id: { type: "string" }, label: { type: "string" } } },
   },
@@ -42,7 +43,15 @@ const tools = [
     description: "Update a task's completed status",
     method: "POST",
     path: "/api/tools/updateTaskStatus",
-    inputSchema: { type: "object", properties: { completed: { type: "boolean" } }, required: ["completed"] },
+    inputSchema: {
+      type: "object",
+      properties: {
+        missionId: { type: "string" },
+        taskId: { type: "string" },
+        completed: { type: "boolean" },
+      },
+      required: ["missionId", "taskId", "completed"],
+    },
     outputSchema: { type: "object", properties: { id: { type: "string" }, completed: { type: "boolean" } } },
   },
   {

@@ -1,10 +1,12 @@
 gcloud run deploy "$SERVICE_NAME" \
   --source . \
   --region "$REGION" \
-  --platform managed \
-  --allow-unauthenticated \
-  --set-env-vars "MONGODB_DB=$MONGODB_DB,GEMINI_MODEL=$GEMINI_MODEL,EVENT_RETENTION_DAYS=90" \
-  --set-secrets "MONGODB_URI=MONGODB_URI:latest,TOOL_API_KEY=TOOL_API_KEY:latest,JWT_SECRET=JWT_SECRET:latest,GEMINI_API_KEY=GEMINI_API_KEY:latest,GCS_BUCKET=GCS_BUCKET:latest"Agent Builder integration notes
+ --platform managed \
+ --allow-unauthenticated \
+ --set-env-vars "MONGODB_DB=$MONGODB_DB,GEMINI_MODEL=$GEMINI_MODEL,EVENT_RETENTION_DAYS=90" \
+ --set-secrets "MONGODB_URI=MONGODB_URI:latest,TOOLS_API_KEY=TOOL_API_KEY:latest,JWT_SECRET=JWT_SECRET:latest,GEMINI_API_KEY=GEMINI_API_KEY:latest,GCS_BUCKET=GCS_BUCKET:latest"
+
+Agent Builder integration notes
 
 Goal
 
@@ -19,7 +21,7 @@ Tools manifest
 Primary tool contracts (summary)
 
 - `createMission` — `POST /api/missions` { title, overview, subtitle?, nextStep?, source? }
-- `createTask` — `POST /api/missions/{missionId}/tasks` { label, category?, dueDate?, priority?, source? }
+- `createTask` — `POST /api/missions/{missionId}/tasks` { missionId, label, category?, dueDate?, priority?, source? }
 - `createMission` — `POST /api/tools/createMission` { title, overview, subtitle?, nextStep?, source? }
 - `createTask` — `POST /api/tools/createTask` { missionId, label, category?, dueDate?, priority?, source? }
 - `updateTaskStatus` — `POST /api/tools/updateTaskStatus` { missionId, taskId, completed }
@@ -32,13 +34,13 @@ Primary tool contracts (summary)
 Usage notes
 
 - The agent should treat the tools as authoritative operations that mutate mission state and emit events.
-- `ingestDocument` stores the uploaded file in `public/uploads` and triggers background processing for text extraction.
+- `ingestDocument` stores the uploaded file in GCS when configured, or `public/uploads` locally, and triggers extraction for text.
 - All mutation endpoints return `{ success: true, data: ... }` on success.
 
 Security
 
 - Tool endpoints support API-key auth via `TOOLS_API_KEY`.
-- If `TOOLS_API_KEY` is set, provide either `x-tools-api-key` or `Authorization: Bearer <key>`.
+- If `TOOLS_API_KEY` is set, provide `x-tools-api-key`, `x-api-key`, or `Authorization: Bearer <key>`.
 - For local testing, leave `TOOLS_API_KEY` unset.
 
 Next steps
@@ -60,9 +62,10 @@ Tool discovery
 
 Authentication
 
-- For local testing set `TOOL_API_KEY` in the Agent Builder tool configuration and include header `x-api-key: <TOOL_API_KEY>` on each request.
+- For local testing set `TOOLS_API_KEY` in the Agent Builder tool configuration and include header `x-tools-api-key: <TOOLS_API_KEY>` on each request.
 - In production prefer service-to-service auth (Cloud IAM or signed service account token) or provide a long-lived JWT. The server accepts:
-  - `x-api-key` header (simple key) OR
+  - `x-tools-api-key` header (preferred simple key)
+  - `x-api-key` header (legacy compatibility)
   - `Authorization: Bearer <JWT>` where the JWT `sub` is a valid Velora user id.
 
 Tool invocation
@@ -91,7 +94,7 @@ Tool usage examples
 
   Request:
   POST /api/tools/createMission
-  Headers: `x-api-key: <KEY>`
+  Headers: `x-tools-api-key: <KEY>`
   Body:
   {
   "title": "Move to new city",
@@ -142,7 +145,7 @@ Tool usage examples
   Response:
   { "success": true, "data": { "id": "doc-1", "storageUrl": "/uploads/.." } }
 
-  Notes: The route saves the file (GCS if configured), creates a document record and emits a `document-uploaded` event. Background extraction is kicked off asynchronously; the agent should re-query `GET /api/missions/{missionId}/documents` or `POST /api/tools/listDocuments` to fetch extractedText once available.
+  Notes: The route saves the file (GCS if configured), creates a document record and emits a `document-attached` event. Background extraction is kicked off asynchronously; the agent should re-query `GET /api/missions/{missionId}/documents` or `POST /api/tools/listDocuments` to fetch extractedText once available.
 
 Agent behavior and persona
 

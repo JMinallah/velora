@@ -18,19 +18,36 @@ export default function GeneratingMissionPage() {
   const router = useRouter();
 
   useEffect(() => {
+    let cancelled = false;
     const interval = setInterval(() => {
       setCurrentStep((prevStep) => {
         if (prevStep < generatingSteps.length - 1) {
           return prevStep + 1;
         }
         clearInterval(interval);
-        // Redirect to the mission page after the final step
-        router.push("/mission/1"); // Using a static ID for now
+        void (async () => {
+          try {
+            const response = await fetch("/api/missions");
+            const data = await response.json().catch(() => ({}));
+            const latestMissionId = response.ok && data?.success ? data.data?.[0]?.id : null;
+
+            if (!cancelled) {
+              router.push(latestMissionId ? `/mission/${latestMissionId}` : "/onboarding");
+            }
+          } catch {
+            if (!cancelled) {
+              router.push("/onboarding");
+            }
+          }
+        })();
         return prevStep;
       });
     }, 1500); // Time per step
 
-    return () => clearInterval(interval);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
   }, [router]);
 
   return (

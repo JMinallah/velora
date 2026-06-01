@@ -4,7 +4,7 @@ export function isToolAuthorized(request: Request): boolean {
   // If no key is configured, keep local/dev experience simple.
   if (!configuredKey) return true
 
-  const headerKey = request.headers.get("x-tools-api-key")
+  const headerKey = request.headers.get("x-tools-api-key") ?? request.headers.get("x-api-key")
   if (headerKey && headerKey === configuredKey) return true
 
   const authHeader = request.headers.get("authorization")
