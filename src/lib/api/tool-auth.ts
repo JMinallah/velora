@@ -1,5 +1,5 @@
 export function isToolAuthorized(request: Request): boolean {
-  const configuredKey = process.env.TOOLS_API_KEY
+  const configuredKey = process.env.TOOLS_API_KEY ?? process.env.TOOL_API_KEY
 
   // If no key is configured, keep local/dev experience simple.
   if (!configuredKey) return true

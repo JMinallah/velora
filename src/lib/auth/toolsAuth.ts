@@ -1,7 +1,7 @@
 import jwt, { type JwtPayload } from "jsonwebtoken"
 import { getUserById } from "@/lib/mongodb/users"
 
-const TOOLS_API_KEY = process.env.TOOLS_API_KEY || ""
+const TOOLS_API_KEY = process.env.TOOLS_API_KEY || process.env.TOOL_API_KEY || ""
 const JWT_SECRET = process.env.JWT_SECRET || "dev-secret"
 
 type RequestLike = { headers: Headers }
