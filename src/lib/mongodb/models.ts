@@ -60,6 +60,8 @@ export type ReminderRecord = {
   dueAt: string
   channel?: "in-app" | "email" | "push"
   status?: "scheduled" | "sent" | "dismissed"
+  // optional in-app read state
+  read?: boolean
   createdAt: string
   updatedAt?: string
 }

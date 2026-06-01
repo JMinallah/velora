@@ -10,7 +10,8 @@
     "check:startup": "node scripts/check_startup.mjs",
     "smoke:tools": "node scripts/test_tools.mjs",
     "mcp:dev": "tsx scripts/mcp-server.ts",
-    "smoke:mcp": "tsx scripts/mcp-smoke.ts"
+    "smoke:mcp": "tsx scripts/mcp-smoke.ts",
+    "reminders:run": "tsx scripts/send_reminders.ts"
   },
   "dependencies": {
     "@google-cloud/storage": "^6.10.0",
