@@ -4,7 +4,7 @@ gcloud run deploy "$SERVICE_NAME" \
  --platform managed \
  --allow-unauthenticated \
  --set-env-vars "MONGODB_DB=$MONGODB_DB,GEMINI_MODEL=$GEMINI_MODEL,EVENT_RETENTION_DAYS=90" \
- --set-secrets "MONGODB_URI=MONGODB_URI:latest,TOOLS_API_KEY=TOOL_API_KEY:latest,JWT_SECRET=JWT_SECRET:latest,GEMINI_API_KEY=GEMINI_API_KEY:latest,GCS_BUCKET=GCS_BUCKET:latest"
+ --set-secrets "MONGODB_URI=MONGODB_URI:latest,TOOLS_API_KEY=TOOLS_API_KEY:latest,JWT_SECRET=JWT_SECRET:latest,GEMINI_API_KEY=GEMINI_API_KEY:latest,GCS_BUCKET=GCS_BUCKET:latest"
 
 Agent Builder integration notes
 
@@ -42,6 +42,13 @@ Security
 - Tool endpoints support API-key auth via `TOOLS_API_KEY`.
 - If `TOOLS_API_KEY` is set, provide `x-tools-api-key`, `x-api-key`, or `Authorization: Bearer <key>`.
 - For local testing, leave `TOOLS_API_KEY` unset.
+
+MongoDB MCP server
+
+- Start the standalone MongoDB-backed MCP server with `npm run mcp:dev`.
+- Run `npm run smoke:mcp` to verify the MCP tool list before you wire any external client.
+- The MCP server exposes mission, task, message, document, and event tools directly from MongoDB.
+- Agent Builder does not talk to this stdio server directly; it still uses the HTTP tool manifest below.
 
 Next steps
 
@@ -198,17 +205,114 @@ Agent: Waits for extraction completion (poll `GET /api/tools/listDocuments` or `
 Operational notes for Agent Builder configuration
 
 - Configure the tool with the `GET /api/agent/tools` manifest URL so the agent can discover tool names and input shapes programmatically.
-- Provide the agent with `TOOL_API_KEY` in the Agent Builder tool secret configuration or use service account authentication that maps to a JWT accepted by Velora.
+- Provide the agent with `TOOLS_API_KEY` in the Agent Builder tool secret configuration or use service account authentication that maps to a JWT accepted by Velora.
 - Set conservative rate limits to avoid accidental rapid writes during development (e.g., 1 request/sec, burst 5).
 
+Exact Agent Builder setup
+
+1. Open Google Cloud Agent Builder and create a new agent or edit the existing Velora agent.
+2. Set the agent instructions to use the Velora tool manifest and to prefer tool calls over direct database assumptions.
+3. Add a tool connection for `GET https://velora-tools-849323590862.us-central1.run.app/api/agent/tools`.
+4. Configure the tool auth secret as `TOOLS_API_KEY` and send it as `x-tools-api-key` on every tool request.
+5. Point tool execution at `https://velora-tools-849323590862.us-central1.run.app/api/tools/{tool}` for JSON calls.
+6. Use `POST /api/missions/{missionId}/documents/ingest` only for document uploads; it is not part of the JSON tool dispatcher.
+7. Test `createMission`, `createTask`, `listEvents`, and `listDocuments` before publishing the agent.
+8. Publish the agent only after the smoke tests succeed and the tool manifest matches the live service.
+
 Testing guidance
+
+Step-by-step Agent Builder (start → publish)
+
+Prerequisites
+
+- Your backend is deployed and reachable (Cloud Run URL available). Example: `https://velora-tools-849323590862.us-central1.run.app`.
+- Secrets set in Secret Manager: `MONGODB_URI`, `TOOLS_API_KEY`, `JWT_SECRET`, `GEMINI_API_KEY`, `GCS_BUCKET` (optional).
+- Run `npm run build` and verify site is healthy.
+
+Local dev checks (optional but recommended)
+
+- Start the app locally: `npm run dev`.
+- Start MCP dev server (optional for local Agent testing): `npm run mcp:dev`.
+- Run smoke tests: `npm run smoke:tools` (HTTP tool manifest) and `npm run smoke:mcp` (MCP tool list).
+
+Agent Builder console steps (exact)
+
+1. In Google Cloud Console navigate to Agent Builder → Agents → Create agent (or open existing).
+2. Under **Instructions/Persona** paste the Velora system persona and goals (use the decision-making guidance in this repo).
+3. Add a new **Tool** and set the manifest URL to:
+
+GET https://<YOUR_SERVICE>/api/agent/tools
+
+- Example: `https://velora-tools-849323590862.us-central1.run.app/api/agent/tools`.
+- Set method to `GET` and allow the agent to fetch the manifest.
+
+4. Create a **Tool Auth secret** in Agent Builder with the value of `TOOLS_API_KEY` and name it `TOOLS_API_KEY`.
+5. For tool execution configure the tool base URL to:
+
+POST https://<YOUR_SERVICE>/api/tools/{tool}
+
+- Ensure the tool invocation method is `POST` for JSON tools.
+- For document ingestion the agent should call the mission route (multipart):
+
+  POST https://<YOUR_SERVICE>/api/missions/{missionId}/documents/ingest
+
+6. Set request headers to include the secret: `x-tools-api-key: {{TOOLS_API_KEY}}` (Agent Builder supports injecting secrets into headers).
+7. Set conservative rate limits in the agent configuration (e.g., 1 req/sec, burst 5) for development.
+8. Run the discovery/test flow in Agent Builder: ask the agent to list tools and call `createMission` with a short test payload.
+9. Verify in your Cloud Run logs that the request authenticated and that `createEvent` entries were written to MongoDB.
+10. When satisfied, set the agent to `Published` and attach any monitoring alerts (error rate, 5xx, latency).
+
+Monitoring & operational checklist
+
+- Add audit logging for tool calls: log caller, tool name, args, and idempotencyKey if present.
+- Add alerts for high error rates, unauthorized calls, and long-running Gemini responses.
+- Provide a manual rollback process: unpublish the agent or replace the manifest URL with a safe stub.
+
+Replanning — does it require a rewrite?
+
+Short answer: No, replanning does not require rewriting the app. It requires adding a disciplined tool endpoint and some safeguards.
+
+Implementation checklist for replanning
+
+1. Implement a `replanMission` (or `generatePlan` + `replanMission`) tool in your tool surface (`/api/tools/replanMission`):
+
+- Read the current mission state from MongoDB (mission, tasks, documents, events).
+- Run your planner (Gemini via server-side wrapper, or call into Vertex/Gemini from Agent Builder) to generate new plan steps.
+- Return a structured plan (list of tasks, suggested due dates, priority, rationale).
+
+2. Make the replan operation idempotent and safe:
+
+- Accept an `idempotencyKey` to deduplicate requests.
+- Emit a `replan-generated` event with the input hash so the UI and audit logs can show the change.
+
+3. Apply the plan as a sequence of small actions (createTask, updateTaskStatus, updateMission) rather than one big destructive replace:
+
+- For each suggested action, either (a) create a task, or (b) attach a proposed change to the mission and ask for confirmation via `createMessage`.
+
+4. Add feature flags / guard rails:
+
+- A `dryRun` input option that returns the proposed changes without mutating state.
+- A `maxChanges` limit to avoid large mass edits.
+
+5. Add tests and smoke flows:
+
+- Unit test the planner output parsing.
+- Integration smoke test: agent calls `replanMission` with `dryRun=true` and inspects results, then runs without `dryRun` to apply a small, safe change.
+
+Why this avoids a rewrite
+
+- Replanning is an orchestration layer on top of existing CRUD: it uses `createTask`, `updateTaskStatus`, `updateMission`, `createEvent` primitives already present.
+- You do not need to change the mission schema to support replanning; you just add a tool that reads state, reasons, and issues small writes.
+- The main work is in robustifying the planner (idempotency, dry-run, limits), not changing the data model.
+
+If you’d like, I can: add a concrete `replanMission` endpoint implementation (code + tests), or add the exact Agent Builder prompt snippet to enforce `dryRun` first.
 
 - Use `scripts/test_tools.mjs` to run a quick smoke test locally against a dev server. Example:
   BASE_URL=http://localhost:3000 node scripts/test_tools.mjs
 
 Security & Production
 
-- Replace `TOOL_API_KEY` with a managed secret and prefer authenticated service accounts for production.
+- Replace `TOOLS_API_KEY` with a managed secret and prefer authenticated service accounts for production.
 - Validate uploaded files server-side and scan for malware before sending to shared storage. Consider adding file size limits and content-type restrictions.
 
 When to call a human
