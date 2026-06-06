@@ -617,6 +617,20 @@ Build the MongoDB-backed coordination memory layer, then introduce Agent Builder
 
 Once the memory and tool surfaces are stable, wire in document grounding, replanning, and reminders so the app demonstrates a full agent loop instead of a stateless chat experience.
 
-//tKZIctKFybkD3R17
-//joviaminallah_db_user
-// [REDACTED] Remove all inline credentials. Use env vars via `.env.local` or Secret Manager.
+## Audit Findings & Action Items (Added via Audit)
+
+Based on a comprehensive codebase audit, the following issues and improvements have been identified. These should be addressed to ensure consistency, security, and completeness.
+
+### 1. Type & Schema Consistency
+- [ ] **Standardize `Task` vs `TaskRecord`**: `src/types/index.ts` defines a `Task` type that is missing fields present in `TaskRecord` (`src/lib/mongodb/models.ts`), such as `missionId`, `priority`, `risk`, `createdAt`, etc. Align these or deprecate the old `Task` type.
+- [ ] **Standardize Timestamps**: The `Message` type uses `timestamp`, whereas all other database records (`MissionRecord`, `TaskRecord`, etc.) use `createdAt` and `updatedAt`. Standardize on `createdAt` for consistency.
+
+### 2. Missing Tool Implementations
+- [ ] **Implement Planned Tools**: `PLAN.md` mentions `updateTimeline`, `analyzeRisk`, `generateReminder`, and `replanMission`. These are currently missing from the tool manifest (`src/app/api/agent/tools/route.ts`) and the tool execution endpoint (`src/app/api/tools/[tool]/route.ts`).
+
+### 3. UI & UX Improvements
+- [ ] **Dynamic User Greeting**: In `src/app/page.tsx`, the greeting "Hey, Jovia 👋" is hardcoded. This should be updated to dynamically fetch and display the logged-in user's name.
+- [ ] **Empty State Handling**: In `src/app/mission/[id]/page.tsx`, if a user has no missions, it falls back to a dummy mission object with empty strings. This should be replaced with a proper "Empty State" UI prompting the user to create their first mission.
+
+### 4. Security & Cleanup
+- [x] **Remove Inline Credentials**: Removed commented-out database credentials from the bottom of `PLAN.md`. Ensure no other files contain hardcoded secrets.
