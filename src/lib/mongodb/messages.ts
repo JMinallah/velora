@@ -8,7 +8,7 @@ export async function listMessagesForMission(missionId: string): Promise<Message
   return await db
     .collection<MessageRecord>(COLLECTIONS.messages)
     .find({ missionId })
-    .sort({ timestamp: 1 })
+    .sort({ createdAt: 1 })
     .toArray()
 }
 
@@ -20,7 +20,7 @@ export async function createMessage(input: Partial<MessageRecord>): Promise<Mess
     missionId: input.missionId as string,
     type: (input.type as MessageRecord['type']) ?? "reasoning",
     text: input.text ?? "",
-    timestamp: input.timestamp ?? now,
+    createdAt: input.createdAt ?? now,
     extractedData: input.extractedData,
     source: input.source ?? "agent",
   }

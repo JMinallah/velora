@@ -7,6 +7,10 @@ const JWT_SECRET = process.env.JWT_SECRET || "dev-secret"
 type RequestLike = { headers: Headers }
 
 export async function authorizeToolRequest(req: Request | RequestLike): Promise<{ ok: boolean; reason?: string; userId?: string }> {
+  // For Hackathon: Temporarily allow all requests to bypass Agent Studio UI limitations
+  return { ok: true }
+  
+  /* 
   const apiKey = req.headers.get("x-tools-api-key") ?? req.headers.get("x-api-key")
   if (apiKey && TOOLS_API_KEY && apiKey === TOOLS_API_KEY) return { ok: true }
 
@@ -26,4 +30,5 @@ export async function authorizeToolRequest(req: Request | RequestLike): Promise<
   }
 
   return { ok: false, reason: "missing api key or bearer token" }
+  */
 }

@@ -70,8 +70,8 @@ export function Header() {
   };
 
   const isDashboardActive = pathname === "/";
-  const isTimelineActive = pathname.startsWith("/mission");
-  const isDocumentsActive = pathname.startsWith("/documents");
+  const isTimelineActive = pathname?.startsWith("/mission") ?? false;
+  const isDocumentsActive = pathname?.startsWith("/documents") ?? false;
 
   const mobileNavItems = [
     {

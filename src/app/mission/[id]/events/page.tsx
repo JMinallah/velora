@@ -3,15 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-
-type EventRecord = {
-  id: string;
-  missionId: string;
-  type: string;
-  actor: string;
-  payload: Record<string, unknown>;
-  createdAt: string | Date;
-};
+import type { Event } from "@/types";
 
 const EVENT_TYPES = [
   "all",
@@ -38,8 +30,8 @@ function formatTimestamp(value: string | Date) {
 
 export default function MissionEventsPage() {
   const params = useParams();
-  const missionId = String(params.id ?? "");
-  const [events, setEvents] = useState<EventRecord[]>([]);
+  const missionId = params ? String(params.id ?? "") : "";
+  const [events, setEvents] = useState<Event[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [typeFilter, setTypeFilter] = useState<(typeof EVENT_TYPES)[number]>("all");

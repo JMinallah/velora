@@ -42,3 +42,54 @@ export async function updateTaskStatus(missionId: string, taskId: string, comple
 
   return result.value
 }
+
+export async function updateTasks(missionId: string, updates: Array<{ id: string } & Partial<TaskRecord>>): Promise<number> {
+  const db = await getDb()
+  const now = new Date().toISOString()
+  
+  let modifiedCount = 0
+  for (const update of updates) {
+    const { id, ...patch } = update
+    const res = await db.collection<TaskRecord>(COLLECTIONS.tasks).updateOne(
+      { missionId, id },
+      { $set: { ...patch, updatedAt: now } }
+    )
+    modifiedCount += res.modifiedCount
+  }
+  
+  return modifiedCount
+}
+
+export async function getTask(missionId: string, taskId: string): Promise<TaskRecord | null> {
+  const db = await getDb()
+  return await db.collection<TaskRecord>(COLLECTIONS.tasks).findOne({ missionId, id: taskId })
+}
+
+export async function shiftTaskDates(missionId: string, days: number): Promise<number> {
+  const db = await getDb()
+  const tasks = await listTasksForMission(missionId)
+  const now = new Date().toISOString()
+  
+  let modifiedCount = 0
+  for (const task of tasks) {
+    if (task.dueDate && !task.completed) {
+      const currentDate = new Date(task.dueDate)
+      currentDate.setDate(currentDate.getDate() + days)
+      const newDueDate = currentDate.toISOString()
+      
+      const res = await db.collection<TaskRecord>(COLLECTIONS.tasks).updateOne(
+        { missionId, id: task.id },
+        { $set: { dueDate: newDueDate, updatedAt: now } }
+      )
+      modifiedCount += res.modifiedCount
+    }
+  }
+  
+  return modifiedCount
+}
+
+export async function deleteTask(missionId: string, taskId: string): Promise<boolean> {
+  const db = await getDb()
+  const result = await db.collection<TaskRecord>(COLLECTIONS.tasks).deleteOne({ missionId, id: taskId })
+  return result.deletedCount > 0
+}

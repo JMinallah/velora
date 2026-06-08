@@ -12,7 +12,7 @@ export async function createEvent(input: Partial<EventRecord>): Promise<EventRec
     type: (input.type as EventRecord['type']) ?? "mission-updated",
     actor: input.actor ?? "user",
     payload: input.payload ?? {},
-    createdAt: now,
+    createdAt: now.toISOString(),
   }
 
   await db.collection(COLLECTIONS.events).insertOne(event)

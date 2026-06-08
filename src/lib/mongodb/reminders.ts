@@ -40,7 +40,7 @@ export async function createReminder(input: Partial<ReminderRecord>): Promise<Re
 
 export async function listReminders(filter?: { missionId?: string; status?: ReminderRecord['status'] }): Promise<ReminderRecord[]> {
   const db = await getDb()
-  const query: any = {}
+  const query: Record<string, unknown> = {}
   if (filter?.missionId) query.missionId = filter.missionId
   if (filter?.status) query.status = filter.status
 

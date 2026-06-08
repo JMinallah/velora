@@ -20,7 +20,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       return NextResponse.json({ success: false, error: "type and text required" }, { status: 400 })
     }
 
-    const created = await createMessage({ missionId: id, type: body.type, text: body.text, timestamp: body.timestamp })
+    const created = await createMessage({ missionId: id, type: body.type, text: body.text, createdAt: body.createdAt })
     return NextResponse.json({ success: true, data: created }, { status: 201 })
   } catch (err) {
     console.error("POST /api/missions/[id]/messages", err)

@@ -1,84 +1,75 @@
-import { getGeminiModel, isTransientGeminiError } from "@/lib/ai/gemini"
+import { NextRequest, NextResponse } from 'next/server';
+import { GoogleAuth } from 'google-auth-library';
 
-type ChatHistoryTurn = {
-  sender?: string
-  text: string
-}
+const PROJECT_ID = 'velora-497511';
+const LOCATION = process.env.AGENT_LOCATION || 'us-west1';
+const RESOURCE_ID = process.env.AGENT_RESOURCE_ID || '7640576670159601664';
 
-function toModelHistory(history: ChatHistoryTurn[]) {
-  const firstUserIndex = history.findIndex((turn) => turn.sender === "user")
-
-  return history
-    .slice(firstUserIndex >= 0 ? firstUserIndex : history.length)
-    .filter((turn) => typeof turn.text === "string" && turn.text.trim().length > 0)
-    .map((turn) => ({
-      role: turn.sender === "user" ? "user" : "model",
-      parts: [{ text: turn.text }],
-    }))
-}
-
-async function generateWithRetry(prompt: string, history: ChatHistoryTurn[]) {
-  let lastError: unknown
-  const modelHistory = toModelHistory(history)
-  const model = getGeminiModel()
-
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    try {
-      const chat = model.startChat({ history: modelHistory })
-      const result = await chat.sendMessage(prompt)
-      const response = await result.response
-      return response.text()
-    } catch (error) {
-      lastError = error
-
-      if (attempt === 0 && isTransientGeminiError(error)) {
-        await new Promise((resolve) => setTimeout(resolve, 700))
-        continue
-      }
-
-      throw error
-    }
-  }
-
-  throw lastError instanceof Error ? lastError : new Error("Failed to get response from Gemini")
-}
-
-export async function POST(request: Request) {
+export async function POST(req: NextRequest) {
   try {
-    const { message, history = [], context = "" } = await request.json()
+    const body = await req.json();
+    const { message, history = [], context = "", sessionId = "default-session" } = body;
 
     if (!message || typeof message !== "string") {
-      return new Response(JSON.stringify({ error: "Invalid message" }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      })
+      return NextResponse.json({ error: "Invalid message" }, { status: 400 });
     }
 
-    const conversationHistory = Array.isArray(history) ? history : []
-    const prompt = [context.trim(), message.trim()].filter(Boolean).join("\n\n") || message
-    const responseText = await generateWithRetry(prompt, conversationHistory)
+    const prompt = [context.trim(), message.trim()].filter(Boolean).join("\n\n") || message;
 
-    return new Response(
-      JSON.stringify({
-        success: true,
-        response: responseText,
+    const auth = new GoogleAuth({
+      scopes: ['https://www.googleapis.com/auth/cloud-platform'],
+    });
+    
+    const client = await auth.getClient();
+    const { token } = await client.getAccessToken();
+
+    const url = `https://${LOCATION}-aiplatform.googleapis.com/v1/projects/${PROJECT_ID}/locations/${LOCATION}/reasoningEngines/${RESOURCE_ID}:query`;
+
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        input: {
+          message: prompt,
+          session_id: sessionId,
+        },
       }),
-      {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }
-    )
+    });
+
+    if (!res.ok) {
+      const err = await res.text();
+      console.error('Agent error:', err);
+      return NextResponse.json({ error: 'Agent call failed: ' + err }, { status: 500 });
+    }
+
+    const data = await res.json();
+    
+    // The response format from Reasoning Engine can vary. 
+    // Usually it's in data.output or data.output.output or similar.
+    let replyText = "";
+    if (typeof data.output === 'string') {
+      replyText = data.output;
+    } else if (data.output && typeof data.output.output === 'string') {
+      replyText = data.output.output;
+    } else if (data.output && typeof data.output.text === 'string') {
+      replyText = data.output.text;
+    } else {
+      replyText = JSON.stringify(data.output ?? data);
+    }
+
+    return NextResponse.json({ 
+      success: true,
+      response: replyText 
+    });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error)
-    console.error("Gemini API Error:", message)
-    return new Response(
-      JSON.stringify({
-        error: message || "Failed to get response from Gemini",
-      }),
-      {
-        status: 500,
-        headers: { "Content-Type": "application/json" },
-      }
-    )
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error("Vertex AI API Error:", errorMessage);
+    return NextResponse.json(
+      { error: errorMessage || "Failed to get response from Agent" },
+      { status: 500 }
+    );
   }
 }

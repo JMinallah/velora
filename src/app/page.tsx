@@ -1,10 +1,12 @@
 "use client"
 
 import { useEffect, useRef, useState, type KeyboardEvent } from "react"
+import { v4 as uuidv4 } from "uuid"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Camera, File, Send } from "lucide-react"
 import { sendGeminiChat } from "@/lib/gemini-chat"
+import type { Message } from "@/types"
 
 const PLACEHOLDERS = [
   "Ask anything...",
@@ -13,19 +15,13 @@ const PLACEHOLDERS = [
   "Create something amazing...",
 ]
 
-type ChatMessage = {
-  id: string
-  sender: "user" | "assistant"
-  text: string
-  timestamp: string
-}
-
 export default function Dashboard() {
   const [draft, setDraft] = useState("")
   const [files, setFiles] = useState<File[]>([])
-  const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [messages, setMessages] = useState<Message[]>([])
   const [placeholder, setPlaceholder] = useState(PLACEHOLDERS[0])
   const [isLoading, setIsLoading] = useState(false)
+  const [sessionId] = useState(() => uuidv4())
   const idx = useRef(0)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const messageListRef = useRef<HTMLDivElement | null>(null)
@@ -61,11 +57,11 @@ export default function Dashboard() {
     const messageText = text || (files.length > 0 ? `Uploaded ${files.length} file${files.length === 1 ? "" : "s"}` : "")
     if (!messageText) return
 
-    const userMessage: ChatMessage = {
+    const userMessage: Message = {
       id: `u-${Date.now()}`,
-      sender: "user",
+      type: "user",
       text: messageText,
-      timestamp: new Date().toLocaleTimeString(),
+      createdAt: new Date().toISOString(),
     }
 
     setMessages((prev) => [...prev, userMessage])
@@ -84,16 +80,17 @@ export default function Dashboard() {
       const assistantText = await sendGeminiChat(
         {
           message: messageText,
-          history: messages,
+          sessionId,
+          history: messages.map(m => ({ sender: m.type === 'user' ? 'user' : 'assistant', text: m.text })),
         },
         { signal: assistantAbortRef.current.signal }
       )
 
-      const assistantMessage: ChatMessage = {
+      const assistantMessage: Message = {
         id: `a-${Date.now()}`,
-        sender: "assistant",
+        type: "reasoning",
         text: assistantText,
-        timestamp: new Date().toLocaleTimeString(),
+        createdAt: new Date().toISOString(),
       }
 
       setMessages((prev) => [...prev, assistantMessage])
@@ -107,11 +104,11 @@ export default function Dashboard() {
 
       console.error("Chat error:", error)
 
-      const errorMessage: ChatMessage = {
+      const errorMessage: Message = {
         id: `a-${Date.now()}`,
-        sender: "assistant",
+        type: "alert",
         text: "Sorry, I encountered an error. Please try again.",
-        timestamp: new Date().toLocaleTimeString(),
+        createdAt: new Date().toISOString(),
       }
 
       setMessages((prev) => [...prev, errorMessage])
@@ -136,7 +133,7 @@ export default function Dashboard() {
           <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
             V
           </div>
-          <h1 className="text-3xl font-semibold">Hey, Jovia 👋</h1>
+          <h1 className="text-3xl font-semibold">Welcome back 👋</h1>
           <p className="mt-2 text-sm text-muted-foreground">What would you like to do today?</p>
         </header>
 
@@ -152,17 +149,17 @@ export default function Dashboard() {
                   {messages.map((message) => (
                     <div
                       key={message.id}
-                      className={`mb-2 flex ${message.sender === "user" ? "justify-end" : "justify-start"}`}
+                      className={`mb-2 flex ${message.type === "user" ? "justify-end" : "justify-start"}`}
                     >
                       <div
                         className={`max-w-[85%] rounded-xl px-3 py-2 text-sm ${
-                          message.sender === "user"
+                          message.type === "user"
                             ? "bg-primary/10 text-foreground"
                             : "bg-muted/10 text-muted-foreground"
                         }`}
                       >
                         <div>{message.text}</div>
-                        <div className="mt-1 text-xs opacity-70">{message.timestamp}</div>
+                        <div className="mt-1 text-xs opacity-70">{message.createdAt}</div>
                       </div>
                     </div>
                   ))}

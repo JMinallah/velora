@@ -39,7 +39,7 @@ export function NotificationBell() {
         const data = await res.json().catch(() => ({}))
         if (!res.ok || !data?.success) throw new Error(data?.error || "Failed to load reminders")
         if (!cancelled) {
-          const mapped: Notification[] = (data.data ?? []).map((r: any) => ({ id: r.id, type: r.channel === "email" ? "alert" : "info", text: r.title, read: !!r.read }))
+          const mapped: Notification[] = (data.data ?? []).map((r: { id: string, channel: string, title: string, read: boolean }) => ({ id: r.id, type: r.channel === "email" ? "alert" : "info", text: r.title, read: !!r.read }))
           setNotifications(mapped)
         }
       } catch (err) {

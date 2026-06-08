@@ -21,6 +21,8 @@ steps:
       - --region=${_REGION}
       - --platform=managed
       - --allow-unauthenticated
+      - --session-affinity
+      - --max-instances=1
       - --set-env-vars=MONGODB_DB=${_MONGODB_DB},GEMINI_MODEL=${_GEMINI_MODEL},EVENT_RETENTION_DAYS=${_EVENT_RETENTION_DAYS}
       - --set-secrets=MONGODB_URI=MONGODB_URI:latest,TOOLS_API_KEY=TOOLS_API_KEY:latest,JWT_SECRET=JWT_SECRET:latest,GEMINI_API_KEY=GEMINI_API_KEY:latest,GCS_BUCKET=GCS_BUCKET:latest
 

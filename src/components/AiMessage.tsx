@@ -2,6 +2,8 @@ import { AlertTriangle, CheckCircle2, Info, Lightbulb } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Message } from "@/types";
 import { ExtractedInfo } from "./documents/ExtractedInfo";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 const messageConfig = {
   suggestion: {
@@ -51,7 +53,7 @@ export function AiMessage({ message }: { message: Message }) {
             {message.text}
           </p>
           <p className="mt-1.5 text-[11px] text-primary-foreground/80">
-            {message.timestamp}
+            {message.createdAt}
           </p>
         </div>
       </div>
@@ -73,11 +75,13 @@ export function AiMessage({ message }: { message: Message }) {
     >
       <Icon className={cn("mt-0.5 h-4 w-4 shrink-0", config.iconColor, config.darkIconColor)} />
       <div className="min-w-0 flex-1">
-        <p className="text-sm leading-6 whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
-          {message.text}
-        </p>
+        <div className="text-sm leading-6 whitespace-pre-wrap break-words [overflow-wrap:anywhere] prose prose-sm dark:prose-invert max-w-none prose-p:leading-relaxed prose-pre:p-0">
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>
+            {message.text}
+          </ReactMarkdown>
+        </div>
         {message.extractedData && <ExtractedInfo extractedData={message.extractedData} />}
-        <p className="mt-1.5 text-[11px] text-muted-foreground">{message.timestamp}</p>
+        <p className="mt-1.5 text-[11px] text-muted-foreground">{message.createdAt}</p>
       </div>
     </div>
   );

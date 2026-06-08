@@ -59,8 +59,8 @@ export function Sidebar() {
   };
 
   const isDashboardActive = pathname === "/";
-  const isTimelineActive = pathname.startsWith("/mission");
-  const isDocumentsActive = pathname.startsWith("/documents");
+  const isTimelineActive = pathname?.startsWith("/mission") ?? false;
+  const isDocumentsActive = pathname?.startsWith("/documents") ?? false;
 
   return (
     <div className="sticky top-0 z-30 hidden h-screen bg-sidebar shadow-sm md:block">

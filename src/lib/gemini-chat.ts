@@ -7,6 +7,7 @@ export type GeminiChatRequest = {
   message: string
   history?: GeminiChatTurn[]
   context?: string
+  sessionId?: string
 }
 
 type GeminiChatResponse = {

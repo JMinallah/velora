@@ -3,10 +3,10 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod"
 
 import { createMessage, listMessagesForMission } from "@/lib/mongodb/messages"
-import { createMission, getMission, listMissions, updateMission } from "@/lib/mongodb/missions"
+import { createMission, getMission, listMissions, updateMission, searchMissions, deleteMission } from "@/lib/mongodb/missions"
 import { listDocumentsForMission } from "@/lib/mongodb/documents"
 import { listEventsForMission } from "@/lib/mongodb/events"
-import { createTask, listTasksForMission, updateTaskStatus } from "@/lib/mongodb/tasks"
+import { createTask, listTasksForMission, updateTaskStatus, deleteTask } from "@/lib/mongodb/tasks"
 
 type McpToolResult = {
   content: Array<{ type: "text"; text: string }>
@@ -62,6 +62,17 @@ const buildTools = (): ToolSpec[] => [
     annotations: { readOnlyHint: true, idempotentHint: true },
     inputSchema: {},
     run: async () => textResult(await listMissions()),
+  },
+  {
+    name: "search_missions",
+    description: "Search for missions by keyword in title, subtitle, or overview.",
+    annotations: { readOnlyHint: true, idempotentHint: true },
+    inputSchema: { query: z.string().min(1).describe("Search query") },
+    run: async (input) => {
+      const query = readString(input.query)
+      if (!query) return errorResult("query is required")
+      return textResult(await searchMissions(query))
+    },
   },
   {
     name: "get_mission",
@@ -136,6 +147,22 @@ const buildTools = (): ToolSpec[] => [
     },
   },
   {
+    name: "delete_mission",
+    description: "Delete a mission record.",
+    annotations: { destructiveHint: true, idempotentHint: true },
+    inputSchema: {
+      missionId: z.string().min(1).describe("Mission id"),
+    },
+    run: async (input) => {
+      const missionId = readString(input.missionId)
+      if (!missionId) return errorResult("missionId is required")
+
+      const deleted = await deleteMission(missionId)
+      if (!deleted) return errorResult(`Mission not found: ${missionId}`)
+      return textResult({ success: true, message: `Mission ${missionId} deleted successfully` })
+    },
+  },
+  {
     name: "list_tasks",
     description: "List tasks for a mission.",
     annotations: { readOnlyHint: true, idempotentHint: true },
@@ -144,6 +171,22 @@ const buildTools = (): ToolSpec[] => [
       const missionId = readString(input.missionId)
       if (!missionId) return errorResult("missionId is required")
       return textResult(await listTasksForMission(missionId))
+    },
+  },
+  {
+    name: "summarize_progress",
+    description: "Get a summary of task progress for a mission (total, completed, pending, percentage).",
+    annotations: { readOnlyHint: true, idempotentHint: true },
+    inputSchema: { missionId: z.string().min(1).describe("Mission id") },
+    run: async (input) => {
+      const missionId = readString(input.missionId)
+      if (!missionId) return errorResult("missionId is required")
+      const tasks = await listTasksForMission(missionId)
+      const total = tasks.length
+      const completed = tasks.filter(t => t.completed).length
+      const pending = total - completed
+      const progressPercentage = total === 0 ? 0 : Math.round((completed / total) * 100)
+      return textResult({ total, completed, pending, progressPercentage })
     },
   },
   {
@@ -195,6 +238,24 @@ const buildTools = (): ToolSpec[] => [
       const updated = await updateTaskStatus(missionId, taskId, completed)
       if (!updated) return errorResult(`Task not found: ${taskId}`)
       return textResult(updated)
+    },
+  },
+  {
+    name: "delete_task",
+    description: "Delete a task from a mission.",
+    annotations: { destructiveHint: true, idempotentHint: true },
+    inputSchema: {
+      missionId: z.string().min(1).describe("Mission id"),
+      taskId: z.string().min(1).describe("Task id"),
+    },
+    run: async (input) => {
+      const missionId = readString(input.missionId)
+      const taskId = readString(input.taskId)
+      if (!missionId || !taskId) return errorResult("missionId and taskId are required")
+
+      const deleted = await deleteTask(missionId, taskId)
+      if (!deleted) return errorResult(`Task not found: ${taskId}`)
+      return textResult({ success: true, message: `Task ${taskId} deleted successfully` })
     },
   },
   {
@@ -261,28 +322,11 @@ export const VELORA_MCP_TOOL_NAMES = buildTools().map((tool) => tool.name)
 
 export function createVeloraMcpServer() {
   const server = new McpServer({ name: "velora-mongodb", version: "1.0.0" }, { capabilities: { logging: {} } })
-  const registerTool = server.registerTool.bind(server) as unknown as (
-    name: string,
-    config: {
-      description?: string
-      inputSchema?: z.ZodRawShape
-      annotations?: {
-        readOnlyHint?: boolean
-        destructiveHint?: boolean
-        idempotentHint?: boolean
-      }
-    },
-    handler: (input: Record<string, unknown>) => Promise<McpToolResult>
-  ) => unknown
-
   for (const tool of buildTools()) {
-    registerTool(
+    server.tool(
       tool.name,
-      {
-        description: tool.description,
-        inputSchema: tool.inputSchema,
-        annotations: tool.annotations,
-      },
+      tool.description,
+      tool.inputSchema || {},
       async (input: Record<string, unknown>) => tool.run(input)
     )
   }

@@ -48,3 +48,24 @@ export async function updateMission(id: string, patch: Partial<MissionRecord>): 
 
   return result.value
 }
+
+export async function searchMissions(query: string): Promise<MissionRecord[]> {
+  const db = await getDb()
+  return await db
+    .collection<MissionRecord>(COLLECTIONS.missions)
+    .find({
+      $or: [
+        { title: { $regex: query, $options: "i" } },
+        { overview: { $regex: query, $options: "i" } },
+        { subtitle: { $regex: query, $options: "i" } }
+      ]
+    })
+    .sort({ createdAt: -1 })
+    .toArray()
+}
+
+export async function deleteMission(id: string): Promise<boolean> {
+  const db = await getDb()
+  const result = await db.collection<MissionRecord>(COLLECTIONS.missions).deleteOne({ id })
+  return result.deletedCount > 0
+}
