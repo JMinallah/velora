@@ -10,13 +10,9 @@ export type GeminiChatRequest = {
   sessionId?: string
 }
 
-type GeminiChatResponse = {
-  response?: string
-  error?: string
-}
-
 type SendGeminiChatOptions = {
   signal?: AbortSignal
+  onChunk: (chunk: string) => void
 }
 
 export function buildMissionChatContext(input: {
@@ -33,26 +29,59 @@ export function buildMissionChatContext(input: {
   return contextLines.filter(Boolean).join("\n")
 }
 
+const sessionMap = new Map<string, string>();
+const USER_ID = "velora-user-" + Math.random().toString(36).substring(7);
+
 export async function sendGeminiChat(
   input: GeminiChatRequest,
-  options: SendGeminiChatOptions = {}
-) {
+  options: SendGeminiChatOptions
+): Promise<void> {
+  const localSessionKey = input.sessionId || 'default';
+  let agentSessionId = sessionMap.get(localSessionKey);
+
+  if (!agentSessionId) {
+    const sessionRes = await fetch('/api/session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: USER_ID }),
+    });
+    const sessionData = await sessionRes.json();
+    agentSessionId = sessionData.sessionId;
+    if (agentSessionId) {
+      sessionMap.set(localSessionKey, agentSessionId);
+    }
+  }
+
+  const fullMessage = input.context 
+    ? `${input.context}\n\n${input.message}` 
+    : input.message;
+
   const response = await fetch("/api/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(input),
+    body: JSON.stringify({
+      message: fullMessage,
+      sessionId: agentSessionId,
+      userId: USER_ID
+    }),
     signal: options.signal,
   })
 
-  const data = (await response.json().catch(() => ({}))) as GeminiChatResponse
-
   if (!response.ok) {
-    throw new Error(data.error || "Failed to get response from Gemini")
+    const data = await response.json().catch(() => ({}));
+    throw new Error(data.error || "Failed to get response from Agent")
   }
 
-  if (!data.response) {
-    throw new Error("Gemini returned an empty response")
+  const reader = response.body?.getReader();
+  if (!reader) {
+    throw new Error("Response body is empty");
   }
 
-  return data.response
+  const decoder = new TextDecoder();
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    const chunk = decoder.decode(value, { stream: true });
+    options.onChunk(chunk);
+  }
 }

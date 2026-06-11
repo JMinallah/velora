@@ -69,31 +69,37 @@ export default function Dashboard() {
     setFiles([])
     setIsLoading(true)
 
-    // Cancel any previous request
     if (assistantAbortRef.current) {
       assistantAbortRef.current.abort()
     }
 
     assistantAbortRef.current = new AbortController()
 
+    const assistantId = `a-${Date.now()}`
+    const assistantMessage: Message = {
+      id: assistantId,
+      type: "reasoning",
+      text: "",
+      createdAt: new Date().toISOString(),
+    }
+    setMessages((prev) => [...prev, assistantMessage])
+
     try {
-      const assistantText = await sendGeminiChat(
+      await sendGeminiChat(
         {
           message: messageText,
           sessionId,
           history: messages.map(m => ({ sender: m.type === 'user' ? 'user' : 'assistant', text: m.text })),
         },
-        { signal: assistantAbortRef.current.signal }
+        { 
+          signal: assistantAbortRef.current.signal,
+          onChunk: (chunk) => {
+            setMessages((prev) => 
+              prev.map(m => m.id === assistantId ? { ...m, text: m.text + chunk } : m)
+            )
+          }
+        }
       )
-
-      const assistantMessage: Message = {
-        id: `a-${Date.now()}`,
-        type: "reasoning",
-        text: assistantText,
-        createdAt: new Date().toISOString(),
-      }
-
-      setMessages((prev) => [...prev, assistantMessage])
     } catch (error: unknown) {
       let name: string | undefined
       if (typeof error === 'object' && error !== null && 'name' in error) {
@@ -104,14 +110,9 @@ export default function Dashboard() {
 
       console.error("Chat error:", error)
 
-      const errorMessage: Message = {
-        id: `a-${Date.now()}`,
-        type: "alert",
-        text: "Sorry, I encountered an error. Please try again.",
-        createdAt: new Date().toISOString(),
-      }
-
-      setMessages((prev) => [...prev, errorMessage])
+      setMessages((prev) => 
+        prev.map(m => m.id === assistantId ? { ...m, type: "alert", text: "Sorry, I encountered an error. Please try again." } : m)
+      )
     } finally {
       setIsLoading(false)
     }

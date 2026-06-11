@@ -1,75 +1,87 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { GoogleAuth } from 'google-auth-library';
 
-const PROJECT_ID = 'velora-497511';
-const LOCATION = process.env.AGENT_LOCATION || 'us-west1';
-const RESOURCE_ID = process.env.AGENT_RESOURCE_ID || '7640576670159601664';
+const PROJECT = process.env.AGENT_PROJECT_NUMBER!;
+const LOCATION = process.env.AGENT_LOCATION!;
+const RESOURCE_ID = process.env.AGENT_RESOURCE_ID!;
+
+const auth = new GoogleAuth({
+  scopes: ['https://www.googleapis.com/auth/cloud-platform'],
+});
 
 export async function POST(req: NextRequest) {
-  try {
-    const body = await req.json();
-    const { message, history = [], context = "", sessionId = "default-session" } = body;
+  const { message, sessionId, userId } = await req.json();
 
-    if (!message || typeof message !== "string") {
-      return NextResponse.json({ error: "Invalid message" }, { status: 400 });
-    }
+  const client = await auth.getClient();
+  const { token } = await client.getAccessToken();
 
-    const prompt = [context.trim(), message.trim()].filter(Boolean).join("\n\n") || message;
+  const url = `https://${LOCATION}-aiplatform.googleapis.com/v1/projects/${PROJECT}/locations/${LOCATION}/reasoningEngines/${RESOURCE_ID}:streamQuery`;
 
-    const auth = new GoogleAuth({
-      scopes: ['https://www.googleapis.com/auth/cloud-platform'],
-    });
-    
-    const client = await auth.getClient();
-    const { token } = await client.getAccessToken();
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      input: { message, session_id: sessionId, user_id: userId },
+    }),
+  });
 
-    const url = `https://${LOCATION}-aiplatform.googleapis.com/v1/projects/${PROJECT_ID}/locations/${LOCATION}/reasoningEngines/${RESOURCE_ID}:query`;
-
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        input: {
-          message: prompt,
-          session_id: sessionId,
-        },
-      }),
-    });
-
-    if (!res.ok) {
-      const err = await res.text();
-      console.error('Agent error:', err);
-      return NextResponse.json({ error: 'Agent call failed: ' + err }, { status: 500 });
-    }
-
-    const data = await res.json();
-    
-    // The response format from Reasoning Engine can vary. 
-    // Usually it's in data.output or data.output.output or similar.
-    let replyText = "";
-    if (typeof data.output === 'string') {
-      replyText = data.output;
-    } else if (data.output && typeof data.output.output === 'string') {
-      replyText = data.output.output;
-    } else if (data.output && typeof data.output.text === 'string') {
-      replyText = data.output.text;
-    } else {
-      replyText = JSON.stringify(data.output ?? data);
-    }
-
-    return NextResponse.json({ 
-      success: true,
-      response: replyText 
-    });
-  } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error("Vertex AI API Error:", errorMessage);
-    return NextResponse.json(
-      { error: errorMessage || "Failed to get response from Agent" },
-      { status: 500 }
-    );
+  if (!res.ok) {
+    const err = await res.text();
+    console.error('Agent error:', err);
+    return NextResponse.json({ error: 'Agent call failed' }, { status: 500 });
   }
+
+  const stream = new ReadableStream({
+    async start(controller) {
+      const reader = res.body?.getReader();
+      if (!reader) {
+        controller.close();
+        return;
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      try {
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed) continue;
+            try {
+              const event = JSON.parse(trimmed);
+              const text = event?.content?.parts?.[0]?.text;
+              if (text) {
+                controller.enqueue(new TextEncoder().encode(text));
+              }
+            } catch (e) {
+              console.error('Error parsing stream line:', e);
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Stream reading error:', err);
+      } finally {
+        controller.close();
+        reader.releaseLock();
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/plain; charset=utf-8',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+    },
+  });
 }

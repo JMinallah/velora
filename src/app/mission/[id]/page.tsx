@@ -275,40 +275,16 @@ export default function MissionPage() {
         throw new Error(userData?.error || "Failed to save user message")
       }
 
-      const assistantText = await sendGeminiChat({
-        message: trimmed || attachmentSummary,
-        sessionId: missionId, // Use missionId as sessionId to maintain context per mission
-        history: missionSnapshot.messages.map((message) => ({
-          sender: message.type === "user" ? "user" : "assistant",
-          text: message.text,
-        })),
-        context,
-      });
-
+      const assistantId = `msg-${Date.now()}-reply`;
       const assistantMessage: Message = {
-        id: `msg-${Date.now()}-reply`,
+        id: assistantId,
         type: "reasoning",
-        text: assistantText,
+        text: "",
         createdAt: new Date().toISOString(),
       };
 
-      const assistantResponse = await fetch(`/api/missions/${missionId}/messages`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type: "reasoning",
-          text: assistantText,
-        }),
-      })
-
-      const assistantData = await assistantResponse.json().catch(() => ({}))
-      if (!assistantResponse.ok || !assistantData?.success) {
-        throw new Error(assistantData?.error || "Failed to save assistant message")
-      }
-
       setMissions((currentMissions) => {
         const currentMission = currentMissions[missionId];
-
         return {
           ...currentMissions,
           [missionId]: {
@@ -317,6 +293,47 @@ export default function MissionPage() {
           },
         };
       });
+
+      let finalAssistantText = "";
+      await sendGeminiChat({
+        message: trimmed || attachmentSummary,
+        sessionId: missionId,
+        history: missionSnapshot.messages.map((message) => ({
+          sender: message.type === "user" ? "user" : "assistant",
+          text: message.text,
+        })),
+        context,
+      }, {
+        onChunk: (chunk) => {
+          finalAssistantText += chunk;
+          setMissions((currentMissions) => {
+            const currentMission = currentMissions[missionId];
+            return {
+              ...currentMissions,
+              [missionId]: {
+                ...currentMission,
+                messages: currentMission.messages.map(m => 
+                  m.id === assistantId ? { ...m, text: finalAssistantText } : m
+                ),
+              },
+            };
+          });
+        }
+      });
+
+      const assistantResponse = await fetch(`/api/missions/${missionId}/messages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "reasoning",
+          text: finalAssistantText,
+        }),
+      })
+
+      const assistantData = await assistantResponse.json().catch(() => ({}))
+      if (!assistantResponse.ok || !assistantData?.success) {
+        throw new Error(assistantData?.error || "Failed to save assistant message")
+      }
     } catch (error) {
       console.error("Mission chat error:", error);
 
