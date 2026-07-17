@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { withAuth } from "@/lib/with-auth"
 import { generateGeminiText, isTransientGeminiError } from "@/lib/ai/gemini"
 import { buildTransitionPlanPrompt, type TransitionPlanInput } from "@/lib/coordination/plan"
 
@@ -15,7 +16,7 @@ async function generateWithRetry(prompt: string) {
   }
 }
 
-export async function POST(request: Request) {
+export const POST = withAuth(async (request) => {
   try {
     const body = (await request.json()) as TransitionPlanInput
 
@@ -38,4 +39,4 @@ export async function POST(request: Request) {
       { status: 500 }
     )
   }
-}
+})

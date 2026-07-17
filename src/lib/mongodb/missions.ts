@@ -46,7 +46,7 @@ export async function updateMission(id: string, patch: Partial<MissionRecord>): 
     .collection<MissionRecord>(COLLECTIONS.missions)
     .findOneAndUpdate({ id }, { $set: { ...patch, updatedAt: now } }, { returnDocument: "after" })
 
-  return result.value
+  return result
 }
 
 export async function searchMissions(query: string): Promise<MissionRecord[]> {

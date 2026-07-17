@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server"
 import { listMissions, createMission } from "@/lib/mongodb/missions"
 import type { CreateMissionInput } from "@/lib/coordination/contracts"
+import { withAuth } from "@/lib/with-auth"
 
-export async function GET() {
+export const GET = withAuth(async () => {
   try {
     const data = await listMissions()
     return NextResponse.json({ success: true, data })
@@ -10,9 +11,9 @@ export async function GET() {
     console.error("GET /api/missions error", err)
     return NextResponse.json({ success: false, error: (err as Error).message }, { status: 500 })
   }
-}
+})
 
-export async function POST(req: Request) {
+export const POST = withAuth(async (req) => {
   try {
     const body = (await req.json()) as CreateMissionInput
     if (!body.title || !body.overview) {
@@ -25,4 +26,4 @@ export async function POST(req: Request) {
     console.error("POST /api/missions error", err)
     return NextResponse.json({ success: false, error: (err as Error).message }, { status: 500 })
   }
-}
+})

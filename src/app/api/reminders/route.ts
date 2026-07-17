@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server"
+import { withAuth } from "@/lib/with-auth"
 import { createReminder, listReminders, markRemindersRead } from "@/lib/mongodb/reminders"
 import type { ReminderRecord } from "@/lib/mongodb/models"
 
-export async function GET(req: Request) {
+export const GET = withAuth(async (req) => {
   try {
     const url = new URL(req.url)
     const missionId = url.searchParams.get("missionId") || undefined
@@ -13,9 +14,9 @@ export async function GET(req: Request) {
     console.error("GET /api/reminders error", err)
     return NextResponse.json({ success: false, error: (err as Error).message }, { status: 500 })
   }
-}
+})
 
-export async function POST(req: Request) {
+export const POST = withAuth(async (req) => {
   try {
     const body = (await req.json()) as Partial<ReminderRecord>
     if (!body.missionId || !body.title || !body.dueAt) {
@@ -28,9 +29,9 @@ export async function POST(req: Request) {
     console.error("POST /api/reminders error", err)
     return NextResponse.json({ success: false, error: (err as Error).message }, { status: 500 })
   }
-}
+})
 
-export async function PATCH(req: Request) {
+export const PATCH = withAuth(async (req) => {
   try {
     const body = (await req.json()) as { action?: string; ids?: string[] }
     if (body.action === "markRead") {
@@ -44,4 +45,4 @@ export async function PATCH(req: Request) {
     console.error("PATCH /api/reminders error", err)
     return NextResponse.json({ success: false, error: (err as Error).message }, { status: 500 })
   }
-}
+})

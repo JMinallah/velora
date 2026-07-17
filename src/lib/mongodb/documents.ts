@@ -41,5 +41,5 @@ export async function updateDocument(id: string, patch: Partial<DocumentRecord>)
     .collection<DocumentRecord>(COLLECTIONS.documents)
     .findOneAndUpdate({ id }, { $set: update }, { returnDocument: "after" })
 
-  return res.value ?? null
+  return res ?? null
 }

@@ -1,8 +1,9 @@
-import { NextRequest, NextResponse } from "next/server"
+import { NextResponse } from "next/server"
+import { withAuth } from "@/lib/with-auth"
 import { updateTaskStatus } from "@/lib/mongodb/tasks"
 import { createEvent } from "@/lib/mongodb/events"
 
-export async function PATCH(_req: NextRequest, { params }: { params: Promise<{ id: string; taskId: string }> }) {
+export const PATCH = withAuth<{ id: string; taskId: string }>(async (_req, _session, { params }) => {
   try {
     const { id, taskId } = await params
     const body = await _req.json()
@@ -24,4 +25,4 @@ export async function PATCH(_req: NextRequest, { params }: { params: Promise<{ i
     console.error("PATCH /api/missions/[id]/tasks/[taskId]", err)
     return NextResponse.json({ success: false, error: (err as Error).message }, { status: 500 })
   }
-}
+})

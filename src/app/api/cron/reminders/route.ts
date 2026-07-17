@@ -2,46 +2,47 @@ import { NextResponse } from "next/server"
 import { getDb } from "@/lib/mongodb/client"
 import { COLLECTIONS } from "@/lib/mongodb/models"
 import { createEvent } from "@/lib/mongodb/events"
+import { env } from "@/lib/env"
 
+// Machine-to-machine endpoint: authenticated by CRON_SECRET bearer token,
+// not a user session (docs/04-SECURITY.md T7). Refuses to run if the secret
+// is not configured — there is no unauthenticated mode.
 export async function GET(request: Request) {
-  // In a real app, you'd verify a secret header from Cloud Scheduler
-  // const authHeader = request.headers.get('Authorization')
-  // if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) return new Response('Unauthorized', { status: 401 })
+  const secret = env().CRON_SECRET
+  if (!secret) {
+    return NextResponse.json(
+      { success: false, error: "CRON_SECRET is not configured" },
+      { status: 503 }
+    )
+  }
+  if (request.headers.get("authorization") !== `Bearer ${secret}`) {
+    return new Response("Unauthorized", { status: 401 })
+  }
 
   try {
     const db = await getDb()
     const now = new Date().toISOString()
 
-    // Find scheduled reminders that are due
-    const dueReminders = await db.collection(COLLECTIONS.reminders)
-      .find({
-        status: "scheduled",
-        dueAt: { $lte: now }
-      })
-      .toArray()
-
-    if (dueReminders.length === 0) {
-      return NextResponse.json({ success: true, processed: 0 })
-    }
-
+    // Atomically claim one due reminder at a time so concurrent or duplicate
+    // cron fires never double-process (FR-REM-2 idempotency).
     let processed = 0
-    for (const reminder of dueReminders) {
-      // Update status to 'sent'
-      await db.collection(COLLECTIONS.reminders).updateOne(
-        { _id: reminder._id },
-        { $set: { status: "sent", updatedAt: now } }
+    for (;;) {
+      const reminder = await db.collection(COLLECTIONS.reminders).findOneAndUpdate(
+        { status: "scheduled", dueAt: { $lte: now } },
+        { $set: { status: "sent", updatedAt: now } },
+        { returnDocument: "after" }
       )
+      if (!reminder) break
 
-      // Create an event so it shows up in the activity feed
       await createEvent({
         missionId: reminder.missionId,
-        type: "reminder-created", // Or maybe a new type 'reminder-sent'
+        type: "reminder-created",
         actor: "system",
         payload: {
           reminderId: reminder.id,
           title: reminder.title,
-          details: reminder.details
-        }
+          details: reminder.details,
+        },
       }).catch(() => undefined)
 
       processed++

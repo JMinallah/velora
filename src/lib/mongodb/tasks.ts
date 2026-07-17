@@ -40,7 +40,7 @@ export async function updateTaskStatus(missionId: string, taskId: string, comple
     .collection<TaskRecord>(COLLECTIONS.tasks)
     .findOneAndUpdate({ missionId, id: taskId }, { $set: { completed, updatedAt: now } }, { returnDocument: "after" })
 
-  return result.value
+  return result
 }
 
 export async function updateTasks(missionId: string, updates: Array<{ id: string } & Partial<TaskRecord>>): Promise<number> {

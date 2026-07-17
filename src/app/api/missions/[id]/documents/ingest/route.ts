@@ -1,9 +1,10 @@
-import { NextRequest, NextResponse } from "next/server"
+import { NextResponse } from "next/server"
+import { withAuth } from "@/lib/with-auth"
 import { attachDocument } from "@/lib/mongodb/documents"
 import { createEvent } from "@/lib/mongodb/events"
 import { processDocumentRecord } from "@/lib/documents/ingest"
 
-export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const POST = withAuth<{ id: string }>(async (request, _session, { params }) => {
   try {
     const { id } = await params
     const formData = await request.formData()
@@ -43,4 +44,4 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     console.error("POST /api/missions/[id]/documents/ingest", error)
     return NextResponse.json({ success: false, error: error instanceof Error ? error.message : "Failed to ingest document" }, { status: 500 })
   }
-}
+})

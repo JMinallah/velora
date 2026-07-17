@@ -1,8 +1,9 @@
-import { NextRequest, NextResponse } from "next/server"
+import { NextResponse } from "next/server"
+import { withAuth } from "@/lib/with-auth"
 import { listTasksForMission, createTask } from "@/lib/mongodb/tasks"
 import { createEvent } from "@/lib/mongodb/events"
 
-export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const GET = withAuth<{ id: string }>(async (req, _session, { params }) => {
   try {
     const { id } = await params
     const tasks = await listTasksForMission(id)
@@ -11,9 +12,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     console.error("GET /api/missions/[id]/tasks", err)
     return NextResponse.json({ success: false, error: (err as Error).message }, { status: 500 })
   }
-}
+})
 
-export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const POST = withAuth<{ id: string }>(async (req, _session, { params }) => {
   try {
     const { id } = await params
     const body = await req.json()
@@ -32,4 +33,4 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     console.error("POST /api/missions/[id]/tasks", err)
     return NextResponse.json({ success: false, error: (err as Error).message }, { status: 500 })
   }
-}
+})
