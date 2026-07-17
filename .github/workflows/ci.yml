@@ -42,5 +42,10 @@ jobs:
       - name: Unit tests
         run: npm test
 
+      - name: Agent evals (skips without GEMINI_API_KEY secret)
+        run: npm run evals
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+
       - name: Audit (high and critical)
         run: npm audit --audit-level=high

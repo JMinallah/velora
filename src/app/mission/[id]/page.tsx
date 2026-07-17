@@ -16,7 +16,6 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
-import { buildMissionChatContext, sendGeminiChat } from "@/lib/gemini-chat";
 import type { DocumentRecord, MessageRecord, MissionRecord, TaskRecord, EventRecord, ReminderRecord } from "@/domain/collections";
 import { Message } from "@/types";
 import { Bell, Menu, Plus, Send, X } from "lucide-react";
@@ -225,13 +224,7 @@ export default function MissionPage() {
         ? `${trimmed}\n\n${attachmentSummary}`
         : trimmed || attachmentSummary;
 
-    const missionSnapshot = activeMission;
     const missionId = activeMissionId;
-    const context = buildMissionChatContext({
-      missionTitle: missionSnapshot.title,
-      missionSubtitle: missionSnapshot.subtitle,
-      documents: selectedDocuments,
-    });
 
     const userMessage: Message = {
       userId: "local",
@@ -262,26 +255,33 @@ export default function MissionPage() {
     setIsSending(true);
 
     try {
-      const userResponse = await fetch(`/api/missions/${missionId}/messages`, {
+      // One call: the server persists both sides of the exchange, runs the
+      // agent loop, and returns the reply plus receipts for each action taken.
+      const response = await fetch(`/api/missions/${missionId}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type: "user",
-          text: userText,
-        }),
-      })
-
-      const userData = await userResponse.json().catch(() => ({}))
-      if (!userResponse.ok || !userData?.success) {
-        throw new Error(userData?.error || "Failed to save user message")
+        body: JSON.stringify({ message: userText }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data?.success) {
+        throw new Error(data?.error || "Chat failed");
       }
 
-      const assistantId = `msg-${Date.now()}-reply`;
+      const now = Date.now();
+      const receiptMessages: Message[] = (data.data.receipts ?? []).map(
+        (receipt: { tool: string; text: string }, index: number) => ({
+          userId: "local",
+          id: `msg-${now}-receipt-${index}`,
+          type: "update" as const,
+          text: `✓ ${receipt.text}`,
+          createdAt: new Date().toISOString(),
+        })
+      );
       const assistantMessage: Message = {
         userId: "local",
-        id: assistantId,
+        id: `msg-${now}-reply`,
         type: "reasoning",
-        text: "",
+        text: data.data.reply,
         createdAt: new Date().toISOString(),
       };
 
@@ -291,51 +291,10 @@ export default function MissionPage() {
           ...currentMissions,
           [missionId]: {
             ...currentMission,
-            messages: [...currentMission.messages, assistantMessage],
+            messages: [...currentMission.messages, ...receiptMessages, assistantMessage],
           },
         };
       });
-
-      let finalAssistantText = "";
-      await sendGeminiChat({
-        message: trimmed || attachmentSummary,
-        sessionId: missionId,
-        history: missionSnapshot.messages.map((message) => ({
-          sender: message.type === "user" ? "user" : "assistant",
-          text: message.text,
-        })),
-        context,
-      }, {
-        onChunk: (chunk) => {
-          finalAssistantText += chunk;
-          setMissions((currentMissions) => {
-            const currentMission = currentMissions[missionId];
-            return {
-              ...currentMissions,
-              [missionId]: {
-                ...currentMission,
-                messages: currentMission.messages.map(m => 
-                  m.id === assistantId ? { ...m, text: finalAssistantText } : m
-                ),
-              },
-            };
-          });
-        }
-      });
-
-      const assistantResponse = await fetch(`/api/missions/${missionId}/messages`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type: "reasoning",
-          text: finalAssistantText,
-        }),
-      })
-
-      const assistantData = await assistantResponse.json().catch(() => ({}))
-      if (!assistantResponse.ok || !assistantData?.success) {
-        throw new Error(assistantData?.error || "Failed to save assistant message")
-      }
     } catch (error) {
       console.error("Mission chat error:", error);
 
