@@ -58,6 +58,7 @@ export default function Dashboard() {
     if (!messageText) return
 
     const userMessage: Message = {
+      userId: "local",
       id: `u-${Date.now()}`,
       type: "user",
       text: messageText,
@@ -77,6 +78,7 @@ export default function Dashboard() {
 
     const assistantId = `a-${Date.now()}`
     const assistantMessage: Message = {
+      userId: "local",
       id: assistantId,
       type: "reasoning",
       text: "",

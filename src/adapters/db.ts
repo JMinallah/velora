@@ -1,6 +1,6 @@
 import { MongoClient, Db } from "mongodb"
 import { env } from "@/lib/env"
-import { ensureIndexes } from "@/lib/mongodb/indexes"
+import { ensureIndexes } from "@/domain/indexes"
 
 // Cached across hot reloads in dev and across invocations in serverless.
 const globalForDb = globalThis as unknown as {

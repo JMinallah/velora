@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
 import { buildMissionChatContext, sendGeminiChat } from "@/lib/gemini-chat";
-import type { DocumentRecord, MessageRecord, MissionRecord, TaskRecord, EventRecord, ReminderRecord } from "@/lib/mongodb/models";
+import type { DocumentRecord, MessageRecord, MissionRecord, TaskRecord, EventRecord, ReminderRecord } from "@/domain/collections";
 import { Message } from "@/types";
 import { Bell, Menu, Plus, Send, X } from "lucide-react";
 import Link from "next/link";
@@ -234,6 +234,7 @@ export default function MissionPage() {
     });
 
     const userMessage: Message = {
+      userId: "local",
       id: `msg-${Date.now()}`,
       type: "user",
       text: userText,
@@ -277,6 +278,7 @@ export default function MissionPage() {
 
       const assistantId = `msg-${Date.now()}-reply`;
       const assistantMessage: Message = {
+        userId: "local",
         id: assistantId,
         type: "reasoning",
         text: "",
@@ -338,6 +340,7 @@ export default function MissionPage() {
       console.error("Mission chat error:", error);
 
       const fallbackMessage: Message = {
+        userId: "local",
         id: `msg-${Date.now()}-error`,
         type: "alert",
         text: "I couldn’t get a response right now. Please try again.",

@@ -8,6 +8,13 @@ on:
 jobs:
   checks:
     runs-on: ubuntu-latest
+    services:
+      mongo:
+        image: mongo:7
+        ports:
+          - 27017:27017
+    env:
+      TEST_MONGODB_URI: mongodb://localhost:27017
     steps:
       - uses: actions/checkout@v4
         with:

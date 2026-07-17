@@ -1,12 +1,4 @@
-import type { 
-  Message, 
-  Mission, 
-  Task, 
-  Document, 
-  Reminder, 
-  Event, 
-  User 
-} from "@/types"
+import type { Message, Mission, Task, Document, Reminder, Event } from "@/types"
 
 export const COLLECTIONS = {
   missions: "missions",
@@ -15,8 +7,7 @@ export const COLLECTIONS = {
   reminders: "reminders",
   documents: "documents",
   events: "events",
-  users: "users",
-}
+} as const
 
 export type MissionRecord = Mission
 export type TaskRecord = Task
@@ -24,4 +15,3 @@ export type MessageRecord = Message
 export type DocumentRecord = Document
 export type ReminderRecord = Reminder
 export type EventRecord = Event
-export type UserRecord = User

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { DocumentList } from "@/components/documents/DocumentList";
 import { FileUpload } from "@/components/documents/FileUpload";
-import type { DocumentRecord, MissionRecord } from "@/lib/mongodb/models";
+import type { DocumentRecord, MissionRecord } from "@/domain/collections";
 
 export default function DocumentsPage() {
   const [missions, setMissions] = useState<MissionRecord[]>([]);

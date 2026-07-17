@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
-import { getDb } from "@/lib/mongodb/client"
-import { COLLECTIONS } from "@/lib/mongodb/models"
-import { createEvent } from "@/lib/mongodb/events"
+import { getDb } from "@/adapters/db"
+import { COLLECTIONS, type ReminderRecord } from "@/domain/collections"
+import { emitEvent } from "@/domain/events"
 import { env } from "@/lib/env"
 
 // Machine-to-machine endpoint: authenticated by CRON_SECRET bearer token,
@@ -27,14 +27,14 @@ export async function GET(request: Request) {
     // cron fires never double-process (FR-REM-2 idempotency).
     let processed = 0
     for (;;) {
-      const reminder = await db.collection(COLLECTIONS.reminders).findOneAndUpdate(
+      const reminder = await db.collection<ReminderRecord>(COLLECTIONS.reminders).findOneAndUpdate(
         { status: "scheduled", dueAt: { $lte: now } },
         { $set: { status: "sent", updatedAt: now } },
         { returnDocument: "after" }
       )
       if (!reminder) break
 
-      await createEvent({
+      await emitEvent(reminder.userId, {
         missionId: reminder.missionId,
         type: "reminder-created",
         actor: "system",

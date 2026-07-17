@@ -1,6 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FileText, ImageIcon, File as FileIcon } from "lucide-react";
-import type { DocumentRecord } from "@/lib/mongodb/models";
+import type { DocumentRecord } from "@/domain/collections";
 
 function getDocumentIcon(mimeType: string) {
   if (mimeType.startsWith("image/")) {

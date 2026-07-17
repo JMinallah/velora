@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server"
-import { listMissions, createMission } from "@/lib/mongodb/missions"
+import { listMissions, createMission } from "@/domain/missions"
 import type { CreateMissionInput } from "@/lib/coordination/contracts"
 import { withAuth } from "@/lib/with-auth"
 
-export const GET = withAuth(async () => {
+export const GET = withAuth(async (_req, session) => {
   try {
-    const data = await listMissions()
+    const data = await listMissions(session.userId)
     return NextResponse.json({ success: true, data })
   } catch (err) {
     console.error("GET /api/missions error", err)
@@ -13,14 +13,20 @@ export const GET = withAuth(async () => {
   }
 })
 
-export const POST = withAuth(async (req) => {
+export const POST = withAuth(async (req, session) => {
   try {
     const body = (await req.json()) as CreateMissionInput
     if (!body.title || !body.overview) {
       return NextResponse.json({ success: false, error: "title and overview required" }, { status: 400 })
     }
 
-    const created = await createMission({ title: body.title, subtitle: body.subtitle, overview: body.overview, nextStep: body.nextStep, source: body.source })
+    const created = await createMission(session.userId, {
+      title: body.title,
+      subtitle: body.subtitle,
+      overview: body.overview,
+      nextStep: body.nextStep,
+      source: body.source,
+    })
     return NextResponse.json({ success: true, data: created }, { status: 201 })
   } catch (err) {
     console.error("POST /api/missions error", err)

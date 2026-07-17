@@ -1,13 +1,18 @@
 import fs from "fs"
 import path from "path"
-import { getDb } from "@/lib/mongodb/client"
-import { COLLECTIONS } from "@/lib/mongodb/models"
-import type { DocumentRecord } from "@/lib/mongodb/models"
+import { getDb } from "@/adapters/db"
+import { COLLECTIONS, type DocumentRecord } from "@/domain/collections"
 
-export async function processDocumentRecord(documentId: string, input: { filePath?: string; buffer?: Buffer }) {
+export async function processDocumentRecord(
+  userId: string,
+  documentId: string,
+  input: { filePath?: string; buffer?: Buffer }
+) {
   try {
     const db = await getDb()
-    const doc = await db.collection<DocumentRecord>(COLLECTIONS.documents).findOne({ id: documentId })
+    const doc = await db
+      .collection<DocumentRecord>(COLLECTIONS.documents)
+      .findOne({ userId, id: documentId })
     if (!doc) throw new Error("document not found")
 
     const buffer = input.buffer ?? (input.filePath ? await fs.promises.readFile(input.filePath) : null)
@@ -50,7 +55,7 @@ export async function processDocumentRecord(documentId: string, input: { filePat
 
     await db
       .collection(COLLECTIONS.documents)
-      .updateOne({ id: documentId }, { $set: { extractedText, summary } })
+      .updateOne({ userId, id: documentId }, { $set: { extractedText, summary } })
 
     // processed marker file
     if (input.filePath) {
@@ -79,7 +84,7 @@ export async function scanAndProcessPendingUploads() {
       const storageUrl = `/uploads/${file}`
       const doc = await db.collection<DocumentRecord>(COLLECTIONS.documents).findOne({ storageUrl })
       if (doc && !doc.extractedText) {
-        await processDocumentRecord(doc.id, { filePath })
+        await processDocumentRecord(doc.userId, doc.id, { filePath })
       }
     }
   } catch {
