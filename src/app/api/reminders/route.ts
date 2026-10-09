@@ -1,47 +1,49 @@
 import { NextResponse } from "next/server"
-import { createReminder, listReminders, markRemindersRead } from "@/lib/mongodb/reminders"
-import type { ReminderRecord } from "@/lib/mongodb/models"
+import { z } from "zod"
+import { withAuth } from "@/lib/with-auth"
+import { createReminder, listReminders, markRemindersRead } from "@/domain/reminders"
+import { reminderCreateSchema } from "@/domain/schemas"
+import { readJson, serverError, validationError } from "@/lib/http"
 
-export async function GET(req: Request) {
+const markReadSchema = z.object({
+  action: z.literal("markRead"),
+  ids: z.array(z.string()).max(500).default([]),
+})
+
+export const GET = withAuth(async (req, session) => {
   try {
     const url = new URL(req.url)
     const missionId = url.searchParams.get("missionId") || undefined
 
-    const data = await listReminders(missionId ? { missionId } : undefined)
+    const data = await listReminders(session.userId, missionId ? { missionId } : undefined)
     return NextResponse.json({ success: true, data })
   } catch (err) {
-    console.error("GET /api/reminders error", err)
-    return NextResponse.json({ success: false, error: (err as Error).message }, { status: 500 })
+    return serverError("GET /api/reminders", err)
   }
-}
+})
 
-export async function POST(req: Request) {
+export const POST = withAuth(async (req, session) => {
   try {
-    const body = (await req.json()) as Partial<ReminderRecord>
-    if (!body.missionId || !body.title || !body.dueAt) {
-      return NextResponse.json({ success: false, error: "missionId, title and dueAt are required" }, { status: 400 })
-    }
+    // Only the listed fields are accepted; status, read and id are server-owned.
+    const parsed = reminderCreateSchema.safeParse(await readJson(req))
+    if (!parsed.success) return validationError(parsed.error)
 
-    const created = await createReminder(body)
+    const created = await createReminder(session.userId, parsed.data)
+    if (!created) return NextResponse.json({ success: false, error: "not found" }, { status: 404 })
     return NextResponse.json({ success: true, data: created }, { status: 201 })
   } catch (err) {
-    console.error("POST /api/reminders error", err)
-    return NextResponse.json({ success: false, error: (err as Error).message }, { status: 500 })
+    return serverError("POST /api/reminders", err)
   }
-}
+})
 
-export async function PATCH(req: Request) {
+export const PATCH = withAuth(async (req, session) => {
   try {
-    const body = (await req.json()) as { action?: string; ids?: string[] }
-    if (body.action === "markRead") {
-      const ids = body.ids ?? []
-      const count = await markRemindersRead(ids)
-      return NextResponse.json({ success: true, data: { modified: count } })
-    }
+    const parsed = markReadSchema.safeParse(await readJson(req))
+    if (!parsed.success) return validationError(parsed.error)
 
-    return NextResponse.json({ success: false, error: "unknown action" }, { status: 400 })
+    const count = await markRemindersRead(session.userId, parsed.data.ids)
+    return NextResponse.json({ success: true, data: { modified: count } })
   } catch (err) {
-    console.error("PATCH /api/reminders error", err)
-    return NextResponse.json({ success: false, error: (err as Error).message }, { status: 500 })
+    return serverError("PATCH /api/reminders", err)
   }
-}
+})

@@ -5,12 +5,17 @@ export type ExtractedData = {
 
 export type Message = {
   id: string;
+  userId: string;
   missionId?: string;
   type: "suggestion" | "alert" | "update" | "reasoning" | "user";
   text: string;
   createdAt: string;
   extractedData?: ExtractedData;
   source?: "agent" | "user" | "system";
+  /** Prompt version that produced an agent reply (forensics). */
+  promptVersion?: string;
+  /** Tool that produced a receipt message. */
+  tool?: string;
 };
 
 export type MissionAction = {
@@ -22,6 +27,7 @@ export type MissionAction = {
 
 export type Task = {
   id: string;
+  userId: string;
   missionId: string;
   category: string;
   label: string;
@@ -40,6 +46,7 @@ export type TaskCategory = {
 
 export type Mission = {
   id: string;
+  userId: string;
   title: string;
   subtitle?: string;
   phase?: string;
@@ -53,6 +60,7 @@ export type Mission = {
 
 export type Document = {
   id: string;
+  userId: string;
   missionId: string;
   name: string;
   mimeType: string;
@@ -65,6 +73,7 @@ export type Document = {
 
 export type Reminder = {
   id: string;
+  userId: string;
   missionId: string;
   taskId?: string;
   title: string;
@@ -79,26 +88,21 @@ export type Reminder = {
 
 export type Event = {
   id: string;
+  userId: string;
   missionId: string;
   type:
     | "mission-created"
     | "mission-updated"
+    | "mission-deleted"
     | "task-created"
     | "task-updated"
+    | "task-deleted"
     | "document-attached"
     | "reminder-created"
+    | "reminder-due"
     | "risk-updated"
     | "replan-generated";
   actor: "user" | "agent" | "system";
   payload: Record<string, unknown>;
-  createdAt: string;
-};
-
-export type User = {
-  id: string;
-  email: string;
-  name?: string;
-  passwordHash: string;
-  role?: "user" | "admin";
   createdAt: string;
 };

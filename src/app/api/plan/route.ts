@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server"
+import { withAuth } from "@/lib/with-auth"
+import { serverError } from "@/lib/http"
 import { generateGeminiText, isTransientGeminiError } from "@/lib/ai/gemini"
 import { buildTransitionPlanPrompt, type TransitionPlanInput } from "@/lib/coordination/plan"
 
@@ -15,7 +17,7 @@ async function generateWithRetry(prompt: string) {
   }
 }
 
-export async function POST(request: Request) {
+export const POST = withAuth(async (request) => {
   try {
     const body = (await request.json()) as TransitionPlanInput
 
@@ -28,14 +30,6 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ success: true, response })
   } catch (error) {
-    console.error("Plan API Error:", error)
-
-    return NextResponse.json(
-      {
-        success: false,
-        error: error instanceof Error ? error.message : "Failed to generate plan",
-      },
-      { status: 500 }
-    )
+    return serverError("Plan API Error:", error)
   }
-}
+})

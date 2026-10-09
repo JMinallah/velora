@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { UploadCloud } from "lucide-react";
 import { useDropzone } from "react-dropzone";
-import type { DocumentRecord } from "@/lib/mongodb/models";
+import type { DocumentRecord } from "@/domain/collections";
 
 export function FileUpload({
   missionId,

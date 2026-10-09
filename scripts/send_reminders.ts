@@ -1,24 +1,38 @@
-import { findDueReminders, markReminderSent } from "../src/lib/mongodb/reminders"
+// Manual reminder dispatch for development: claims due reminders exactly the
+// way the cron endpoint does (atomic status flip), so running both never
+// double-sends. Usage: npm run reminders:run
+import { getDb, closeClient } from "../src/adapters/db"
+import { COLLECTIONS, type ReminderRecord } from "../src/domain/collections"
+import { emitEvent } from "../src/domain/events"
 
-async function run() {
-  console.log("Starting reminder worker...")
-  try {
-    const due = await findDueReminders(100)
-    console.log(`Found ${due.length} due reminders`)
-    for (const r of due) {
-      try {
-        // TODO: wire real delivery (email/push). For now, simulate send and mark sent.
-        console.log(`Sending reminder ${r.id} (${r.channel}) -> ${r.title} due ${r.dueAt}`)
-        // In production, call SendGrid/FCM/etc and handle failures/retries.
-        await markReminderSent(r.id)
-      } catch (err) {
-        console.error("Failed sending reminder", r.id, err)
-      }
-    }
-  } catch (err) {
-    console.error("Reminder worker failed", err)
-    process.exitCode = 1
+async function main() {
+  const db = await getDb()
+  const now = new Date().toISOString()
+
+  let processed = 0
+  for (;;) {
+    const reminder = await db.collection<ReminderRecord>(COLLECTIONS.reminders).findOneAndUpdate(
+      { status: "scheduled", dueAt: { $lte: now } },
+      { $set: { status: "sent", updatedAt: now } },
+      { returnDocument: "after" }
+    )
+    if (!reminder) break
+
+    console.log(`reminder due: [${reminder.id}] ${reminder.title} (mission ${reminder.missionId})`)
+    await emitEvent(reminder.userId, {
+      missionId: reminder.missionId,
+      type: "reminder-created",
+      actor: "system",
+      payload: { reminderId: reminder.id, title: reminder.title, details: reminder.details },
+    }).catch(() => undefined)
+    processed++
   }
+
+  console.log(`processed ${processed} reminder(s)`)
+  await closeClient()
 }
 
-run()
+main().catch((err) => {
+  console.error(err)
+  process.exit(1)
+})

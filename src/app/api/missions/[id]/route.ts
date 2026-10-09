@@ -1,27 +1,45 @@
-import { NextRequest, NextResponse } from "next/server"
-import { getMission, updateMission } from "@/lib/mongodb/missions"
+import { NextResponse } from "next/server"
+import { getMission, updateMission, deleteMission } from "@/domain/missions"
+import { missionPatchSchema } from "@/domain/schemas"
+import { readJson, serverError, validationError } from "@/lib/http"
+import { withAuth } from "@/lib/with-auth"
 
-export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const GET = withAuth<{ id: string }>(async (_req, session, { params }) => {
   try {
     const { id } = await params
-    const mission = await getMission(id)
+    const mission = await getMission(session.userId, id)
     if (!mission) return NextResponse.json({ success: false, error: "not found" }, { status: 404 })
     return NextResponse.json({ success: true, data: mission })
   } catch (err) {
-    console.error("GET /api/missions/[id]", err)
-    return NextResponse.json({ success: false, error: (err as Error).message }, { status: 500 })
+    return serverError("GET /api/missions/[id]", err)
   }
-}
+})
 
-export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const PATCH = withAuth<{ id: string }>(async (req, session, { params }) => {
   try {
     const { id } = await params
-    const body = await req.json()
-    const updated = await updateMission(id, body)
+    // Unknown keys (userId, id, createdAt, ...) are stripped by the schema.
+    const parsed = missionPatchSchema.safeParse(await readJson(req))
+    if (!parsed.success) return validationError(parsed.error)
+    if (Object.keys(parsed.data).length === 0) {
+      return NextResponse.json({ success: false, error: "no updatable fields provided" }, { status: 400 })
+    }
+
+    const updated = await updateMission(session.userId, id, parsed.data)
     if (!updated) return NextResponse.json({ success: false, error: "not found" }, { status: 404 })
     return NextResponse.json({ success: true, data: updated })
   } catch (err) {
-    console.error("PATCH /api/missions/[id]", err)
-    return NextResponse.json({ success: false, error: (err as Error).message }, { status: 500 })
+    return serverError("PATCH /api/missions/[id]", err)
   }
-}
+})
+
+export const DELETE = withAuth<{ id: string }>(async (_req, session, { params }) => {
+  try {
+    const { id } = await params
+    const deleted = await deleteMission(session.userId, id)
+    if (!deleted) return NextResponse.json({ success: false, error: "not found" }, { status: 404 })
+    return NextResponse.json({ success: true })
+  } catch (err) {
+    return serverError("DELETE /api/missions/[id]", err)
+  }
+})
