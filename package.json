@@ -15,7 +15,7 @@
   },
   "dependencies": {
     "@auth/mongodb-adapter": "^3.7.4",
-    "@google-cloud/storage": "^6.10.0",
+    "@google-cloud/storage": "^8.4.0",
     "@google/generative-ai": "^0.24.1",
     "@tailwindcss/typography": "^0.5.20",
     "class-variance-authority": "^0.7.1",
@@ -23,7 +23,7 @@
     "framer-motion": "^12.40.0",
     "lucide-react": "^1.16.0",
     "mongodb": "^6.20.0",
-    "next": "16.2.6",
+    "next": "^16.4.0",
     "next-auth": "^5.0.0-beta.30",
     "pdf-parse": "^1.1.1",
     "radix-ui": "^1.4.3",
@@ -32,7 +32,6 @@
     "react-dropzone": "^14.3.8",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
-    "shadcn": "^4.8.0",
     "tailwind-merge": "^3.6.0",
     "tesseract.js": "^4.0.2",
     "tsx": "^4.22.4",
@@ -43,13 +42,13 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
+    "@types/node": "^22.20.5",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "16.2.6",
+    "eslint-config-next": "^16.4.0",
     "tailwindcss": "^4",
     "typescript": "^5",
-    "vitest": "^3.2.4"
+    "vitest": "^5.0.3"
   }
 }

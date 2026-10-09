@@ -47,5 +47,11 @@ jobs:
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
 
-      - name: Audit (high and critical)
-        run: npm audit --audit-level=high
+      # Shipped code is held to high+; dev tooling to critical. Dev-only highs
+      # can be unpatchable upstream (e.g. braces via eslint-config-next, which
+      # only ever globs our own lint config) and would otherwise block every merge.
+      - name: Audit production dependencies (high and critical)
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Audit all dependencies (critical)
+        run: npm audit --audit-level=critical
