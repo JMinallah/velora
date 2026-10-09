@@ -55,7 +55,7 @@ export default function MissionPage() {
   const activeMissionId = resolveMissionId(paramsForResolve, availableIds)
   const [attachmentMenuOpen, setAttachmentMenuOpen] = useState(false);
   const [isSending, setIsSending] = useState(false);
-  const [latestPlan, setLatestPlan] = useState(() => loadLatestTransitionPlan());
+  const [latestPlan] = useState(() => loadLatestTransitionPlan());
   const [selectedDocumentsByMission, setSelectedDocumentsByMission] = useState<Record<string, string[]>>(() => ({}));
   const messageListRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);

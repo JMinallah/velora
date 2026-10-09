@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { withAuth } from "@/lib/with-auth"
+import { serverError } from "@/lib/http"
 import { attachDocument } from "@/domain/documents"
 import { processDocumentRecord } from "@/lib/documents/ingest"
 
@@ -44,10 +45,6 @@ export const POST = withAuth<{ id: string }>(async (request, session, { params }
 
     return NextResponse.json({ success: true, data: created }, { status: 201 })
   } catch (error) {
-    console.error("POST /api/missions/[id]/documents/ingest", error)
-    return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : "Failed to ingest document" },
-      { status: 500 }
-    )
+    return serverError("POST /api/missions/[id]/documents/ingest", error)
   }
 })

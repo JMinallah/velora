@@ -75,7 +75,7 @@ export default function OnboardingPage() {
           await fetch(`/api/missions/${mission.id}/tasks`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ label: line, category: "Initial", priority: "medium" }),
+            body: JSON.stringify({ label: line.slice(0, 300), category: "Initial", priority: "medium" }),
           })
         }
 

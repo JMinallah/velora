@@ -11,8 +11,10 @@ const EVENT_TYPES = [
   "mission-updated",
   "task-created",
   "task-updated",
+  "task-deleted",
   "document-attached",
   "reminder-created",
+  "reminder-due",
   "risk-updated",
   "replan-generated",
 ] as const;

@@ -12,6 +12,10 @@ export type Message = {
   createdAt: string;
   extractedData?: ExtractedData;
   source?: "agent" | "user" | "system";
+  /** Prompt version that produced an agent reply (forensics). */
+  promptVersion?: string;
+  /** Tool that produced a receipt message. */
+  tool?: string;
 };
 
 export type MissionAction = {
@@ -95,6 +99,7 @@ export type Event = {
     | "task-deleted"
     | "document-attached"
     | "reminder-created"
+    | "reminder-due"
     | "risk-updated"
     | "replan-generated";
   actor: "user" | "agent" | "system";

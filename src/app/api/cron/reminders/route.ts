@@ -1,8 +1,15 @@
+import { timingSafeEqual } from "node:crypto"
 import { NextResponse } from "next/server"
 import { getDb } from "@/adapters/db"
 import { COLLECTIONS, type ReminderRecord } from "@/domain/collections"
 import { emitEvent } from "@/domain/events"
 import { env } from "@/lib/env"
+
+function bearerMatches(header: string | null, secret: string): boolean {
+  const given = Buffer.from(header ?? "")
+  const expected = Buffer.from(`Bearer ${secret}`)
+  return given.length === expected.length && timingSafeEqual(given, expected)
+}
 
 // Machine-to-machine endpoint: authenticated by CRON_SECRET bearer token,
 // not a user session (docs/04-SECURITY.md T7). Refuses to run if the secret
@@ -15,7 +22,7 @@ export async function GET(request: Request) {
       { status: 503 }
     )
   }
-  if (request.headers.get("authorization") !== `Bearer ${secret}`) {
+  if (!bearerMatches(request.headers.get("authorization"), secret)) {
     return new Response("Unauthorized", { status: 401 })
   }
 
@@ -25,10 +32,17 @@ export async function GET(request: Request) {
 
     // Atomically claim one due reminder at a time so concurrent or duplicate
     // cron fires never double-process (FR-REM-2 idempotency).
+    // Only in-app reminders are claimed: for them, "sent" means "now surfaced
+    // in the app". Email/push stay scheduled until Phase 6 adds a sender —
+    // marking them sent would record a delivery that never happened.
     let processed = 0
     for (;;) {
       const reminder = await db.collection<ReminderRecord>(COLLECTIONS.reminders).findOneAndUpdate(
-        { status: "scheduled", dueAt: { $lte: now } },
+        {
+          status: "scheduled",
+          dueAt: { $lte: now },
+          $or: [{ channel: "in-app" }, { channel: { $exists: false } }],
+        },
         { $set: { status: "sent", updatedAt: now } },
         { returnDocument: "after" }
       )
@@ -36,7 +50,7 @@ export async function GET(request: Request) {
 
       await emitEvent(reminder.userId, {
         missionId: reminder.missionId,
-        type: "reminder-created",
+        type: "reminder-due",
         actor: "system",
         payload: {
           reminderId: reminder.id,

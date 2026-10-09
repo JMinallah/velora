@@ -25,6 +25,8 @@ export async function createMessage(
     createdAt: input.createdAt ?? new Date().toISOString(),
     extractedData: input.extractedData,
     source: input.source ?? "agent",
+    ...(input.promptVersion ? { promptVersion: input.promptVersion } : {}),
+    ...(input.tool ? { tool: input.tool } : {}),
   }
   await db.collection<MessageRecord>(COLLECTIONS.messages).insertOne(msg)
   return msg

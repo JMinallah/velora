@@ -3,7 +3,7 @@
  * Uses a scripted fake provider — no LLM, no network. DB-backed tool
  * execution is covered by tests/routes.test.ts and the eval suite.
  */
-import { describe, it, expect, vi } from "vitest"
+import { describe, it, expect, vi, afterEach } from "vitest"
 import type { LlmProvider, ProviderResponse } from "@/agent/providers/types"
 
 // The loop imports domain modules; stub them so no DB is needed.
@@ -106,5 +106,57 @@ describe("runAgentTurn", () => {
     const run = await runAgentTurn({ provider, ...base })
     expect(provider.calls).toBeLessThanOrEqual(8)
     expect(run.reply).toMatch(/step/i)
+  })
+
+  it("feeds back an updateTask call that changes nothing instead of issuing a receipt", async () => {
+    const provider = scriptedProvider([
+      { text: "", toolCalls: [{ name: "updateTask", args: { taskId: "t1" } }] },
+      { text: "What should I change?", toolCalls: [] },
+    ])
+    const run = await runAgentTurn({ provider, ...base })
+    expect(run.trace).toEqual([{ tool: "updateTask", ok: false }])
+    expect(run.receipts).toHaveLength(0)
+  })
+
+  it("rejects non-ISO dates from the model", async () => {
+    const provider = scriptedProvider([
+      { text: "", toolCalls: [{ name: "createTask", args: { label: "Visa", dueDate: "next Friday" } }] },
+      { text: "Which date exactly?", toolCalls: [] },
+    ])
+    const run = await runAgentTurn({ provider, ...base })
+    expect(run.trace).toEqual([{ tool: "createTask", ok: false }])
+    expect(run.receipts).toHaveLength(0)
+  })
+
+  describe("wall-clock budget", () => {
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it("abandons a model call that hangs past the turn budget", async () => {
+      vi.useFakeTimers()
+      const provider: LlmProvider = { generate: () => new Promise(() => {}) } // never resolves
+      const pending = runAgentTurn({ provider, ...base })
+      await vi.advanceTimersByTimeAsync(30_001)
+      const run = await pending
+      expect(run.reply).toMatch(/ran out of time/i)
+    })
+
+    it("keeps receipts from steps that finished before the budget ran out", async () => {
+      vi.useFakeTimers()
+      let calls = 0
+      const provider: LlmProvider = {
+        generate: async () => {
+          calls++
+          if (calls === 1) return { text: "", toolCalls: [{ name: "createTask", args: { label: "Book movers" } }] }
+          return new Promise(() => {})
+        },
+      }
+      const pending = runAgentTurn({ provider, ...base })
+      await vi.advanceTimersByTimeAsync(30_001)
+      const run = await pending
+      expect(run.receipts.map((r) => r.text)).toEqual(['Created task "Book movers"'])
+      expect(run.reply).toMatch(/actions listed above did complete/i)
+    })
   })
 })

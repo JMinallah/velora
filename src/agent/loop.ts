@@ -9,7 +9,8 @@ import * as tasks from "@/domain/tasks"
  * runaway behavior architecturally impossible:
  *   - MAX_STEPS model calls per turn
  *   - MAX_CONSECUTIVE_FAILURES invalid tool calls before forcing an answer
- *   - WALL_CLOCK_MS total budget per turn
+ *   - WALL_CLOCK_MS total budget per turn, enforced on every model call
+ *     (a single hung call cannot outlive it), not just between steps
  */
 const MAX_STEPS = 8
 const MAX_CONSECUTIVE_FAILURES = 3
@@ -26,6 +27,21 @@ export type AgentRunResult = {
   trace: ToolTraceEntry[]
   steps: number
   promptVersion: string
+}
+
+class TurnDeadlineExceeded extends Error {}
+
+/**
+ * Races a model call against the turn's remaining budget. The abandoned call
+ * may still complete in the background; that is safe because model calls
+ * never write state — only tool execution does, and that happens here.
+ */
+function withDeadline<T>(promise: Promise<T>, msRemaining: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new TurnDeadlineExceeded()), Math.max(0, msRemaining))
+  })
+  return Promise.race([promise, deadline]).finally(() => clearTimeout(timer))
 }
 
 export async function buildMissionSnapshot(userId: string, missionId: string): Promise<string> {
@@ -75,21 +91,31 @@ export async function runAgentTurn(input: {
   let consecutiveFailures = 0
   let steps = 0
 
+  const remainingMs = () => WALL_CLOCK_MS - (Date.now() - startedAt)
+  const outOfTime = (): AgentRunResult => ({
+    reply: receipts.length
+      ? "I ran out of time mid-way, but the actions listed above did complete. Ask me to continue where I left off."
+      : "I ran out of time before finishing — please try again.",
+    receipts,
+    trace,
+    steps,
+    promptVersion: PROMPT_VERSION,
+  })
+  const generate = async (callTools: typeof tools) => {
+    try {
+      return await withDeadline(input.provider.generate({ system, turns, tools: callTools }), remainingMs())
+    } catch (error) {
+      if (error instanceof TurnDeadlineExceeded) return null
+      throw error
+    }
+  }
+
   while (steps < MAX_STEPS) {
     steps++
-    if (Date.now() - startedAt > WALL_CLOCK_MS) {
-      return {
-        reply: receipts.length
-          ? "I ran out of time mid-way, but the actions listed above did complete. Ask me to continue where I left off."
-          : "I ran out of time before finishing — please try again.",
-        receipts,
-        trace,
-        steps,
-        promptVersion: PROMPT_VERSION,
-      }
-    }
+    if (remainingMs() <= 0) return outOfTime()
 
-    const response = await input.provider.generate({ system, turns, tools })
+    const response = await generate(tools)
+    if (!response) return outOfTime()
 
     if (response.toolCalls.length === 0) {
       return {
@@ -146,9 +172,9 @@ export async function runAgentTurn(input: {
         role: "user",
         text: "SYSTEM NOTE: several tool calls failed. Stop calling tools and answer the user with what you have, stating plainly what you could not complete.",
       })
-      const final = await input.provider.generate({ system, turns, tools: [] })
+      const final = await generate([])
       return {
-        reply: final.text || "I couldn't complete that — something kept failing. Please try again.",
+        reply: final?.text || "I couldn't complete that — something kept failing. Please try again.",
         receipts,
         trace,
         steps: steps + 1,

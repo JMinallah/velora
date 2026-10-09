@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from "uuid"
 import { getDb } from "@/adapters/db"
-import { COLLECTIONS, type TaskRecord } from "./collections"
+import { COLLECTIONS, type TaskRecord, withoutProtectedFields } from "./collections"
 import { emitEvent } from "./events"
 import { getMission } from "./missions"
 
@@ -70,11 +70,12 @@ export async function updateTask(
 ): Promise<TaskRecord | null> {
   const db = await getDb()
   const now = new Date().toISOString()
+  const safePatch = withoutProtectedFields(patch)
   const updated = await db
     .collection<TaskRecord>(COLLECTIONS.tasks)
     .findOneAndUpdate(
       { userId, missionId, id: taskId },
-      { $set: { ...patch, updatedAt: now } },
+      { $set: { ...safePatch, updatedAt: now } },
       { returnDocument: "after" }
     )
 
@@ -83,7 +84,7 @@ export async function updateTask(
       missionId,
       type: "task-updated",
       actor,
-      payload: { taskId, fields: Object.keys(patch) },
+      payload: { taskId, fields: Object.keys(safePatch) },
     })
   }
   return updated
@@ -109,6 +110,15 @@ export async function deleteTask(
   return true
 }
 
+/** Adds N days in UTC, keeping the input's shape: date-only stays date-only. Null if unparseable. */
+function shiftDate(value: string, days: number): string | null {
+  const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(value)
+  const due = new Date(dateOnly ? `${value}T00:00:00Z` : value)
+  if (Number.isNaN(due.getTime())) return null
+  due.setUTCDate(due.getUTCDate() + days)
+  return dateOnly ? due.toISOString().slice(0, 10) : due.toISOString()
+}
+
 /** Shifts due dates of open tasks by N days (used by re-planning). */
 export async function shiftTaskDates(
   userId: string,
@@ -123,13 +133,13 @@ export async function shiftTaskDates(
   let modified = 0
   for (const task of tasks) {
     if (!task.dueDate || task.completed) continue
-    const due = new Date(task.dueDate)
-    due.setDate(due.getDate() + days)
+    const shifted = shiftDate(task.dueDate, days)
+    if (!shifted) continue // unparseable legacy value — leave it rather than crash the whole shift
     const res = await db
       .collection<TaskRecord>(COLLECTIONS.tasks)
       .updateOne(
         { userId, missionId, id: task.id },
-        { $set: { dueDate: due.toISOString(), updatedAt: now } }
+        { $set: { dueDate: shifted, updatedAt: now } }
       )
     modified += res.modifiedCount
   }

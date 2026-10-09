@@ -3,32 +3,40 @@ import { env } from "@/lib/env"
 import { ensureIndexes } from "@/domain/indexes"
 
 // Cached across hot reloads in dev and across invocations in serverless.
+// The *promises* are cached, not the resolved values, so concurrent cold-start
+// requests share one connection instead of each opening their own.
 const globalForDb = globalThis as unknown as {
-  _mongoClient?: MongoClient
-  _mongoDb?: Db
+  _mongoClient?: Promise<MongoClient>
+  _mongoDb?: Promise<Db>
 }
 
-export async function getClient(): Promise<MongoClient> {
-  if (globalForDb._mongoClient) return globalForDb._mongoClient
-  const client = new MongoClient(env().MONGODB_URI)
-  await client.connect()
-  globalForDb._mongoClient = client
-  return client
+export function getClient(): Promise<MongoClient> {
+  if (!globalForDb._mongoClient) {
+    globalForDb._mongoClient = new MongoClient(env().MONGODB_URI).connect().catch((err) => {
+      globalForDb._mongoClient = undefined // let the next request retry
+      throw err
+    })
+  }
+  return globalForDb._mongoClient
 }
 
-export async function getDb(): Promise<Db> {
-  if (globalForDb._mongoDb) return globalForDb._mongoDb
-  const client = await getClient()
-  const db = client.db(env().MONGODB_DB)
-  await ensureIndexes(db)
-  globalForDb._mongoDb = db
-  return db
+export function getDb(): Promise<Db> {
+  if (!globalForDb._mongoDb) {
+    globalForDb._mongoDb = (async () => {
+      const db = (await getClient()).db(env().MONGODB_DB)
+      await ensureIndexes(db)
+      return db
+    })().catch((err) => {
+      globalForDb._mongoDb = undefined
+      throw err
+    })
+  }
+  return globalForDb._mongoDb
 }
 
 export async function closeClient() {
-  if (globalForDb._mongoClient) {
-    await globalForDb._mongoClient.close()
-    globalForDb._mongoClient = undefined
-    globalForDb._mongoDb = undefined
-  }
+  const pending = globalForDb._mongoClient
+  globalForDb._mongoClient = undefined
+  globalForDb._mongoDb = undefined
+  if (pending) await (await pending).close()
 }

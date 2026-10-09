@@ -126,7 +126,7 @@ Streaming uses the platform's native response streaming (works within Vercel Hob
 3. Extraction is validated, stored as `unverified`, and shown for user confirmation. Confirmed fields become mission facts the agent may cite.
 
 ### 4.4 Reminders (FR-REM-*)
-Vercel Cron (primary) and a GitHub Actions scheduled workflow (fallback, staggered) hit `POST /api/internal/reminders/dispatch` with a bearer `CRON_SECRET`. The dispatcher selects due reminders with an atomic claim (`findOneAndUpdate` status `pending→sending`), making concurrent/duplicate cron fires idempotent, then sends via Resend and records `sent`/`failed` events.
+Vercel Cron (primary) and a GitHub Actions scheduled workflow (fallback, staggered) hit `GET /api/cron/reminders` (Vercel Cron issues GET requests) with a bearer `CRON_SECRET`. The dispatcher selects due reminders with an atomic claim (`findOneAndUpdate` status `pending→sending`), making concurrent/duplicate cron fires idempotent, then sends via Resend and records `sent`/`failed` events.
 
 ## 5. Data model (MongoDB Atlas)
 

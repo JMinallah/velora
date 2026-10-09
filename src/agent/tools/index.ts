@@ -3,6 +3,7 @@ import { zodToJsonSchema } from "zod-to-json-schema"
 import * as missions from "@/domain/missions"
 import * as tasks from "@/domain/tasks"
 import * as reminders from "@/domain/reminders"
+import { isoDate } from "@/domain/schemas"
 import type { ToolDeclaration } from "@/agent/providers/types"
 
 /**
@@ -106,7 +107,7 @@ const createTask = defineTool({
   input: z.object({
     label: z.string().min(1).max(300),
     category: z.string().max(100).optional(),
-    dueDate: z.string().optional().describe("ISO date, e.g. 2026-09-12"),
+    dueDate: isoDate.optional().describe("ISO date, e.g. 2026-09-12"),
     priority: z.enum(["low", "medium", "high"]).optional(),
   }),
   execute: async (userId, missionId, args) => {
@@ -129,13 +130,18 @@ const updateTaskTool = defineTool({
   tier: "write",
   description:
     "Update an existing task's label, category, due date, or priority. Get the taskId from listTasks first.",
-  input: z.object({
-    taskId: z.string().min(1),
-    label: z.string().min(1).max(300).optional(),
-    category: z.string().max(100).optional(),
-    dueDate: z.string().nullable().optional(),
-    priority: z.enum(["low", "medium", "high"]).optional(),
-  }),
+  input: z
+    .object({
+      taskId: z.string().min(1),
+      label: z.string().min(1).max(300).optional(),
+      category: z.string().max(100).optional(),
+      dueDate: isoDate.nullable().optional().describe("ISO date, e.g. 2026-09-12; null clears it"),
+      priority: z.enum(["low", "medium", "high"]).optional(),
+    })
+    // An update with nothing to change would still emit a "Updated task" receipt.
+    .refine((a) => [a.label, a.category, a.dueDate, a.priority].some((v) => v !== undefined), {
+      message: "provide at least one field to change",
+    }),
   execute: async (userId, missionId, args) => {
     const { taskId, ...patch } = args
     const updated = await tasks.updateTask(userId, missionId, taskId, patch, "agent")
@@ -177,7 +183,7 @@ const createReminderTool = defineTool({
   description: "Schedule an in-app reminder for this mission at a specific time.",
   input: z.object({
     title: z.string().min(1).max(200),
-    dueAt: z.string().describe("ISO datetime for when the reminder should fire"),
+    dueAt: isoDate.describe("ISO datetime for when the reminder should fire, e.g. 2026-09-12T09:00:00Z"),
     details: z.string().max(500).optional(),
     taskId: z.string().optional(),
   }),

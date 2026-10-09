@@ -9,7 +9,9 @@ import { NextRequest } from "next/server"
 /**
  * Requires a running MongoDB, provided via TEST_MONGODB_URI:
  *   local: podman run -d --name velora-test-mongo -p 27017:27017 mongo:4.4
- *          TEST_MONGODB_URI=mongodb://localhost:27017 npm test
+ *          TEST_MONGODB_URI=mongodb://127.0.0.1:27017 npm test
+ *          (127.0.0.1, not localhost: localhost may resolve to IPv6 ::1,
+ *          which rootless podman port forwarding resets)
  *   CI:    provided by the mongo service container in ci.yml.
  * Skipped (visibly) when TEST_MONGODB_URI is not set.
  */
@@ -35,6 +37,8 @@ import {
 } from "@/app/api/missions/[id]/tasks/[taskId]/route"
 import { GET as listEventsRoute } from "@/app/api/missions/[id]/events/route"
 import { GET as cronRemindersRoute } from "@/app/api/cron/reminders/route"
+import { GET as listRemindersRoute, POST as createReminderRoute } from "@/app/api/reminders/route"
+import { POST as createMessageRoute, GET as listMessagesRoute } from "@/app/api/missions/[id]/messages/route"
 import { closeClient } from "@/adapters/db"
 
 beforeAll(async () => {
@@ -112,8 +116,10 @@ describeDb("missions routes", () => {
 
   it("emits audit events for create/update/delete", async () => {
     const id = await createMissionAs("user-events")
-    await patchMissionRoute(req("PATCH", `/api/missions/${id}`, { title: "Renamed" }), ctx({ id }))
-    await deleteMissionRoute(req("DELETE", `/api/missions/${id}`), ctx({ id }))
+    const patched = await patchMissionRoute(req("PATCH", `/api/missions/${id}`, { title: "Renamed" }), ctx({ id }))
+    expect(patched.status).toBe(200)
+    const deleted = await deleteMissionRoute(req("DELETE", `/api/missions/${id}`), ctx({ id }))
+    expect(deleted.status).toBe(200)
 
     const res = await listEventsRoute(req("GET", `/api/missions/${id}/events`), ctx({ id }))
     const json = await res.json()
@@ -121,6 +127,40 @@ describeDb("missions routes", () => {
     expect(types).toEqual(
       expect.arrayContaining(["mission-created", "mission-updated", "mission-deleted"])
     )
+  })
+})
+
+describeDb("mission input validation", () => {
+  it("PATCH cannot reassign ownership or identity fields", async () => {
+    const id = await createMissionAs("user-owner")
+    const res = await patchMissionRoute(
+      req("PATCH", `/api/missions/${id}`, { userId: "user-victim", id: "hijacked", createdAt: "1999-01-01", title: "Renamed" }),
+      ctx({ id })
+    )
+    expect(res.status).toBe(200)
+    const data = (await res.json()).data
+    expect(data).toMatchObject({ id, userId: "user-owner", title: "Renamed" })
+    expect(data.createdAt).not.toBe("1999-01-01")
+
+    asUser("user-victim")
+    const victimList = await (await listMissionsRoute(req("GET", "/api/missions"), ctx({}))).json()
+    expect(victimList.data).toHaveLength(0)
+  })
+
+  it("rejects an invalid status and malformed JSON with 400", async () => {
+    const id = await createMissionAs("user-validate")
+    const badStatus = await patchMissionRoute(req("PATCH", `/api/missions/${id}`, { status: "Done!!" }), ctx({ id }))
+    expect(badStatus.status).toBe(400)
+
+    const malformed = await createMissionRoute(
+      new NextRequest("http://localhost/api/missions", {
+        method: "POST",
+        body: "{not json",
+        headers: { "content-type": "application/json" },
+      }),
+      ctx({})
+    )
+    expect(malformed.status).toBe(400)
   })
 })
 
@@ -177,6 +217,27 @@ describeDb("tasks routes", () => {
     )
   })
 
+  it("rejects non-ISO due dates and ignores a client-claimed agent origin", async () => {
+    const missionId = await createMissionAs("user-dates")
+    const freeText = await createTaskRoute(
+      req("POST", `/api/missions/${missionId}/tasks`, { label: "Visa", dueDate: "next Friday" }),
+      ctx({ id: missionId })
+    )
+    expect(freeText.status).toBe(400)
+    const impossible = await createTaskRoute(
+      req("POST", `/api/missions/${missionId}/tasks`, { label: "Visa", dueDate: "2026-02-30" }),
+      ctx({ id: missionId })
+    )
+    expect(impossible.status).toBe(400)
+
+    const ok = await createTaskRoute(
+      req("POST", `/api/missions/${missionId}/tasks`, { label: "Visa", dueDate: "2026-09-01", source: "agent" }),
+      ctx({ id: missionId })
+    )
+    expect(ok.status).toBe(201)
+    expect((await ok.json()).data).toMatchObject({ dueDate: "2026-09-01", source: "user" })
+  })
+
   it("task list is scoped: wrong user sees empty, not the owner's tasks", async () => {
     const missionId = await createMissionAs("user-e")
     await createTaskRoute(
@@ -187,6 +248,63 @@ describeDb("tasks routes", () => {
     asUser("user-f")
     const res = await listTasksRoute(req("GET", `/api/missions/${missionId}/tasks`), ctx({ id: missionId }))
     expect((await res.json()).data).toHaveLength(0)
+  })
+})
+
+describeDb("reminders and messages routes", () => {
+  it("ignores server-owned reminder fields and normalizes dueAt to UTC", async () => {
+    const missionId = await createMissionAs("user-rem")
+    const res = await createReminderRoute(
+      req("POST", "/api/reminders", {
+        missionId,
+        title: "Call the landlord",
+        dueAt: "2026-09-01T09:00:00+03:00",
+        status: "sent",
+        read: true,
+        id: "chosen-id",
+      }),
+      ctx({})
+    )
+    expect(res.status).toBe(201)
+    const data = (await res.json()).data
+    expect(data).toMatchObject({ status: "scheduled", read: false, dueAt: "2026-09-01T06:00:00.000Z" })
+    expect(data.id).not.toBe("chosen-id")
+
+    const badDate = await createReminderRoute(
+      req("POST", "/api/reminders", { missionId, title: "x", dueAt: "tomorrow-ish" }),
+      ctx({})
+    )
+    expect(badDate.status).toBe(400)
+  })
+
+  it("rejects a reminder linked to a task outside the mission (404)", async () => {
+    const missionId = await createMissionAs("user-rem2")
+    const res = await createReminderRoute(
+      req("POST", "/api/reminders", { missionId, title: "x", dueAt: "2026-09-01", taskId: "not-a-task" }),
+      ctx({})
+    )
+    expect(res.status).toBe(404)
+  })
+
+  it("stores client messages as the user's, whatever type/source they claim", async () => {
+    const missionId = await createMissionAs("user-msg")
+    const res = await createMessageRoute(
+      req("POST", `/api/missions/${missionId}/messages`, { text: "I already did that", type: "reasoning", source: "agent" }),
+      ctx({ id: missionId })
+    )
+    expect(res.status).toBe(201)
+    expect((await res.json()).data).toMatchObject({ type: "user", source: "user" })
+
+    asUser("user-other")
+    const foreign = await createMessageRoute(
+      req("POST", `/api/missions/${missionId}/messages`, { text: "hi" }),
+      ctx({ id: missionId })
+    )
+    expect(foreign.status).toBe(404)
+    const foreignList = await (
+      await listMessagesRoute(req("GET", `/api/missions/${missionId}/messages`), ctx({ id: missionId }))
+    ).json()
+    expect(foreignList.data).toHaveLength(0)
   })
 })
 
@@ -210,5 +328,34 @@ describeDb("cron dispatch route", () => {
       })
     )
     expect(res.status).toBe(200)
+  })
+
+  it("claims due in-app reminders only, recording reminder-due", async () => {
+    const missionId = await createMissionAs("user-cron")
+    for (const channel of ["in-app", "email"]) {
+      const res = await createReminderRoute(
+        req("POST", "/api/reminders", { missionId, title: `due ${channel}`, dueAt: "2020-01-01T00:00:00Z", channel }),
+        ctx({})
+      )
+      expect(res.status).toBe(201)
+    }
+
+    const res = await cronRemindersRoute(
+      new Request("http://localhost/api/cron/reminders", {
+        headers: { authorization: "Bearer test-cron-secret" },
+      })
+    )
+    expect(res.status).toBe(200)
+
+    const reminders = (
+      await (await listRemindersRoute(req("GET", `/api/reminders?missionId=${missionId}`), ctx({}))).json()
+    ).data as { channel: string; status: string }[]
+    expect(reminders.find((r) => r.channel === "in-app")?.status).toBe("sent")
+    expect(reminders.find((r) => r.channel === "email")?.status).toBe("scheduled")
+
+    const events = await (
+      await listEventsRoute(req("GET", `/api/missions/${missionId}/events`), ctx({ id: missionId }))
+    ).json()
+    expect(events.data.filter((e: { type: string }) => e.type === "reminder-due")).toHaveLength(1)
   })
 })

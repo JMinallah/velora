@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { withAuth } from "@/lib/with-auth"
+import { serverError } from "@/lib/http"
 import { attachDocument, listDocuments } from "@/domain/documents"
 
 export const GET = withAuth<{ id: string }>(async (_req, session, { params }) => {
@@ -8,11 +9,7 @@ export const GET = withAuth<{ id: string }>(async (_req, session, { params }) =>
     const documents = await listDocuments(session.userId, id)
     return NextResponse.json({ success: true, data: documents })
   } catch (error) {
-    console.error("GET /api/missions/[id]/documents", error)
-    return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : "Failed to load documents" },
-      { status: 500 }
-    )
+    return serverError("GET /api/missions/[id]/documents", error)
   }
 })
 
@@ -37,10 +34,6 @@ export const POST = withAuth<{ id: string }>(async (request, session, { params }
 
     return NextResponse.json({ success: true, data: created }, { status: 201 })
   } catch (error) {
-    console.error("POST /api/missions/[id]/documents", error)
-    return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : "Failed to attach document" },
-      { status: 500 }
-    )
+    return serverError("POST /api/missions/[id]/documents", error)
   }
 })

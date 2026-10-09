@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from "uuid"
 import { getDb } from "@/adapters/db"
-import { COLLECTIONS, type MissionRecord } from "./collections"
+import { COLLECTIONS, type MissionRecord, withoutProtectedFields } from "./collections"
 import { emitEvent } from "./events"
 
 type Actor = "user" | "agent" | "system"
@@ -58,11 +58,12 @@ export async function updateMission(
 ): Promise<MissionRecord | null> {
   const db = await getDb()
   const now = new Date().toISOString()
+  const safePatch = withoutProtectedFields(patch)
   const updated = await db
     .collection<MissionRecord>(COLLECTIONS.missions)
     .findOneAndUpdate(
       { userId, id },
-      { $set: { ...patch, updatedAt: now } },
+      { $set: { ...safePatch, updatedAt: now } },
       { returnDocument: "after" }
     )
 
@@ -71,7 +72,7 @@ export async function updateMission(
       missionId: id,
       type: "mission-updated",
       actor,
-      payload: { fields: Object.keys(patch) },
+      payload: { fields: Object.keys(safePatch) },
     })
   }
   return updated

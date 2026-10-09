@@ -3,10 +3,15 @@ import { getDb } from "@/adapters/db"
 import { COLLECTIONS, type ReminderRecord } from "./collections"
 import { emitEvent } from "./events"
 import { getMission } from "./missions"
+import { getTask } from "./tasks"
 
 type Actor = "user" | "agent" | "system"
 
-/** Returns null when the mission doesn't exist or isn't the caller's (renders as 404). */
+/**
+ * Returns null when the mission (or the linked task) doesn't exist or isn't
+ * the caller's (renders as 404). dueAt is stored as a UTC ISO string because
+ * the dispatcher compares it to "now" as a string.
+ */
 export async function createReminder(
   userId: string,
   input: Partial<Omit<ReminderRecord, "userId">> &
@@ -15,6 +20,10 @@ export async function createReminder(
 ): Promise<ReminderRecord | null> {
   const mission = await getMission(userId, input.missionId)
   if (!mission) return null
+  if (input.taskId && !(await getTask(userId, input.missionId, input.taskId))) return null
+
+  const dueAt = new Date(input.dueAt)
+  if (Number.isNaN(dueAt.getTime())) throw new Error(`invalid dueAt: ${input.dueAt}`)
 
   const db = await getDb()
   const now = new Date().toISOString()
@@ -25,7 +34,7 @@ export async function createReminder(
     taskId: input.taskId,
     title: input.title,
     details: input.details,
-    dueAt: input.dueAt,
+    dueAt: dueAt.toISOString(),
     channel: input.channel ?? "in-app",
     status: input.status ?? "scheduled",
     read: input.read ?? false,
