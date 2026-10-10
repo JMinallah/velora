@@ -36,7 +36,7 @@ const getMissionOverview = defineTool({
   name: "getMissionOverview",
   tier: "read",
   description:
-    "Get the current mission: title, status, overview, next step, and task counts by completion. Use before answering any question about the mission's state.",
+    "Get the current mission: title, status, overview, next step, target date, and task counts by completion. Use before answering any question about the mission's state.",
   input: z.object({}),
   execute: async (userId, missionId) => {
     const mission = await missions.getMission(userId, missionId)
@@ -49,6 +49,7 @@ const getMissionOverview = defineTool({
         status: mission.status,
         overview: mission.overview,
         nextStep: mission.nextStep,
+        targetDate: mission.targetDate ?? null,
         tasksTotal: all.length,
         tasksCompleted: all.filter((t) => t.completed).length,
       },

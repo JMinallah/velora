@@ -3,6 +3,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { useState } from "react";
@@ -15,6 +16,18 @@ export default function OnboardingPage() {
   const [concerns, setConcerns] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [plan, setPlan] = useState("");
+  // Set when AI planning failed or is disabled: the user is offered manual creation instead.
+  const [aiProblem, setAiProblem] = useState<string | null>(null);
+
+  // Carries what the user already typed over to the manual form.
+  const manualHref = (() => {
+    const params = new URLSearchParams();
+    if (goal.trim()) params.set("title", goal.trim());
+    const context = [deadline.trim() && `Deadline: ${deadline.trim()}`, concerns.trim()].filter(Boolean).join("\n");
+    if (context) params.set("overview", context);
+    const query = params.toString();
+    return query ? `/mission/new?${query}` : "/mission/new";
+  })();
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -22,6 +35,7 @@ export default function OnboardingPage() {
     if (!trimmedGoal) return;
 
     setIsGenerating(true);
+    setAiProblem(null);
 
     try {
       const response = await fetch("/api/plan", {
@@ -36,10 +50,15 @@ export default function OnboardingPage() {
         }),
       });
 
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
 
       if (!response.ok) {
-        throw new Error(data.error || "Failed to generate plan");
+        setAiProblem(
+          data?.code === "agent_disabled"
+            ? data.error
+            : "We couldn't generate a plan right now. You can create the mission yourself and add tasks as you go."
+        );
+        return;
       }
 
       const generatedPlan = data.response || "No plan returned.";
@@ -131,7 +150,19 @@ export default function OnboardingPage() {
               <Button type="submit" className="w-full" disabled={isGenerating}>
                 {isGenerating ? "Generating..." : "Generate My Transition Plan"}
               </Button>
+              <Button asChild variant="outline" className="w-full">
+                <Link href={manualHref}>Plan it myself (no AI)</Link>
+              </Button>
             </form>
+
+            {aiProblem && (
+              <div role="alert" className="mt-6 flex flex-col gap-3 rounded-lg border border-border/40 bg-muted/20 p-4 text-sm">
+                <p>{aiProblem}</p>
+                <Button asChild className="self-start">
+                  <Link href={manualHref}>Create it manually instead</Link>
+                </Button>
+              </div>
+            )}
 
             {plan && (
               <div className="mt-6 rounded-lg border border-border/20 bg-muted/20 p-4 text-sm whitespace-pre-wrap">

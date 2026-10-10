@@ -38,6 +38,7 @@ import {
 import { GET as listEventsRoute } from "@/app/api/missions/[id]/events/route"
 import { GET as cronRemindersRoute } from "@/app/api/cron/reminders/route"
 import { GET as listRemindersRoute, POST as createReminderRoute } from "@/app/api/reminders/route"
+import { POST as planRoute } from "@/app/api/plan/route"
 import { POST as createMessageRoute, GET as listMessagesRoute } from "@/app/api/missions/[id]/messages/route"
 import { closeClient } from "@/adapters/db"
 
@@ -49,6 +50,8 @@ beforeAll(async () => {
   process.env.AUTH_GOOGLE_ID = "test-client-id"
   process.env.AUTH_GOOGLE_SECRET = "test-client-secret"
   process.env.CRON_SECRET = "test-cron-secret"
+  // These tests exercise manual mode; a key in the developer's shell must not leak in.
+  delete process.env.GEMINI_API_KEY
 })
 
 afterAll(async () => {
@@ -127,6 +130,47 @@ describeDb("missions routes", () => {
     expect(types).toEqual(
       expect.arrayContaining(["mission-created", "mission-updated", "mission-deleted"])
     )
+  })
+})
+
+describeDb("zero-AI mission creation", () => {
+  it("creates a mission from just a title, with no AI involved", async () => {
+    asUser("user-manual")
+    const res = await createMissionRoute(req("POST", "/api/missions", { title: "Start university in Lyon" }), ctx({}))
+    expect(res.status).toBe(201)
+    expect((await res.json()).data).toMatchObject({
+      title: "Start university in Lyon",
+      overview: "",
+      targetDate: null,
+      source: "manual",
+    })
+  })
+
+  it("stores a valid target date and rejects an invalid one", async () => {
+    asUser("user-manual")
+    const ok = await createMissionRoute(
+      req("POST", "/api/missions", { title: "Move", targetDate: "2026-12-01" }),
+      ctx({})
+    )
+    expect(ok.status).toBe(201)
+    expect((await ok.json()).data.targetDate).toBe("2026-12-01")
+
+    const bad = await createMissionRoute(
+      req("POST", "/api/missions", { title: "Move", targetDate: "end of year" }),
+      ctx({})
+    )
+    expect(bad.status).toBe(400)
+  })
+
+  it("plan route reports AI as disabled (503 agent_disabled) so the client can offer manual planning", async () => {
+    asUser("user-manual")
+    const res = await planRoute(req("POST", "/api/plan", { goal: "Move to Seoul" }), ctx({}))
+    expect(res.status).toBe(503)
+    expect((await res.json()).code).toBe("agent_disabled")
+
+    asUser(null)
+    const anon = await planRoute(req("POST", "/api/plan", { goal: "Move to Seoul" }), ctx({}))
+    expect(anon.status).toBe(401)
   })
 })
 
