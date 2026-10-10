@@ -1,273 +1,177 @@
-"use client"
-
-import { useEffect, useRef, useState, type KeyboardEvent } from "react"
-import { v4 as uuidv4 } from "uuid"
+import Link from "next/link"
+import { redirect } from "next/navigation"
+import { CalendarDays, Plus, Sparkles } from "lucide-react"
+import { auth } from "@/lib/auth"
+import { listMissions } from "@/domain/missions"
+import { summarizeTasks } from "@/domain/tasks"
+import { formatDisplayDate } from "@/lib/dates"
 import { Button } from "@/components/ui/button"
-import { Textarea } from "@/components/ui/textarea"
-import { Camera, File, Send } from "lucide-react"
-import { sendGeminiChat } from "@/lib/gemini-chat"
-import type { Message } from "@/types"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 
-const PLACEHOLDERS = [
-  "Ask anything...",
-  "Generate ideas...",
-  "Upload a file to analyze...",
-  "Create something amazing...",
-]
+// Per-user data read at request time; never prerendered at build.
+export const dynamic = "force-dynamic"
 
-export default function Dashboard() {
-  const [draft, setDraft] = useState("")
-  const [files, setFiles] = useState<File[]>([])
-  const [messages, setMessages] = useState<Message[]>([])
-  const [placeholder, setPlaceholder] = useState(PLACEHOLDERS[0])
-  const [isLoading, setIsLoading] = useState(false)
-  const [sessionId] = useState(() => uuidv4())
-  const idx = useRef(0)
-  const fileInputRef = useRef<HTMLInputElement | null>(null)
-  const messageListRef = useRef<HTMLDivElement | null>(null)
-  const assistantAbortRef = useRef<AbortController | null>(null)
+const DAY_MS = 24 * 60 * 60 * 1000
 
-  useEffect(() => {
-    const t = setInterval(() => {
-      idx.current = (idx.current + 1) % PLACEHOLDERS.length
-      setPlaceholder(PLACEHOLDERS[idx.current])
-    }, 3500)
+/** Whole days from today (UTC) to a stored date; negative when past. */
+function daysUntil(value: string): number | null {
+  const date = new Date(/^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T00:00:00Z` : value)
+  if (Number.isNaN(date.getTime())) return null
+  const today = new Date()
+  const startOfToday = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate())
+  return Math.floor((date.getTime() - startOfToday) / DAY_MS)
+}
 
-    return () => clearInterval(t)
-  }, [])
+function relativeDay(days: number): string {
+  if (days < -1) return `${-days} days overdue`
+  if (days === -1) return "1 day overdue"
+  if (days === 0) return "today"
+  if (days === 1) return "tomorrow"
+  return `in ${days} days`
+}
 
-  useEffect(() => {
-    const el = messageListRef.current
-    if (!el) return
+/**
+ * Dashboard (docs/06-DELIVERY-PLAN.md 2.5-7): every mission with progress,
+ * plus the soonest deadlines across all of them. Server-rendered straight
+ * from the domain layer — no AI involved.
+ */
+export default async function DashboardPage() {
+  const session = await auth()
+  const userId = session?.user?.id
+  if (!userId) redirect("/signin")
 
-    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" })
-  }, [messages])
+  const [missions, summary] = await Promise.all([listMissions(userId), summarizeTasks(userId)])
+  const missionTitles = Object.fromEntries(missions.map((m) => [m.id, m.title]))
 
-  function handleFiles(selected: FileList | null) {
-    if (!selected) return
-    setFiles((prev) => [...prev, ...Array.from(selected)])
-  }
-
-  function removeFile(name: string) {
-    setFiles((prev) => prev.filter((file) => file.name !== name))
-  }
-
-  async function handleSend() {
-    const text = draft.trim()
-    const messageText = text || (files.length > 0 ? `Uploaded ${files.length} file${files.length === 1 ? "" : "s"}` : "")
-    if (!messageText) return
-
-    const userMessage: Message = {
-      userId: "local",
-      id: `u-${Date.now()}`,
-      type: "user",
-      text: messageText,
-      createdAt: new Date().toISOString(),
-    }
-
-    setMessages((prev) => [...prev, userMessage])
-    setDraft("")
-    setFiles([])
-    setIsLoading(true)
-
-    if (assistantAbortRef.current) {
-      assistantAbortRef.current.abort()
-    }
-
-    assistantAbortRef.current = new AbortController()
-
-    const assistantId = `a-${Date.now()}`
-    const assistantMessage: Message = {
-      userId: "local",
-      id: assistantId,
-      type: "reasoning",
-      text: "",
-      createdAt: new Date().toISOString(),
-    }
-    setMessages((prev) => [...prev, assistantMessage])
-
-    try {
-      await sendGeminiChat(
-        {
-          message: messageText,
-          sessionId,
-          history: messages.map(m => ({ sender: m.type === 'user' ? 'user' : 'assistant', text: m.text })),
-        },
-        { 
-          signal: assistantAbortRef.current.signal,
-          onChunk: (chunk) => {
-            setMessages((prev) => 
-              prev.map(m => m.id === assistantId ? { ...m, text: m.text + chunk } : m)
-            )
-          }
-        }
-      )
-    } catch (error: unknown) {
-      let name: string | undefined
-      if (typeof error === 'object' && error !== null && 'name' in error) {
-        const maybeName = (error as Record<string, unknown>).name
-        if (typeof maybeName === 'string') name = maybeName
-      }
-      if (name === 'AbortError') return
-
-      console.error("Chat error:", error)
-
-      setMessages((prev) => 
-        prev.map(m => m.id === assistantId ? { ...m, type: "alert", text: "Sorry, I encountered an error. Please try again." } : m)
-      )
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault()
-      handleSend()
-    }
+  if (missions.length === 0) {
+    return (
+      <div className="mx-auto flex max-w-md flex-1 flex-col items-center justify-center gap-4 text-center">
+        <h1 className="text-2xl font-semibold">Start your first mission</h1>
+        <p className="text-muted-foreground">
+          A mission is one big change — a move, a new job, starting university — broken into tasks with dates.
+        </p>
+        <div className="flex flex-wrap justify-center gap-2">
+          <Button asChild>
+            <Link href="/mission/new">
+              <Plus /> Plan it myself
+            </Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link href="/onboarding">
+              <Sparkles /> Plan with AI
+            </Link>
+          </Button>
+        </div>
+      </div>
+    )
   }
 
   return (
-    <main className="flex h-[calc(100dvh-2rem)] min-h-0 flex-col items-center px-4 py-4 sm:py-6 lg:py-8">
-      <div className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-72 bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.06),transparent_38%),radial-gradient(circle_at_top_right,rgba(16,185,129,0.05),transparent_32%)]" />
-
-      <div className="flex h-full min-h-0 w-full max-w-205 flex-col">
-        <header className="shrink-0 text-center">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
-            V
-          </div>
-          <h1 className="text-3xl font-semibold">Welcome back 👋</h1>
-          <p className="mt-2 text-sm text-muted-foreground">What would you like to do today?</p>
-        </header>
-
-        <section className="flex min-h-0 flex-1 flex-col pt-6">
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            <div ref={messageListRef} className="min-h-0 flex-1 overflow-y-auto px-1 py-2">
-              {messages.length === 0 ? (
-                <div className="flex h-full items-center justify-center px-6 py-8 text-center text-sm text-muted-foreground">
-                  Start a conversation. Messages will appear here.
-                </div>
-              ) : (
-                <>
-                  {messages.map((message) => (
-                    <div
-                      key={message.id}
-                      className={`mb-2 flex ${message.type === "user" ? "justify-end" : "justify-start"}`}
-                    >
-                      <div
-                        className={`max-w-[85%] rounded-xl px-3 py-2 text-sm ${
-                          message.type === "user"
-                            ? "bg-primary/10 text-foreground"
-                            : "bg-muted/10 text-muted-foreground"
-                        }`}
-                      >
-                        <div>{message.text}</div>
-                        <div className="mt-1 text-xs opacity-70">{message.createdAt}</div>
-                      </div>
-                    </div>
-                  ))}
-                  {isLoading && (
-                    <div className="mb-2 flex justify-start">
-                      <div className="rounded-xl bg-muted/10 px-3 py-2 text-sm text-muted-foreground">
-                        <div className="flex gap-1">
-                          <div className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground" />
-                          <div className="animation-delay-200 h-2 w-2 animate-bounce rounded-full bg-muted-foreground" />
-                          <div className="animation-delay-400 h-2 w-2 animate-bounce rounded-full bg-muted-foreground" />
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-
-            <div className="shrink-0 border-t border-border/10 p-3 sm:p-4">
-              {files.length > 0 && (
-                <div className="mb-3 flex flex-wrap gap-2">
-                  {files.map((file) => (
-                    <div
-                      key={file.name}
-                      className="inline-flex items-center gap-2 rounded-full bg-muted/10 px-3 py-1 text-sm"
-                    >
-                      <span className="max-w-40 truncate">{file.name}</span>
-                      <button onClick={() => removeFile(file.name)} className="text-muted-foreground">
-                        ✕
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              <div className="relative">
-                <Textarea
-                  value={draft}
-                  onChange={(e) => setDraft(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  placeholder={placeholder}
-                  className="min-h-23 max-h-[28vh] w-full resize-none rounded-[20px] border border-border/20 bg-transparent px-4 py-4 pr-16 text-base shadow-none focus:border-border/40 focus:ring-0"
-                />
-
-                <div className="absolute left-3 bottom-3 flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-transparent text-muted-foreground transition hover:bg-muted/10"
-                    aria-label="Upload file"
-                  >
-                    <File className="h-4 w-4" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-transparent text-muted-foreground transition hover:bg-muted/10"
-                    aria-label="Upload image"
-                  >
-                    <Camera className="h-4 w-4" />
-                  </button>
-                </div>
-
-                <div className="absolute right-3 bottom-3">
-                  <Button
-                    onClick={handleSend}
-                    disabled={isLoading}
-                    className="h-9 w-9 rounded-full p-0"
-                    aria-label="Send"
-                  >
-                    <Send className={`h-4 w-4 ${isLoading ? "animate-pulse" : ""}`} />
-                  </Button>
-                </div>
-
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  multiple
-                  className="hidden"
-                  onChange={(e) => handleFiles(e.target.files)}
-                />
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section className="shrink-0 pt-5 text-center">
-          <div className="mx-auto flex max-w-md flex-wrap justify-center gap-3">
-            {[
-              "Generate UI ideas",
-              "Summarize a document",
-              "Help me write code",
-            ].map((prompt) => (
-              <button
-                key={prompt}
-                type="button"
-                onClick={() => setDraft(prompt)}
-                className="rounded-lg border border-border/20 px-4 py-2 text-sm transition hover:-translate-y-0.5 hover:shadow-sm"
-              >
-                {prompt}
-              </button>
-            ))}
-          </div>
-        </section>
+    <div className="mx-auto flex w-full max-w-5xl flex-col gap-8">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-3xl font-bold tracking-tight">Your missions</h1>
+        <div className="flex gap-2">
+          <Button asChild>
+            <Link href="/mission/new">
+              <Plus /> New mission
+            </Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link href="/onboarding">
+              <Sparkles /> Plan with AI
+            </Link>
+          </Button>
+        </div>
       </div>
-    </main>
+
+      <section aria-labelledby="upcoming-heading" className="space-y-3">
+        <h2 id="upcoming-heading" className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+          Coming up
+        </h2>
+        {summary.upcoming.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No open tasks with due dates.</p>
+        ) : (
+          <ul className="divide-y rounded-xl border bg-background" aria-label="Upcoming tasks">
+            {summary.upcoming.map((task) => {
+              const days = task.dueDate ? daysUntil(task.dueDate) : null
+              return (
+                <li key={task.id}>
+                  <Link
+                    href={`/mission/${task.missionId}`}
+                    className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/40"
+                  >
+                    <CalendarDays className="size-4 shrink-0 text-muted-foreground" />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-medium">{task.label}</p>
+                      <p className="truncate text-sm text-muted-foreground">{missionTitles[task.missionId]}</p>
+                    </div>
+                    <div className="shrink-0 text-right text-sm">
+                      <p>{formatDisplayDate(task.dueDate)}</p>
+                      {days !== null && (
+                        <p className={days < 0 ? "font-medium text-destructive" : "text-muted-foreground"}>
+                          {relativeDay(days)}
+                        </p>
+                      )}
+                    </div>
+                  </Link>
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </section>
+
+      <section aria-labelledby="missions-heading" className="space-y-3">
+        <h2 id="missions-heading" className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+          All missions
+        </h2>
+        <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" aria-label="Missions">
+          {missions.map((mission) => {
+            const counts = summary.counts[mission.id] ?? { total: 0, open: 0 }
+            const done = counts.total - counts.open
+            const target = formatDisplayDate(mission.targetDate)
+            const targetDays = mission.targetDate ? daysUntil(mission.targetDate) : null
+            return (
+              <li key={mission.id}>
+                <Link href={`/mission/${mission.id}`} className="block h-full">
+                  <Card className="h-full transition-colors hover:bg-muted/40">
+                    <CardHeader>
+                      <CardTitle className="line-clamp-2">{mission.title}</CardTitle>
+                      <CardDescription>
+                        {mission.status ?? "On track"}
+                        {target && (
+                          <>
+                            {" · "}
+                            {target}
+                            {targetDays !== null && ` (${relativeDay(targetDays)})`}
+                          </>
+                        )}
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-2">
+                      <p className="text-sm text-muted-foreground">
+                        {counts.total === 0 ? "No tasks yet" : `${done} of ${counts.total} tasks done`}
+                      </p>
+                      {counts.total > 0 && (
+                        <div
+                          className="h-1.5 overflow-hidden rounded-full bg-muted"
+                          role="progressbar"
+                          aria-label={`${mission.title} progress`}
+                          aria-valuemin={0}
+                          aria-valuemax={counts.total}
+                          aria-valuenow={done}
+                        >
+                          <div className="h-full bg-primary" style={{ width: `${(done / counts.total) * 100}%` }} />
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </Link>
+              </li>
+            )
+          })}
+        </ul>
+      </section>
+    </div>
   )
 }
