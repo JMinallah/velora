@@ -76,6 +76,8 @@ export async function runAgentTurn(input: {
   missionId: string
   userMessage: string
   history?: AgentTurn[]
+  /** Overrides WALL_CLOCK_MS — for the eval harness, whose calls are paced to free-tier rate limits. */
+  wallClockMs?: number
 }): Promise<AgentRunResult> {
   const startedAt = Date.now()
   const snapshot = await buildMissionSnapshot(input.userId, input.missionId)
@@ -92,7 +94,8 @@ export async function runAgentTurn(input: {
   let consecutiveFailures = 0
   let steps = 0
 
-  const remainingMs = () => WALL_CLOCK_MS - (Date.now() - startedAt)
+  const budgetMs = input.wallClockMs ?? WALL_CLOCK_MS
+  const remainingMs = () => budgetMs - (Date.now() - startedAt)
   const outOfTime = (): AgentRunResult => ({
     reply: receipts.length
       ? "I ran out of time mid-way, but the actions listed above did complete. Ask me to continue where I left off."
@@ -128,14 +131,19 @@ export async function runAgentTurn(input: {
       }
     }
 
-    turns.push({ role: "assistant", text: response.text || undefined, toolCalls: response.toolCalls })
+    turns.push({
+      role: "assistant",
+      text: response.text || undefined,
+      toolCalls: response.toolCalls,
+      providerParts: response.providerParts,
+    })
 
     for (const call of response.toolCalls) {
       const tool = toolRegistry[call.name]
       if (!tool) {
         consecutiveFailures++
         trace.push({ tool: call.name, ok: false })
-        turns.push({ role: "tool", name: call.name, result: { error: `unknown tool "${call.name}"` } })
+        turns.push({ role: "tool", name: call.name, callId: call.id, result: { error: `unknown tool "${call.name}"` } })
         continue
       }
 
@@ -146,6 +154,7 @@ export async function runAgentTurn(input: {
         turns.push({
           role: "tool",
           name: call.name,
+          callId: call.id,
           result: { error: "invalid arguments", issues: parsed.error.issues },
         })
         continue
@@ -156,13 +165,14 @@ export async function runAgentTurn(input: {
         consecutiveFailures = 0
         trace.push({ tool: call.name, ok: true })
         if (receipt) receipts.push({ tool: tool.name, text: receipt })
-        turns.push({ role: "tool", name: call.name, result })
+        turns.push({ role: "tool", name: call.name, callId: call.id, result })
       } catch (error) {
         consecutiveFailures++
         trace.push({ tool: call.name, ok: false })
         turns.push({
           role: "tool",
           name: call.name,
+          callId: call.id,
           result: { error: error instanceof Error ? error.message : "tool execution failed" },
         })
       }
