@@ -29,7 +29,10 @@ function providers(): Provider[] {
 // Lazy config: env access and the DB connection happen on first request,
 // never at module import — `next build` must succeed with no secrets present.
 export const { handlers, auth, signIn, signOut } = NextAuth(() => ({
-  adapter: MongoDBAdapter(getClient()),
+  // databaseName is required: without it the adapter uses the database named
+  // in the connection string ("test" when none), splitting users/sessions
+  // away from the app data in MONGODB_DB.
+  adapter: MongoDBAdapter(getClient(), { databaseName: env().MONGODB_DB }),
   providers: providers(),
   secret: env().AUTH_SECRET,
   session: { strategy: "database" },

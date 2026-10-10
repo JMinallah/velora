@@ -35,9 +35,10 @@ The app validates its environment on first use and fails fast with a named error
 | `npm run dev` / `build` / `start` | Next.js lifecycle |
 | `npm run lint` / `typecheck` | Static checks |
 | `npm test` / `test:watch` | Vitest suite |
+| `npm run e2e` | Playwright browser tests against a production build with AI disabled (needs `TEST_MONGODB_URI`; locally `PLAYWRIGHT_CHANNEL=chrome` uses installed Chrome) |
 | `npm run reminders:run` | Manual reminder dispatch (dev) |
 
-CI runs secret scanning (gitleaks), lint, typecheck, tests, and a dependency audit on every push and PR.
+CI runs secret scanning (gitleaks), lint, typecheck, unit/integration tests, end-to-end browser tests, agent evals, and dependency audits on every push and PR.
 
 ## License
 
