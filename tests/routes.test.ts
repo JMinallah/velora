@@ -352,6 +352,33 @@ describeDb("reminders and messages routes", () => {
   })
 })
 
+describeDb("dashboard task summary", () => {
+  it("counts per mission, lists soonest open dated tasks, and is scoped to the user", async () => {
+    const { summarizeTasks } = await import("@/domain/tasks")
+    const missionId = await createMissionAs("user-dash")
+    const post = (body: Record<string, unknown>) =>
+      createTaskRoute(req("POST", `/api/missions/${missionId}/tasks`, body), ctx({ id: missionId }))
+
+    await post({ label: "Later", dueDate: "2026-12-01" })
+    await post({ label: "Sooner", dueDate: "2026-11-01" })
+    await post({ label: "No date" })
+    const doneRes = await post({ label: "Done already", dueDate: "2026-10-01" })
+    const doneId = (await doneRes.json()).data.id
+    await patchTaskRoute(
+      req("PATCH", `/api/missions/${missionId}/tasks/${doneId}`, { completed: true }),
+      ctx({ id: missionId, taskId: doneId })
+    )
+
+    const summary = await summarizeTasks("user-dash")
+    expect(summary.counts[missionId]).toEqual({ total: 4, open: 3 })
+    expect(summary.upcoming.map((t) => t.label)).toEqual(["Sooner", "Later"])
+
+    const other = await summarizeTasks("user-dash-other")
+    expect(other.counts).toEqual({})
+    expect(other.upcoming).toHaveLength(0)
+  })
+})
+
 describeDb("cron dispatch route", () => {
   it("rejects a missing or wrong bearer token", async () => {
     const noAuth = await cronRemindersRoute(new Request("http://localhost/api/cron/reminders"))

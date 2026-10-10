@@ -85,3 +85,26 @@ test("runs a whole mission by hand: tasks, edits, deletes, activity log", async 
   const missions = (await (await page.request.get("/api/missions")).json()).data as { id: string }[]
   expect(missions.map((m) => m.id)).not.toContain(missionId)
 })
+
+test("dashboard shows missions with progress and upcoming deadlines", async ({ page }) => {
+  const api = page.request
+  const mission = (await (await api.post("/api/missions", { data: { title: "Relocate to Accra", targetDate: "2027-03-01" } })).json()).data
+  const tasksUrl = `/api/missions/${mission.id}/tasks`
+  await api.post(tasksUrl, { data: { label: "Ship household goods", dueDate: "2027-02-01" } })
+  const done = (await (await api.post(tasksUrl, { data: { label: "Get quotes" } })).json()).data
+  await api.patch(`${tasksUrl}/${done.id}`, { data: { completed: true } })
+
+  await open(page, "/")
+  await expect(page.getByRole("heading", { level: 1, name: "Your missions" })).toBeVisible()
+
+  const card = page.getByRole("list", { name: "Missions" }).getByRole("link", { name: /Relocate to Accra/ })
+  await expect(card).toContainText("1 of 2 tasks done")
+  await expect(card).toContainText("Mar 1, 2027")
+
+  const upcoming = page.getByRole("list", { name: "Upcoming tasks" })
+  await expect(upcoming.getByRole("link", { name: /Ship household goods/ })).toContainText("Relocate to Accra")
+  await expect(upcoming.getByText("Get quotes")).toHaveCount(0) // completed tasks are not upcoming
+
+  await card.click()
+  await expect(page.getByRole("heading", { level: 1, name: "Relocate to Accra" })).toBeVisible()
+})

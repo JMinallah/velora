@@ -154,3 +154,41 @@ export async function shiftTaskDates(
   }
   return modified
 }
+
+export type TaskSummary = {
+  /** Per mission: total and open task counts. Missions with no tasks are absent. */
+  counts: Record<string, { total: number; open: number }>
+  /** The user's open tasks with a due date, soonest (including overdue) first. */
+  upcoming: TaskRecord[]
+}
+
+/** Dashboard data across all of a user's missions in two indexed queries. */
+export async function summarizeTasks(userId: string, upcomingLimit = 8): Promise<TaskSummary> {
+  const db = await getDb()
+  const tasks = db.collection<TaskRecord>(COLLECTIONS.tasks)
+
+  const [grouped, upcoming] = await Promise.all([
+    tasks
+      .aggregate<{ _id: string; total: number; open: number }>([
+        { $match: { userId } },
+        {
+          $group: {
+            _id: "$missionId",
+            total: { $sum: 1 },
+            open: { $sum: { $cond: ["$completed", 0, 1] } },
+          },
+        },
+      ])
+      .toArray(),
+    tasks
+      .find({ userId, completed: false, dueDate: { $type: "string" } })
+      .sort({ dueDate: 1 })
+      .limit(upcomingLimit)
+      .toArray(),
+  ])
+
+  return {
+    counts: Object.fromEntries(grouped.map((g) => [g._id, { total: g.total, open: g.open }])),
+    upcoming,
+  }
+}
