@@ -42,6 +42,24 @@ jobs:
       - name: Unit tests
         run: npm test
 
+      # Browser tests of the zero-AI baseline against a production build
+      # (docs/06-DELIVERY-PLAN.md 2.5 exit gate). Runs with AI disabled.
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: End-to-end tests
+        run: npm run e2e
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
+
       - name: Agent evals (skips without GEMINI_API_KEY secret)
         run: npm run evals
         env:

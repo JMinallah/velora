@@ -29,7 +29,7 @@ export function withAuth<P = Record<string, never>>(handler: AuthedHandler<P>) {
     const userId = session?.user?.id
     if (!userId) {
       return NextResponse.json(
-        { error: { code: "unauthenticated", message: "Sign in required" } },
+        { success: false, error: "Sign in required", code: "unauthenticated" },
         { status: 401 }
       )
     }

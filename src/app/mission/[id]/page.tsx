@@ -20,10 +20,12 @@ import type { DocumentRecord, MessageRecord, MissionRecord, TaskRecord, EventRec
 import { Message } from "@/types";
 import { Bell, Menu, Plus, Send, X } from "lucide-react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { loadLatestTransitionPlan } from "@/lib/coordination/session";
+import { MissionHeader } from "@/components/mission/MissionHeader";
+import { TaskList } from "@/components/mission/TaskList";
 
 function resolveMissionId(value: string | string[] | undefined, availableIds: string[]) {
   const candidate = Array.isArray(value) ? value[0] : value;
@@ -39,13 +41,9 @@ type MissionViewModel = MissionRecord & {
   reminders?: ReminderRecord[];
 };
 
-function formatTaskLabel(task: TaskRecord) {
-  const bits = [task.category, task.priority ? task.priority : null].filter(Boolean)
-  return bits.join(" · ")
-}
-
 export default function MissionPage() {
   const params = useParams();
+  const router = useRouter();
   const [draft, setDraft] = useState("");
   const [missions, setMissions] = useState<Record<string, MissionViewModel>>({});
   const [isLoading, setIsLoading] = useState(true);
@@ -60,7 +58,8 @@ export default function MissionPage() {
   const messageListRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const activeMission = missions[activeMissionId] ?? Object.values(missions)[0];
+  // Undefined until missions load (and when there are none) — keep the type honest.
+  const activeMission = (missions[activeMissionId] ?? Object.values(missions)[0]) as MissionViewModel | undefined;
   const selectedDocuments = selectedDocumentsByMission[activeMissionId] ?? [];
 
   useEffect(() => {
@@ -83,11 +82,18 @@ export default function MissionPage() {
         const json = await res.json().catch(() => ({}))
         if (!json?.success) throw new Error(json?.error || 'failed')
 
-        const map = Object.fromEntries(
-          (json.data || []).map((m: MissionRecord) => [m.id, { ...m, messages: [], tasks: [], documents: [] }])
-        ) as Record<string, MissionViewModel>
-
-        if (!cancelled) setMissions(map)
+        // Merge rather than replace: the active mission's details (tasks,
+        // messages, ...) may have loaded first and must not be wiped.
+        if (!cancelled) {
+          setMissions((cur) =>
+            Object.fromEntries(
+              (json.data || []).map((m: MissionRecord) => [
+                m.id,
+                { messages: [], tasks: [], documents: [], ...(cur[m.id] as Partial<MissionViewModel> | undefined), ...m },
+              ])
+            ) as Record<string, MissionViewModel>
+          )
+        }
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : 'Failed to load missions')
@@ -327,11 +333,8 @@ export default function MissionPage() {
     [missions]
   );
 
-  const activeMissionDocuments = activeMission.documents;
-  const activeMissionTasks = activeMission.tasks;
-  const [newTaskLabel, setNewTaskLabel] = useState("");
-  const [newTaskPriority, setNewTaskPriority] = useState<"low" | "medium" | "high">("medium");
-  const [isCreatingTask, setIsCreatingTask] = useState(false);
+  const activeMissionDocuments = activeMission?.documents ?? [];
+  const activeMissionTasks = activeMission?.tasks ?? [];
 
   const MissionPanel = (
     <div className="flex flex-col gap-1">
@@ -385,26 +388,36 @@ export default function MissionPage() {
     );
   }
 
+  // First render happens before missions load; it used to dereference an
+  // undefined mission here and crash the page on every visit.
+  if (!activeMission?.id) {
+    return (
+      <div className="flex h-[calc(100dvh-8rem)] items-center justify-center text-sm text-muted-foreground">
+        {error ? <p role="alert">Couldn&apos;t load your missions: {error}</p> : <p>Loading mission…</p>}
+      </div>
+    );
+  }
+
   return (
     <div className="grid gap-8 xl:min-h-[calc(100dvh-3.5rem)] xl:grid-cols-[minmax(0,1fr)_260px]">
       <div className="flex min-h-0 flex-col gap-8 xl:min-h-[calc(100dvh-3.5rem)]">
         <section className="flex min-h-0 flex-col gap-4 xl:flex-1">
           <div className="flex items-start justify-between gap-3">
-            <div className="space-y-1">
-              <h1 className="text-3xl font-bold tracking-tight">
-                {activeMission.title}
-              </h1>
-              {activeMission.targetDate && (
-                <p className="text-sm text-muted-foreground">
-                  Target date:{" "}
-                  {/* UTC so a date-only value never shows as the previous day */}
-                  {new Date(activeMission.targetDate).toLocaleDateString(undefined, {
-                    dateStyle: "medium",
-                    timeZone: "UTC",
-                  })}
-                </p>
-              )}
-            </div>
+            <MissionHeader
+              mission={activeMission}
+              onUpdated={(updated) =>
+                setMissions((cur) => ({ ...cur, [updated.id]: { ...cur[updated.id], ...updated } }))
+              }
+              onDeleted={() => {
+                const remaining = Object.keys(missions).filter((id) => id !== activeMission.id);
+                setMissions((cur) => {
+                  const next = { ...cur };
+                  delete next[activeMission.id];
+                  return next;
+                });
+                router.replace(remaining.length > 0 ? `/mission/${remaining[0]}` : "/mission/new");
+              }}
+            />
             <Sheet>
               <SheetTrigger asChild>
                 <Button
@@ -612,95 +625,16 @@ export default function MissionPage() {
               </p>
             </div>
 
-            <div className="space-y-4">
-              <form
-                onSubmit={async (e) => {
-                  e.preventDefault()
-                  if (!newTaskLabel.trim()) return
-                  setIsCreatingTask(true)
-                  try {
-                    const res = await fetch(`/api/missions/${activeMissionId}/tasks`, {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ label: newTaskLabel.trim(), category: "General", priority: newTaskPriority }),
-                    })
-
-                    const data = await res.json().catch(() => ({}))
-                    if (!res.ok || !data?.success) throw new Error(data?.error || "Failed to create task")
-
-                    setMissions((cur) => ({
-                      ...cur,
-                      [activeMissionId]: {
-                        ...(cur[activeMissionId] ?? {}),
-                        tasks: [data.data, ...(cur[activeMissionId]?.tasks ?? [])],
-                      },
-                    }))
-
-                    setNewTaskLabel("")
-                  } catch (err) {
-                    console.error("Create task failed", err)
-                  } finally {
-                    setIsCreatingTask(false)
-                  }
-                }}
-              >
-                <div className="flex gap-2">
-                  <input value={newTaskLabel} onChange={(e) => setNewTaskLabel(e.target.value)} placeholder="New task" className="flex-1 rounded-md border px-2 py-1" />
-                  <select
-                    value={newTaskPriority}
-                    onChange={(e) => setNewTaskPriority(e.target.value as "low" | "medium" | "high")}
-                    className="rounded-md border px-2 py-1"
-                  >
-                    <option value="low">Low</option>
-                    <option value="medium">Medium</option>
-                    <option value="high">High</option>
-                  </select>
-                  <button type="submit" disabled={isCreatingTask} className="rounded-md bg-primary px-3 py-1 text-white">
-                    {isCreatingTask ? "Adding..." : "Add"}
-                  </button>
-                </div>
-              </form>
-
-              {activeMissionTasks.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No tasks yet.</p>
-              ) : null}
-              {activeMissionTasks.map((task) => (
-                <div key={task.id} className="flex items-start gap-3">
-                  <input
-                    type="checkbox"
-                    checked={Boolean(task.completed)}
-                    onChange={async (e) => {
-                      const checked = e.target.checked
-                      try {
-                        const res = await fetch(`/api/missions/${activeMissionId}/tasks/${task.id}`, {
-                          method: "PATCH",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ completed: checked }),
-                        })
-
-                        const data = await res.json().catch(() => ({}))
-                        if (!res.ok || !data?.success) throw new Error(data?.error || "Failed to update task")
-
-                        setMissions((cur) => ({
-                          ...cur,
-                          [activeMissionId]: {
-                            ...(cur[activeMissionId] ?? {}),
-                            tasks: (cur[activeMissionId]?.tasks ?? []).map((t) => (t.id === task.id ? data.data : t)),
-                          },
-                        }))
-                      } catch (err) {
-                        console.error("Failed to toggle task", err)
-                      }
-                    }}
-                  />
-                  <div className="min-w-0 flex-1">
-                    <p className={`font-medium ${task.completed ? 'line-through text-muted-foreground' : ''}`}>{task.label}</p>
-                    <p className="text-sm text-muted-foreground">{formatTaskLabel(task)}</p>
-                  </div>
-                  <time className="shrink-0 text-xs text-muted-foreground">{task.createdAt}</time>
-                </div>
-              ))}
-            </div>
+            <TaskList
+              missionId={activeMissionId}
+              tasks={activeMissionTasks}
+              onChange={(update) =>
+                setMissions((cur) => ({
+                  ...cur,
+                  [activeMissionId]: { ...cur[activeMissionId], tasks: update(cur[activeMissionId]?.tasks ?? []) },
+                }))
+              }
+            />
           </section>
         )}
       </div>

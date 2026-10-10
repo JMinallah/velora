@@ -11,7 +11,8 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "evals": "tsx evals/run.ts",
-    "reminders:run": "tsx scripts/send_reminders.ts"
+    "reminders:run": "tsx scripts/send_reminders.ts",
+    "e2e": "playwright test"
   },
   "dependencies": {
     "@auth/mongodb-adapter": "^3.7.4",
@@ -41,6 +42,7 @@
     "zod-to-json-schema": "^3.25.2"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^22.20.5",
     "@types/react": "^19",
