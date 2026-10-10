@@ -53,6 +53,8 @@ export type Mission = {
   status?: "On track" | "Watch" | "At risk";
   overview?: string;
   nextStep?: string;
+  /** The date the transition must be done by, if the user set one (YYYY-MM-DD or ISO). */
+  targetDate?: string | null;
   createdAt: string;
   updatedAt: string;
   source?: "onboarding" | "agent" | "manual";

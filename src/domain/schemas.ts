@@ -27,8 +27,10 @@ const priority = z.enum(["low", "medium", "high"])
 export const missionCreateSchema = z.object({
   title: z.string().trim().min(1).max(200),
   subtitle: z.string().max(300).optional(),
-  overview: z.string().trim().min(1).max(20_000),
+  // Optional: a mission created by hand may start as just a title.
+  overview: z.string().trim().max(20_000).optional(),
   nextStep: z.string().max(1000).optional(),
+  targetDate: isoDate.nullable().optional(),
   // "agent" origin is assigned server-side, never claimed by a client.
   source: z.enum(["onboarding", "manual"]).optional(),
 })
@@ -41,6 +43,7 @@ export const missionPatchSchema = z
     status: z.enum(["On track", "Watch", "At risk"]),
     overview: z.string().max(20_000),
     nextStep: z.string().max(1000),
+    targetDate: isoDate.nullable(),
   })
   .partial()
 

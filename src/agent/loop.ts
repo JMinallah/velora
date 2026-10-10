@@ -60,6 +60,7 @@ export async function buildMissionSnapshot(userId: string, missionId: string): P
     `Status: ${mission.status}`,
     mission.overview ? `Overview: ${mission.overview}` : null,
     mission.nextStep ? `Next step: ${mission.nextStep}` : null,
+    mission.targetDate ? `Target date: ${mission.targetDate.slice(0, 10)}` : null,
     `Tasks: ${all.length} total, ${open.length} open`,
     soon.length > 0
       ? `Nearest deadlines:\n${soon.map((t) => `  - ${t.label} (due ${String(t.dueDate).slice(0, 10)})`).join("\n")}`

@@ -35,6 +35,7 @@ export async function createMission(
     status: input.status ?? "On track",
     overview: input.overview ?? "",
     nextStep: input.nextStep ?? "",
+    targetDate: input.targetDate ?? null,
     createdAt: now,
     updatedAt: now,
     source: input.source ?? "manual",

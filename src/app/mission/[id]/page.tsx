@@ -394,6 +394,16 @@ export default function MissionPage() {
               <h1 className="text-3xl font-bold tracking-tight">
                 {activeMission.title}
               </h1>
+              {activeMission.targetDate && (
+                <p className="text-sm text-muted-foreground">
+                  Target date:{" "}
+                  {/* UTC so a date-only value never shows as the previous day */}
+                  {new Date(activeMission.targetDate).toLocaleDateString(undefined, {
+                    dateStyle: "medium",
+                    timeZone: "UTC",
+                  })}
+                </p>
+              )}
             </div>
             <Sheet>
               <SheetTrigger asChild>
