@@ -21,7 +21,7 @@ const serverEnvSchema = z.object({
   AUTH_RESEND_KEY: z.string().optional(), // enables email magic-link sign-in
   EMAIL_FROM: z.string().optional(),
   GEMINI_API_KEY: z.string().optional(), // absent → agent features run in manual mode
-  GEMINI_MODEL: z.string().default("gemini-2.5-flash"),
+  GEMINI_MODEL: z.string().default("gemini-3.5-flash"),
   GCS_BUCKET: z.string().optional(), // legacy document storage; replaced by R2 in Phase 5
   CRON_SECRET: z.string().optional(), // required in production for reminder dispatch
 })
