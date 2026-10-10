@@ -11,6 +11,7 @@ This is the production rebuild of the v1 hackathon project. Read in order:
 | [03-AGENT-DESIGN.md](03-AGENT-DESIGN.md) | The agent: reasoning loop, tool contract, robustness, trust mechanics, evals |
 | [04-SECURITY.md](04-SECURITY.md) | Threat model, auth, prompt-injection defense, data protection, CI security gates |
 | [05-ROADMAP.md](05-ROADMAP.md) | Build phases with definitions of done |
+| [06-DELIVERY-PLAN.md](06-DELIVERY-PLAN.md) | Per-phase work items, phase gates with evidence, and where the build actually stands |
 
 ## The three ideas that define v2
 
