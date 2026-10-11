@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { withAuth } from "@/lib/with-auth"
-import { serverError } from "@/lib/http"
+import { readJson, serverError, validationError } from "@/lib/http"
+import { documentCreateSchema } from "@/domain/schemas"
 import { attachDocument, listDocuments } from "@/domain/documents"
 
 export const GET = withAuth<{ id: string }>(async (_req, session, { params }) => {
@@ -16,20 +17,10 @@ export const GET = withAuth<{ id: string }>(async (_req, session, { params }) =>
 export const POST = withAuth<{ id: string }>(async (request, session, { params }) => {
   try {
     const { id } = await params
-    const body = await request.json()
+    const parsed = documentCreateSchema.safeParse(await readJson(request))
+    if (!parsed.success) return validationError(parsed.error)
 
-    if (!body?.name) {
-      return NextResponse.json({ success: false, error: "Document name is required" }, { status: 400 })
-    }
-
-    const created = await attachDocument(session.userId, id, {
-      name: body.name,
-      mimeType: body.mimeType,
-      storageUrl: body.storageUrl,
-      extractedText: body.extractedText,
-      summary: body.summary,
-      extractedFields: body.extractedFields,
-    })
+    const created = await attachDocument(session.userId, id, parsed.data)
     if (!created) return NextResponse.json({ success: false, error: "not found" }, { status: 404 })
 
     return NextResponse.json({ success: true, data: created }, { status: 201 })

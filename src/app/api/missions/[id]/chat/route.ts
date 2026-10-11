@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server"
 import { withAuth } from "@/lib/with-auth"
 import { runAgentTurn } from "@/agent/loop"
-import { GeminiProvider, isTransientLlmError } from "@/agent/providers/gemini"
+import { getLlmProvider } from "@/agent/providers"
+import { isTransientLlmError } from "@/agent/providers/gemini"
 import type { AgentTurn } from "@/agent/providers/types"
 import { getMission } from "@/domain/missions"
 import { listMessages, createMessage } from "@/domain/messages"
 import type { MessageRecord } from "@/domain/collections"
 import { readJson, serverError } from "@/lib/http"
-import { agentEnabled } from "@/lib/env"
 
 const HISTORY_LIMIT = 20
 
@@ -46,7 +46,8 @@ export const POST = withAuth<{ id: string }>(async (req, session, { params }) =>
     const mission = await getMission(session.userId, id)
     if (!mission) return NextResponse.json({ success: false, error: "not found" }, { status: 404 })
 
-    if (!agentEnabled()) {
+    const provider = getLlmProvider()
+    if (!provider) {
       return NextResponse.json(
         {
           success: false,
@@ -65,7 +66,7 @@ export const POST = withAuth<{ id: string }>(async (req, session, { params }) =>
     let run
     try {
       run = await runAgentTurn({
-        provider: new GeminiProvider(),
+        provider,
         userId: session.userId,
         missionId: id,
         userMessage: message,

@@ -1,23 +1,54 @@
+import { randomUUID } from "node:crypto"
+import fs from "node:fs"
+import path from "node:path"
 import { Storage } from "@google-cloud/storage"
-import path from "path"
-import fs from "fs"
+import { env } from "@/lib/env"
 
-const GCS_BUCKET = process.env.GCS_BUCKET || ""
+/**
+ * Interim private document storage until R2 + signed URLs (docs/06-DELIVERY-PLAN.md
+ * 5-1, which deletes this module).
+ *
+ * - Object keys are generated here (`<userId>/<uuid><ext>`): the uploader's
+ *   filename never reaches a filesystem or bucket path (it previously did,
+ *   allowing `../` path traversal).
+ * - Nothing is public: no `makePublic()`, and the development fallback
+ *   writes outside `public/`, so files are never served by the web server.
+ * - Production without a bucket refuses uploads rather than writing to an
+ *   ephemeral or shared disk.
+ */
 
-export async function uploadBufferToStorage(buffer: Buffer, filename: string, contentType = "application/octet-stream") {
-  if (GCS_BUCKET) {
-    const storage = new Storage()
-    const bucket = storage.bucket(GCS_BUCKET)
-    const file = bucket.file(filename)
-    await file.save(buffer, { contentType })
-    await file.makePublic().catch(() => {})
-    return `https://storage.googleapis.com/${GCS_BUCKET}/${filename}`
+const EXTENSIONS: Record<string, string> = {
+  "application/pdf": ".pdf",
+  "image/png": ".png",
+  "image/jpeg": ".jpg",
+  "text/plain": ".txt",
+}
+
+export const ALLOWED_DOCUMENT_TYPES = new Set(Object.keys(EXTENSIONS))
+
+export class StorageUnavailableError extends Error {}
+
+/** Development-only local store; outside public/ and gitignored. */
+export const LOCAL_UPLOAD_DIR = path.resolve(process.cwd(), ".data", "uploads")
+
+export async function storeDocument(userId: string, buffer: Buffer, mimeType: string): Promise<string> {
+  const extension = EXTENSIONS[mimeType]
+  if (!extension) throw new Error(`unsupported document type: ${mimeType}`)
+  const key = `${userId}/${randomUUID()}${extension}`
+
+  const bucket = env().GCS_BUCKET
+  if (bucket) {
+    await new Storage().bucket(bucket).file(key).save(buffer, { contentType: mimeType, resumable: false })
+    return `gs://${bucket}/${key}`
   }
 
-  // fallback to local public/uploads
-  const uploadsDir = path.join(process.cwd(), "public", "uploads")
-  await fs.promises.mkdir(uploadsDir, { recursive: true })
-  const filePath = path.join(uploadsDir, filename)
+  if (process.env.NODE_ENV === "production") {
+    throw new StorageUnavailableError("Document storage is not configured")
+  }
+
+  const filePath = path.resolve(LOCAL_UPLOAD_DIR, key)
+  if (!filePath.startsWith(LOCAL_UPLOAD_DIR + path.sep)) throw new Error("invalid storage key")
+  await fs.promises.mkdir(path.dirname(filePath), { recursive: true })
   await fs.promises.writeFile(filePath, buffer)
-  return `/uploads/${filename}`
+  return `local://${key}`
 }
