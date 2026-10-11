@@ -7,6 +7,7 @@ export const COLLECTIONS = {
   reminders: "reminders",
   documents: "documents",
   events: "events",
+  rateLimits: "rate_limits",
 } as const
 
 export type MissionRecord = Mission

@@ -113,4 +113,4 @@ export const POST = withAuth<{ id: string }>(async (req, session, { params }) =>
   } catch (err) {
     return serverError("POST /api/missions/[id]/chat", err)
   }
-})
+}, { rateLimit: "llm" })

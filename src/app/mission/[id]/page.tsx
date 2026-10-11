@@ -33,6 +33,12 @@ function resolveMissionId(value: string | string[] | undefined, availableIds: st
   return availableIds.includes(candidate) ? candidate : availableIds[0] ?? candidate
 }
 
+class ChatError extends Error {
+  constructor(message: string, readonly userFacing: boolean) {
+    super(message);
+  }
+}
+
 type MissionViewModel = MissionRecord & {
   tasks: TaskRecord[];
   messages: MessageRecord[];
@@ -270,7 +276,10 @@ export default function MissionPage() {
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok || !data?.success) {
-        throw new Error(data?.error || "Chat failed");
+        // Rate limits, AI disabled and provider overload carry messages written
+        // for users ("try again in 40 seconds"); anything else stays generic.
+        const userFacing = ["rate_limited", "agent_disabled", "llm_transient"].includes(data?.code);
+        throw new ChatError(userFacing ? data.error : "Chat failed", userFacing);
       }
 
       const now = Date.now();
@@ -308,7 +317,10 @@ export default function MissionPage() {
         userId: "local",
         id: `msg-${Date.now()}-error`,
         type: "alert",
-        text: "I couldn’t get a response right now. Please try again.",
+        text:
+          error instanceof ChatError && error.userFacing
+            ? error.message
+            : "I couldn’t get a response right now. Please try again.",
         createdAt: new Date().toISOString(),
       };
 
