@@ -5,7 +5,10 @@ import { ShieldAlert } from "lucide-react";
 import type { Message, PendingActionStatus } from "@/types";
 import { Button } from "@/components/ui/button";
 
-export type ConfirmationEffect = { kind: "task-deleted"; taskId: string } | { kind: "mission-deleted" };
+export type ConfirmationEffect =
+  | { kind: "task-deleted"; taskId: string }
+  | { kind: "mission-deleted" }
+  | { kind: "data-changed" };
 
 const STATUS_TEXT: Record<Exclude<PendingActionStatus, "pending">, string> = {
   executed: "Done.",
@@ -40,6 +43,9 @@ export function ConfirmationCard({
   }, []);
 
   if (!action) return null;
+  // Deletions get the red treatment; ordinary changes (when the mission asks
+  // to confirm every change) a calmer one.
+  const isDeletion = action.tool.startsWith("delete");
   const expired = action.status === "pending" && new Date(action.expiresAt).getTime() <= now;
   const status: PendingActionStatus = expired ? "expired" : action.status;
 
@@ -75,19 +81,21 @@ export function ConfirmationCard({
     <div
       role="group"
       aria-label="Confirm action"
-      className="flex w-full gap-3 rounded-2xl border border-destructive/40 bg-destructive/5 px-4 py-3"
+      className={`flex w-full gap-3 rounded-2xl border px-4 py-3 ${
+        isDeletion ? "border-destructive/40 bg-destructive/5" : "border-primary/30 bg-primary/5"
+      }`}
     >
-      <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+      <ShieldAlert className={`mt-0.5 h-4 w-4 shrink-0 ${isDeletion ? "text-destructive" : "text-primary"}`} />
       <div className="min-w-0 flex-1 space-y-2 text-sm">
         <p className="font-medium">{action.summary}</p>
         {status === "pending" ? (
           <>
             <p className="text-muted-foreground">
-              Velora proposed this. Nothing is deleted unless you confirm. Expires{" "}
+              Velora proposed this. Nothing changes unless you confirm. Expires{" "}
               {new Date(action.expiresAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}.
             </p>
             <div className="flex gap-2">
-              <Button size="sm" variant="destructive" onClick={() => decide("confirm")} disabled={isBusy}>
+              <Button size="sm" variant={isDeletion ? "destructive" : "default"} onClick={() => decide("confirm")} disabled={isBusy}>
                 {isBusy ? "Working..." : "Confirm"}
               </Button>
               <Button size="sm" variant="outline" onClick={() => decide("reject")} disabled={isBusy}>

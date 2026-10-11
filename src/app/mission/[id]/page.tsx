@@ -384,12 +384,17 @@ export default function MissionPage() {
   };
 
   // A confirmation card was decided: keep its status and the affected data in step.
+  const fetchTasks = async (missionId: string) => {
+    const res = await fetch(`/api/missions/${missionId}/tasks`).catch(() => null);
+    const data = res ? await res.json().catch(() => null) : null;
+    return data?.success ? (data.data as TaskRecord[]) : null;
+  };
+
   // After an undo: reload the tasks (the change could be any of them) and
   // note it in the chat. The activity log records the undo itself.
   const handleUndone = async (description: string) => {
     const missionId = activeMissionId;
-    const res = await fetch(`/api/missions/${missionId}/tasks`).catch(() => null);
-    const data = res ? await res.json().catch(() => null) : null;
+    const reloaded = await fetchTasks(missionId);
     setMissions((cur) => {
       const mission = cur[missionId];
       if (!mission) return cur;
@@ -404,7 +409,7 @@ export default function MissionPage() {
         ...cur,
         [missionId]: {
           ...mission,
-          tasks: data?.success ? data.data : mission.tasks,
+          tasks: reloaded ?? mission.tasks,
           messages: [...mission.messages, note],
         },
       };
@@ -413,6 +418,12 @@ export default function MissionPage() {
 
   const handleDecided = (actionId: string, status: PendingActionStatus, effect?: ConfirmationEffect) => {
     const missionId = activeMissionId;
+    setChatRevision((n) => n + 1); // a confirmed change becomes undoable
+    if (effect?.kind === "data-changed") {
+      void fetchTasks(missionId).then((reloaded) => {
+        if (reloaded) setMissions((cur) => (cur[missionId] ? { ...cur, [missionId]: { ...cur[missionId], tasks: reloaded } } : cur));
+      });
+    }
     if (effect?.kind === "mission-deleted") {
       const remaining = Object.keys(missions).filter((id) => id !== missionId);
       setMissions((cur) => {

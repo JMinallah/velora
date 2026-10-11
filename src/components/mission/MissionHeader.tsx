@@ -73,6 +73,7 @@ export function MissionHeader({
       {mission.overview && (
         <p className="line-clamp-3 max-w-prose whitespace-pre-line text-sm text-muted-foreground">{mission.overview}</p>
       )}
+      <VeloraPermissions mission={mission} onUpdated={onUpdated} />
 
       <DeleteMissionDialog
         mission={mission}
@@ -230,5 +231,81 @@ function DeleteMissionDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/**
+ * Per-mission agent setting (FR-TRS-4). Asking for more confirmation is one
+ * click; loosening it first explains what changes (03-AGENT-DESIGN §4.6).
+ */
+function VeloraPermissions({
+  mission,
+  onUpdated,
+}: {
+  mission: MissionRecord;
+  onUpdated: (mission: MissionRecord) => void;
+}) {
+  const askFirst = mission.settings?.autonomy === "confirm-writes";
+  const [isExplaining, setIsExplaining] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const save = async (autonomy: "standard" | "confirm-writes") => {
+    setIsSaving(true);
+    setError(null);
+    try {
+      onUpdated(await apiFetch<MissionRecord>(`/api/missions/${mission.id}`, { method: "PATCH", body: { settings: { autonomy } } }));
+      setIsExplaining(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not change the setting");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-wrap items-center gap-2 pt-1 text-xs text-muted-foreground" aria-label="Velora's permissions">
+      <span>
+        {askFirst
+          ? "Velora asks before every change it makes."
+          : "Velora makes changes directly — you can undo them. Deletions always need your confirmation."}
+      </span>
+      <Button
+        size="xs"
+        variant="outline"
+        disabled={isSaving}
+        onClick={() => (askFirst ? setIsExplaining(true) : save("confirm-writes"))}
+      >
+        {askFirst ? "Let Velora make changes directly" : "Ask me before every change"}
+      </Button>
+      {error && (
+        <span role="alert" className="text-destructive">
+          {error}
+        </span>
+      )}
+
+      <Dialog open={isExplaining} onOpenChange={setIsExplaining}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Let Velora make changes directly?</DialogTitle>
+            <DialogDescription>
+              Velora will add, edit and complete tasks and schedule reminders as soon as you ask, without a
+              confirmation card. Each change still appears in the chat and the activity log, and you can undo
+              Velora&apos;s latest change. Deleting anything will always need your confirmation.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline" disabled={isSaving}>
+                Keep asking me
+              </Button>
+            </DialogClose>
+            <Button onClick={() => save("standard")} disabled={isSaving}>
+              {isSaving ? "Saving..." : "Make changes directly"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }

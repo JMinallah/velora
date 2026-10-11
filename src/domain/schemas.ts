@@ -44,6 +44,7 @@ export const missionPatchSchema = z
     overview: z.string().max(20_000),
     nextStep: z.string().max(1000),
     targetDate: isoDate.nullable(),
+    settings: z.object({ autonomy: z.enum(["standard", "confirm-writes"]) }),
   })
   .partial()
 

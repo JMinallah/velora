@@ -108,3 +108,29 @@ test("dashboard shows missions with progress and upcoming deadlines", async ({ p
   await card.click()
   await expect(page.getByRole("heading", { level: 1, name: "Relocate to Accra" })).toBeVisible()
 })
+
+test("asking Velora to confirm every change is one click; loosening it explains first", async ({ page }) => {
+  await open(page, "/mission/new")
+  await page.getByLabel("Mission title").fill("Move to Lisbon")
+  await page.getByRole("button", { name: "Create mission" }).click()
+  await expect(page.getByRole("heading", { level: 1, name: "Move to Lisbon" })).toBeVisible()
+
+  const permissions = page.getByLabel("Velora's permissions")
+  await expect(permissions).toContainText("Velora makes changes directly")
+  await permissions.getByRole("button", { name: "Ask me before every change" }).click()
+  await expect(permissions).toContainText("Velora asks before every change it makes.")
+
+  await permissions.getByRole("button", { name: "Let Velora make changes directly" }).click()
+  const dialog = page.getByRole("dialog")
+  await expect(dialog).toContainText("Deleting anything will always need your confirmation")
+  await dialog.getByRole("button", { name: "Keep asking me" }).click()
+  await expect(permissions).toContainText("Velora asks before every change it makes.")
+
+  await permissions.getByRole("button", { name: "Let Velora make changes directly" }).click()
+  await page.getByRole("dialog").getByRole("button", { name: "Make changes directly" }).click()
+  await expect(permissions).toContainText("Velora makes changes directly")
+
+  // Persisted, not just local state.
+  await open(page, page.url().replace(/^https?:\/\/[^/]+/, ""))
+  await expect(page.getByLabel("Velora's permissions")).toContainText("Velora makes changes directly")
+})

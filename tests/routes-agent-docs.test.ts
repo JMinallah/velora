@@ -30,7 +30,7 @@ import { GET as listTasksRoute } from "@/app/api/missions/[id]/tasks/route"
 import { GET as listDocumentsRoute, POST as attachDocumentRoute } from "@/app/api/missions/[id]/documents/route"
 import { POST as ingestRoute } from "@/app/api/missions/[id]/documents/ingest/route"
 import { POST as decideRoute } from "@/app/api/missions/[id]/pending-actions/[actionId]/route"
-import { GET as getMissionRoute } from "@/app/api/missions/[id]/route"
+import { GET as getMissionRoute, PATCH as patchMissionRoute } from "@/app/api/missions/[id]/route"
 import { POST as createTaskRoute } from "@/app/api/missions/[id]/tasks/route"
 import { PATCH as patchTaskRoute } from "@/app/api/missions/[id]/tasks/[taskId]/route"
 import { GET as getUndoRoute, POST as undoRoute } from "@/app/api/missions/[id]/undo/route"
@@ -425,6 +425,55 @@ describeDb("undo for the agent's changes (FR-AGT-6)", () => {
     asUser("user-undo-stranger")
     expect((await getUndoRoute(req("GET", "/"), ctx({ id: missionId }))).status).toBe(404)
     expect((await undo(missionId, "anything")).status).toBe(404)
+  })
+})
+
+describeDb('autonomy "confirm-writes": every agent change waits for the user (FR-TRS-4)', () => {
+  const patchMission = (missionId: string, body: unknown) =>
+    patchMissionRoute(req("PATCH", `/api/missions/${missionId}`, body), ctx({ id: missionId }))
+
+  it("validates the setting", async () => {
+    const missionId = await createMissionAs("user-auto-validate")
+    expect((await patchMission(missionId, { settings: { autonomy: "yolo" } })).status).toBe(400)
+    const ok = await patchMission(missionId, { settings: { autonomy: "confirm-writes" } })
+    expect((await ok.json()).data.settings).toEqual({ autonomy: "confirm-writes" })
+  })
+
+  it("parks writes; confirming applies them as the agent, confirmed by the user, and undoably", async () => {
+    const missionId = await createMissionAs("user-auto-flow")
+    await patchMission(missionId, { settings: { autonomy: "confirm-writes" } })
+
+    provider = scripted([
+      {
+        text: "",
+        toolCalls: [
+          { name: "createTask", args: { label: "Book movers" } },
+          { name: "createReminder", args: { title: "Call movers", dueAt: "2026-11-01T09:00:00Z" } },
+        ],
+      },
+    ]).provider
+    const res = await chat(missionId, { message: "add a movers task and remind me" })
+    const { proposals, reply } = (await res.json()).data
+    expect(reply).toMatch(/before making changes|these 2 changes/)
+    expect(proposals.map((p: { summary: string }) => p.summary)).toEqual([
+      'Create task "Book movers"',
+      'Schedule reminder "Call movers" for 2026-11-01 09:00',
+    ])
+    expect((await (await listTasksRoute(req("GET", "/"), ctx({ id: missionId }))).json()).data).toHaveLength(0)
+
+    const confirm = (p: { id: string; nonce: string }) =>
+      decideRoute(req("POST", "/", { nonce: p.nonce, decision: "confirm" }), ctx({ id: missionId, actionId: p.id }))
+    const first = await confirm(proposals[0])
+    expect((await first.json()).data).toEqual({ status: "executed", receipt: 'Created task "Book movers"', effect: { kind: "data-changed" } })
+
+    const tasks = (await (await listTasksRoute(req("GET", "/"), ctx({ id: missionId }))).json()).data
+    expect(tasks).toEqual([expect.objectContaining({ label: "Book movers", source: "agent" })])
+    const events = (await (await listEventsRoute(req("GET", "/"), ctx({ id: missionId }))).json()).data
+    expect(events).toContainEqual(expect.objectContaining({ type: "task-created", actor: "agent", confirmedBy: "user" }))
+
+    // A confirmed change is still Velora's change, so it can be undone.
+    const undoable = (await (await getUndoRoute(req("GET", "/"), ctx({ id: missionId }))).json()).data
+    expect(undoable.description).toBe('Created task "Book movers"')
   })
 })
 

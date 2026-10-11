@@ -72,10 +72,20 @@ export type Mission = {
   nextStep?: string;
   /** The date the transition must be done by, if the user set one (YYYY-MM-DD or ISO). */
   targetDate?: string | null;
+  /** Agent settings (FR-TRS-4). Absent means the defaults. */
+  settings?: MissionSettings;
   createdAt: string;
   updatedAt: string;
   source?: "onboarding" | "agent" | "manual";
 };
+
+/**
+ * "standard": Velora's writes apply immediately (visible as receipts, undoable);
+ * deletions always need confirmation. "confirm-writes": every change Velora
+ * makes waits for the user's confirmation, like deletions do.
+ */
+export type Autonomy = "standard" | "confirm-writes";
+export type MissionSettings = { autonomy: Autonomy };
 
 export type Document = {
   id: string;

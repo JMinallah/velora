@@ -19,7 +19,8 @@ import type { ChangeOrigin } from "@/domain/events"
 export type ToolTier = "read" | "write"
 
 /** Per-turn context the loop passes to every tool. */
-export type ToolContext = { turnId: string }
+/** Per-turn context passed to every tool; confirmedBy is set when the user approved this call on a card. */
+export type ToolContext = { turnId: string; confirmedBy?: "user" }
 
 export type ToolDefinition<S extends z.ZodTypeAny = z.ZodTypeAny> = {
   name: string
@@ -32,11 +33,16 @@ export type ToolDefinition<S extends z.ZodTypeAny = z.ZodTypeAny> = {
     args: z.infer<S>,
     ctx: ToolContext
   ) => Promise<{ result: unknown; receipt?: string }>
+  /**
+   * Write tools: what this call *would* do, for a confirmation card when the
+   * mission asks for confirmation before every change (autonomy "confirm-writes").
+   */
+  describe?: (userId: string, missionId: string, args: z.infer<S>) => Promise<{ summary: string } | { error: string }>
 }
 
 /** The origin recorded on events a write tool causes: this turn, this tool, these validated args (FR-TRS-2). */
 function byAgent(ctx: ToolContext, tool: string, args: unknown): ChangeOrigin {
-  return { actor: "agent", turnId: ctx.turnId, tool, args }
+  return { actor: "agent", turnId: ctx.turnId, tool, args, ...(ctx.confirmedBy ? { confirmedBy: ctx.confirmedBy } : {}) }
 }
 
 function defineTool<S extends z.ZodTypeAny>(def: ToolDefinition<S>): ToolDefinition<S> {
@@ -122,6 +128,9 @@ const createTask = defineTool({
     dueDate: isoDate.optional().describe("ISO date, e.g. 2026-09-12"),
     priority: z.enum(["low", "medium", "high"]).optional(),
   }),
+  describe: async (_userId, _missionId, args) => ({
+    summary: `Create task "${args.label}"${args.dueDate ? ` (due ${args.dueDate.slice(0, 10)})` : ""}`,
+  }),
   execute: async (userId, missionId, args, ctx) => {
     const task = await tasks.createTask(
       userId,
@@ -154,6 +163,17 @@ const updateTaskTool = defineTool({
     .refine((a) => [a.label, a.category, a.dueDate, a.priority].some((v) => v !== undefined), {
       message: "provide at least one field to change",
     }),
+  describe: async (userId, missionId, args) => {
+    const task = await tasks.getTask(userId, missionId, args.taskId)
+    if (!task) return { error: "task not found" }
+    const changes = [
+      args.label !== undefined && `rename to "${args.label}"`,
+      args.dueDate !== undefined && (args.dueDate ? `due ${args.dueDate.slice(0, 10)}` : "remove due date"),
+      args.priority !== undefined && `${args.priority} priority`,
+      args.category !== undefined && `category ${args.category}`,
+    ].filter(Boolean)
+    return { summary: `Update task "${task.label}": ${changes.join(", ")}` }
+  },
   execute: async (userId, missionId, args, ctx) => {
     const { taskId, ...patch } = args
     const updated = await tasks.updateTask(userId, missionId, taskId, patch, byAgent(ctx, "updateTask", args))
@@ -173,6 +193,11 @@ const completeTask = defineTool({
     taskId: z.string().min(1),
     completed: z.boolean(),
   }),
+  describe: async (userId, missionId, args) => {
+    const task = await tasks.getTask(userId, missionId, args.taskId)
+    if (!task) return { error: "task not found" }
+    return { summary: `${args.completed ? "Mark complete" : "Reopen"}: "${task.label}"` }
+  },
   execute: async (userId, missionId, args, ctx) => {
     const updated = await tasks.updateTask(
       userId,
@@ -198,6 +223,9 @@ const createReminderTool = defineTool({
     dueAt: isoDate.describe("ISO datetime for when the reminder should fire, e.g. 2026-09-12T09:00:00Z"),
     details: z.string().max(500).optional(),
     taskId: z.string().optional(),
+  }),
+  describe: async (_userId, _missionId, args) => ({
+    summary: `Schedule reminder "${args.title}" for ${args.dueAt.slice(0, 16).replace("T", " ")}`,
   }),
   execute: async (userId, missionId, args, ctx) => {
     const reminder = await reminders.createReminder(userId, { ...args, missionId }, byAgent(ctx, "createReminder", args))

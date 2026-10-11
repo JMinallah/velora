@@ -46,6 +46,7 @@ vi.mock("@/domain/pendingActions", () => ({
 
 import { runAgentTurn } from "@/agent/loop"
 import * as tasks from "@/domain/tasks"
+import * as missions from "@/domain/missions"
 
 function scriptedProvider(responses: ProviderResponse[]): LlmProvider & { calls: number } {
   const provider = {
@@ -185,6 +186,40 @@ describe("runAgentTurn", () => {
       expect(run.proposals).toHaveLength(0)
       expect(run.trace).toEqual([{ tool: "deleteTask", ok: false }])
       expect(run.reply).toBe("I couldn't find that task.")
+    })
+  })
+
+  describe('autonomy "confirm-writes" (FR-TRS-4)', () => {
+    it("parks every write as a proposal while read tools still run", async () => {
+      const original = await missions.getMission("u1", "m1")
+      vi.mocked(missions.getMission).mockResolvedValue({ ...original!, settings: { autonomy: "confirm-writes" } })
+      try {
+        const provider = scriptedProvider([
+          {
+            text: "",
+            toolCalls: [
+              { name: "listTasks", args: {} },
+              { name: "createTask", args: { label: "Get visa photos", dueDate: "2026-11-01" } },
+              { name: "completeTask", args: { taskId: "t1", completed: true } },
+            ],
+          },
+        ])
+        const run = await runAgentTurn({ provider, ...base })
+        expect(tasks.createTask).not.toHaveBeenCalledWith("u1", "m1", expect.objectContaining({ label: "Get visa photos" }), expect.anything())
+        expect(tasks.updateTask).not.toHaveBeenCalled()
+        expect(run.trace).toEqual([
+          { tool: "listTasks", ok: true },
+          { tool: "createTask", ok: true },
+          { tool: "completeTask", ok: true },
+        ])
+        expect(run.proposals.map((p) => p.summary)).toEqual([
+          'Create task "Get visa photos" (due 2026-11-01)',
+          'Mark complete: "Book flights"',
+        ])
+        expect(run.reply).toMatch(/confirmation for these 2 changes/)
+      } finally {
+        vi.mocked(missions.getMission).mockResolvedValue(original)
+      }
     })
   })
 
