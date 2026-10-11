@@ -21,6 +21,9 @@ export type AgentReceipt = { tool: string; text: string }
 
 export type ToolTraceEntry = { tool: string; ok: boolean }
 
+/** Progress while a turn runs, for streaming to the user (FR-AGT-1). */
+export type AgentStreamEvent = { type: "text"; delta: string } | { type: "receipt"; receipt: AgentReceipt }
+
 export type AgentRunResult = {
   reply: string
   receipts: AgentReceipt[]
@@ -83,6 +86,8 @@ export async function runAgentTurn(input: {
   wallClockMs?: number
   /** Links this turn's messages and events; generated when not given. */
   turnId?: string
+  /** Receives text as it is generated and receipts as tools complete; enables provider streaming. */
+  onEvent?: (event: AgentStreamEvent) => void
 }): Promise<AgentRunResult> {
   const startedAt = Date.now()
   const turnId = input.turnId ?? randomUUID()
@@ -102,22 +107,45 @@ export async function runAgentTurn(input: {
 
   const budgetMs = input.wallClockMs ?? WALL_CLOCK_MS
   const remainingMs = () => budgetMs - (Date.now() - startedAt)
-  const outOfTime = (): AgentRunResult => ({
-    reply: receipts.length
-      ? "I ran out of time mid-way, but the actions listed above did complete. Ask me to continue where I left off."
-      : "I ran out of time before finishing — please try again.",
+
+  // Text the model wrote before calling tools ("Let me check your tasks…").
+  // It may already have been streamed to the user, so it stays part of the
+  // reply: what was shown while streaming always matches what is stored.
+  const preambles: string[] = []
+  const finish = (finalText: string, stepCount = steps): AgentRunResult => ({
+    reply: [...preambles, finalText].filter(Boolean).join("\n\n"),
     receipts,
     trace,
-    steps,
+    steps: stepCount,
     promptVersion: PROMPT_VERSION,
     turnId,
   })
+  const outOfTime = () =>
+    finish(
+      receipts.length
+        ? "I ran out of time mid-way, but the actions listed above did complete. Ask me to continue where I left off."
+        : "I ran out of time before finishing — please try again."
+    )
+
   const generate = async (callTools: typeof tools) => {
+    const ms = remainingMs()
+    // Abort the request itself at the deadline (providers that honour the
+    // signal stop the network call); withDeadline covers providers that don't.
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), Math.max(0, ms))
+    const request = { system, turns, tools: callTools, signal: controller.signal }
+    const onEvent = input.onEvent
     try {
-      return await withDeadline(input.provider.generate({ system, turns, tools: callTools }), remainingMs())
+      const call =
+        onEvent && input.provider.generateStream
+          ? input.provider.generateStream({ ...request, onText: (delta) => onEvent({ type: "text", delta }) })
+          : input.provider.generate(request)
+      return await withDeadline(call, ms)
     } catch (error) {
-      if (error instanceof TurnDeadlineExceeded) return null
+      if (error instanceof TurnDeadlineExceeded || controller.signal.aborted) return null
       throw error
+    } finally {
+      clearTimeout(timer)
     }
   }
 
@@ -129,16 +157,10 @@ export async function runAgentTurn(input: {
     if (!response) return outOfTime()
 
     if (response.toolCalls.length === 0) {
-      return {
-        reply: response.text || "I don't have a response for that — could you rephrase?",
-        receipts,
-        trace,
-        steps,
-        promptVersion: PROMPT_VERSION,
-        turnId,
-      }
+      return finish(response.text || "I don't have a response for that — could you rephrase?")
     }
 
+    if (response.text) preambles.push(response.text)
     turns.push({
       role: "assistant",
       text: response.text || undefined,
@@ -172,7 +194,11 @@ export async function runAgentTurn(input: {
         const { result, receipt } = await tool.execute(input.userId, input.missionId, parsed.data, { turnId })
         consecutiveFailures = 0
         trace.push({ tool: call.name, ok: true })
-        if (receipt) receipts.push({ tool: tool.name, text: receipt })
+        if (receipt) {
+          const entry = { tool: tool.name, text: receipt }
+          receipts.push(entry)
+          input.onEvent?.({ type: "receipt", receipt: entry })
+        }
         turns.push({ role: "tool", name: call.name, callId: call.id, result })
       } catch (error) {
         consecutiveFailures++
@@ -192,25 +218,13 @@ export async function runAgentTurn(input: {
         text: "SYSTEM NOTE: several tool calls failed. Stop calling tools and answer the user with what you have, stating plainly what you could not complete.",
       })
       const final = await generate([])
-      return {
-        reply: final?.text || "I couldn't complete that — something kept failing. Please try again.",
-        receipts,
-        trace,
-        steps: steps + 1,
-        promptVersion: PROMPT_VERSION,
-        turnId,
-      }
+      return finish(final?.text || "I couldn't complete that — something kept failing. Please try again.", steps + 1)
     }
   }
 
-  return {
-    reply: receipts.length
+  return finish(
+    receipts.length
       ? "I reached my step limit for one turn, but the actions listed above did complete. Ask me to continue."
-      : "That took more steps than I'm allowed in one turn. Try breaking the request into smaller pieces.",
-    receipts,
-    trace,
-    steps,
-    promptVersion: PROMPT_VERSION,
-    turnId,
-  }
+      : "That took more steps than I'm allowed in one turn. Try breaking the request into smaller pieces."
+  )
 }

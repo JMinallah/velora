@@ -76,9 +76,16 @@ export function AiMessage({ message }: { message: Message }) {
       <Icon className={cn("mt-0.5 h-4 w-4 shrink-0", config.iconColor, config.darkIconColor)} />
       <div className="min-w-0 flex-1">
         <div className="text-sm leading-6 whitespace-pre-wrap break-words [overflow-wrap:anywhere] prose prose-sm dark:prose-invert max-w-none prose-p:leading-relaxed prose-pre:p-0">
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>
-            {message.text}
-          </ReactMarkdown>
+          {message.text ? (
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              {message.text}
+            </ReactMarkdown>
+          ) : (
+            // A streaming reply before its first words arrive.
+            <p className="animate-pulse text-muted-foreground" aria-live="polite">
+              Thinking…
+            </p>
+          )}
         </div>
         {message.extractedData && <ExtractedInfo extractedData={message.extractedData} />}
         <p className="mt-1.5 text-[11px] text-muted-foreground">{message.createdAt}</p>

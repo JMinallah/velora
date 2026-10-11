@@ -28,10 +28,19 @@ export type ProviderResponse = {
   providerParts?: unknown
 }
 
+export type GenerateInput = {
+  system: string
+  turns: AgentTurn[]
+  tools: ToolDeclaration[]
+  /** Aborted when the turn's time budget runs out; providers should stop the request. */
+  signal?: AbortSignal
+}
+
 export interface LlmProvider {
-  generate(input: {
-    system: string
-    turns: AgentTurn[]
-    tools: ToolDeclaration[]
-  }): Promise<ProviderResponse>
+  generate(input: GenerateInput): Promise<ProviderResponse>
+  /**
+   * Optional streaming variant (FR-AGT-1): resolves to the same complete
+   * response, forwarding visible text to `onText` as it arrives.
+   */
+  generateStream?(input: GenerateInput & { onText: (delta: string) => void }): Promise<ProviderResponse>
 }

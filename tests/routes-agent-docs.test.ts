@@ -177,6 +177,60 @@ describeDb("chat route", () => {
   })
 })
 
+describeDb("chat route — streaming (NDJSON)", () => {
+  const streamChat = async (missionId: string, message: string) => {
+    const res = await chatRoute(
+      new NextRequest(`http://localhost/api/missions/${missionId}/chat`, {
+        method: "POST",
+        body: JSON.stringify({ message }),
+        headers: { "content-type": "application/json", accept: "application/x-ndjson" },
+      }),
+      ctx({ id: missionId })
+    )
+    const lines = (await res.text()).trim().split("\n").map((l) => JSON.parse(l))
+    return { res, lines }
+  }
+
+  it("streams text deltas and receipts, ends with the stored reply, and persists the turn", async () => {
+    const missionId = await createMissionAs("user-stream")
+    let call = 0
+    provider = {
+      generate: async () => ({ text: "", toolCalls: [] }),
+      async generateStream({ onText }) {
+        if (++call === 1) return { text: "", toolCalls: [{ name: "createTask", args: { label: "Pack books" } }] }
+        onText("Added ")
+        onText("it.")
+        return { text: "Added it.", toolCalls: [] }
+      },
+    }
+
+    const { res, lines } = await streamChat(missionId, "Add a task to pack books")
+    expect(res.status).toBe(200)
+    expect(res.headers.get("content-type")).toContain("application/x-ndjson")
+    expect(lines.map((l) => l.type)).toEqual(["receipt", "text", "text", "done"])
+    expect(lines[0]).toMatchObject({ tool: "createTask", text: 'Created task "Pack books"' })
+    expect(lines[3]).toMatchObject({ reply: "Added it.", promptVersion: "coordinator.v1", turnId: expect.any(String) })
+
+    const messages = (await (await listMessagesRoute(req("GET", "/"), ctx({ id: missionId }))).json()).data
+    expect(messages.map((m: { type: string }) => m.type)).toEqual(["user", "update", "reasoning"])
+    expect(messages[2].text).toBe("Added it.")
+  })
+
+  it("reports a mid-stream failure as an error event and stores nothing", async () => {
+    const missionId = await createMissionAs("user-stream-quota")
+    provider = {
+      generate: async () => ({ text: "", toolCalls: [] }),
+      generateStream: async () => {
+        throw Object.assign(new Error("quotaId GenerateRequestsPerDayPerProjectPerModel"), { status: 429 })
+      },
+    }
+    const { lines } = await streamChat(missionId, "hello?")
+    expect(lines).toEqual([{ type: "error", code: "llm_quota", error: expect.stringMatching(/daily limit/) }])
+    const messages = (await (await listMessagesRoute(req("GET", "/"), ctx({ id: missionId }))).json()).data
+    expect(messages).toHaveLength(0)
+  })
+})
+
 describeDb("chat route — daily quota", () => {
   it("says the daily AI limit is reached (503 llm_quota), not 'briefly overloaded', and stores nothing", async () => {
     const missionId = await createMissionAs("user-chat-quota")

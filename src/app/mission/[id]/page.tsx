@@ -26,12 +26,17 @@ import { AnimatePresence, motion } from "framer-motion";
 import { loadLatestTransitionPlan } from "@/lib/coordination/session";
 import { MissionHeader } from "@/components/mission/MissionHeader";
 import { TaskList } from "@/components/mission/TaskList";
+import { readChatStream } from "@/lib/chat-stream";
 
 function resolveMissionId(value: string | string[] | undefined, availableIds: string[]) {
   const candidate = Array.isArray(value) ? value[0] : value;
   if (!candidate) return availableIds[0] ?? ""
   return availableIds.includes(candidate) ? candidate : availableIds[0] ?? candidate
 }
+
+// Rate limits, AI disabled/overloaded/out of quota carry messages written for
+// users ("try again in 40 seconds"); anything else stays generic.
+const USER_FACING_CHAT_ERRORS = ["rate_limited", "agent_disabled", "llm_transient", "llm_quota"];
 
 class ChatError extends Error {
   constructor(message: string, readonly userFacing: boolean) {
@@ -265,53 +270,72 @@ export default function MissionPage() {
     }));
 
     setIsSending(true);
-
-    try {
-      // One call: the server persists both sides of the exchange, runs the
-      // agent loop, and returns the reply plus receipts for each action taken.
-      const response = await fetch(`/api/missions/${missionId}/chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: userText }),
-      });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok || !data?.success) {
-        // Rate limits, AI disabled and provider overload carry messages written
-        // for users ("try again in 40 seconds"); anything else stays generic.
-        const userFacing = ["rate_limited", "agent_disabled", "llm_transient", "llm_quota"].includes(data?.code);
-        throw new ChatError(userFacing ? data.error : "Chat failed", userFacing);
-      }
-
-      const now = Date.now();
-      const receiptMessages: Message[] = (data.data.receipts ?? []).map(
-        (receipt: { tool: string; text: string }, index: number) => ({
-          userId: "local",
-          id: `msg-${now}-receipt-${index}`,
-          type: "update" as const,
-          text: `✓ ${receipt.text}`,
-          createdAt: new Date().toISOString(),
-        })
-      );
-      const assistantMessage: Message = {
-        userId: "local",
-        id: `msg-${now}-reply`,
-        type: "reasoning",
-        text: data.data.reply,
-        createdAt: new Date().toISOString(),
-      };
-
+    // Placeholder the streamed reply is written into; removed if the turn fails.
+    const replyId = `msg-${Date.now()}-reply`;
+    const updateMessages = (update: (messages: Message[]) => Message[]) =>
       setMissions((currentMissions) => {
         const currentMission = currentMissions[missionId];
         return {
           ...currentMissions,
-          [missionId]: {
-            ...currentMission,
-            messages: [...currentMission.messages, ...receiptMessages, assistantMessage],
-          },
+          [missionId]: { ...currentMission, messages: update(currentMission.messages) },
         };
       });
+
+    try {
+      // The server runs the agent loop and streams it back (FR-AGT-1): text as
+      // it is generated, a receipt as each action completes, then the final
+      // reply exactly as stored. It persists the exchange itself.
+      const response = await fetch(`/api/missions/${missionId}/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/x-ndjson" },
+        body: JSON.stringify({ message: userText }),
+      });
+      if (!response.ok || !response.body || !response.headers.get("content-type")?.includes("ndjson")) {
+        const data = await response.json().catch(() => ({}));
+        throw new ChatError(
+          USER_FACING_CHAT_ERRORS.includes(data?.code) ? data.error : "Chat failed",
+          USER_FACING_CHAT_ERRORS.includes(data?.code)
+        );
+      }
+
+      updateMessages((messages) => [
+        ...messages,
+        { userId: "local", id: replyId, type: "reasoning", text: "", createdAt: new Date().toISOString() },
+      ]);
+
+      let finished = false;
+      await readChatStream(response.body, (event) => {
+        if (event.type === "text") {
+          updateMessages((messages) =>
+            messages.map((m) => (m.id === replyId ? { ...m, text: m.text + event.delta } : m))
+          );
+        } else if (event.type === "receipt") {
+          // Receipts sit between the user's message and the reply.
+          const receipt: Message = {
+            userId: "local",
+            id: `${replyId}-receipt-${event.tool}-${Math.random().toString(36).slice(2)}`,
+            type: "update",
+            text: `✓ ${event.text}`,
+            createdAt: new Date().toISOString(),
+          };
+          updateMessages((messages) => {
+            const at = messages.findIndex((m) => m.id === replyId);
+            return at < 0 ? [...messages, receipt] : [...messages.slice(0, at), receipt, ...messages.slice(at)];
+          });
+        } else if (event.type === "done") {
+          finished = true;
+          updateMessages((messages) => messages.map((m) => (m.id === replyId ? { ...m, text: event.reply } : m)));
+        } else {
+          throw new ChatError(
+            USER_FACING_CHAT_ERRORS.includes(event.code) ? event.error : "Chat failed",
+            USER_FACING_CHAT_ERRORS.includes(event.code)
+          );
+        }
+      });
+      if (!finished) throw new ChatError("Chat failed", false);
     } catch (error) {
       console.error("Mission chat error:", error);
+      updateMessages((messages) => messages.filter((m) => m.id !== replyId || m.text));
 
       const fallbackMessage: Message = {
         userId: "local",

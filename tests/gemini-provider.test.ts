@@ -5,7 +5,13 @@
  * signatures — so they are pinned here without network access.
  */
 import { describe, it, expect } from "vitest"
-import { toContents, generationSettings, isTransientLlmError, isDailyQuotaError } from "@/agent/providers/gemini"
+import {
+  toContents,
+  generationSettings,
+  isTransientLlmError,
+  isDailyQuotaError,
+  mergeStreamParts,
+} from "@/agent/providers/gemini"
 
 describe("toContents", () => {
   it("returns tool results in one user turn, echoing call ids", () => {
@@ -82,5 +88,24 @@ describe("isDailyQuotaError", () => {
     const perMinute = Object.assign(new Error("quotaId: GenerateRequestsPerMinutePerProjectPerModel"), { status: 429 })
     expect(isDailyQuotaError(perMinute)).toBe(false)
     expect(isTransientLlmError(perMinute)).toBe(true)
+  })
+})
+
+describe("mergeStreamParts", () => {
+  it("joins streamed text chunks, keeps the trailing thought signature, and leaves calls separate", () => {
+    const merged = mergeStreamParts([
+      { text: "Let me " },
+      { text: "check." },
+      { text: "", thoughtSignature: "sig-1" },
+      { functionCall: { name: "listTasks", args: {} }, thoughtSignature: "sig-2" },
+    ])
+    expect(merged).toEqual([
+      { text: "Let me check.", thoughtSignature: "sig-1" },
+      { functionCall: { name: "listTasks", args: {} }, thoughtSignature: "sig-2" },
+    ])
+  })
+
+  it("does not merge thought text with visible text", () => {
+    expect(mergeStreamParts([{ text: "hmm", thought: true }, { text: "Hi" }])).toHaveLength(2)
   })
 })

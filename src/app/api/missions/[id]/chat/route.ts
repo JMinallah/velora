@@ -1,14 +1,14 @@
 import { randomUUID } from "node:crypto"
 import { NextResponse } from "next/server"
 import { withAuth } from "@/lib/with-auth"
-import { runAgentTurn } from "@/agent/loop"
+import { runAgentTurn, type AgentRunResult } from "@/agent/loop"
 import { getLlmProvider } from "@/agent/providers"
 import { isDailyQuotaError, isTransientLlmError } from "@/agent/providers/gemini"
 import type { AgentTurn } from "@/agent/providers/types"
 import { getMission } from "@/domain/missions"
 import { listMessages, createMessage } from "@/domain/messages"
 import type { MessageRecord } from "@/domain/collections"
-import { llmUnavailable, readJson, serverError } from "@/lib/http"
+import { describeLlmFailure, llmUnavailable, readJson, serverError } from "@/lib/http"
 
 const HISTORY_LIMIT = 20
 
@@ -30,6 +30,45 @@ function toHistory(stored: MessageRecord[]): AgentTurn[] {
   // A window that opens mid-exchange starts with the assistant; drop it.
   while (turns[0]?.role === "assistant") turns.shift()
   return turns
+}
+
+/**
+ * Persists a completed turn. Only called once the turn completes, so a failed
+ * model call never leaves an unanswered user message in the history. Receipts
+ * are stored as their own messages, matching how the chat UI renders them, so
+ * they survive a reload. Explicit timestamps keep the order stable; every
+ * message carries the turn id (FR-TRS-2).
+ */
+async function persistTurn(userId: string, missionId: string, message: string, sentAt: string, run: AgentRunResult) {
+  const doneAt = Date.now()
+  await createMessage(userId, {
+    missionId,
+    type: "user",
+    text: message,
+    source: "user",
+    createdAt: sentAt,
+    turnId: run.turnId,
+  })
+  for (const [i, receipt] of run.receipts.entries()) {
+    await createMessage(userId, {
+      missionId,
+      type: "update",
+      text: `✓ ${receipt.text}`,
+      source: "agent",
+      tool: receipt.tool,
+      createdAt: new Date(doneAt + i).toISOString(),
+      turnId: run.turnId,
+    })
+  }
+  await createMessage(userId, {
+    missionId,
+    type: "reasoning",
+    text: run.reply,
+    source: "agent",
+    promptVersion: run.promptVersion,
+    createdAt: new Date(doneAt + run.receipts.length).toISOString(),
+    turnId: run.turnId,
+  })
 }
 
 export const POST = withAuth<{ id: string }>(async (req, session, { params }) => {
@@ -67,58 +106,86 @@ export const POST = withAuth<{ id: string }>(async (req, session, { params }) =>
     // turn's tools emit together, so the activity feed can show why (FR-TRS-2).
     const turnId = randomUUID()
 
-    let run
+    const startedAt = Date.now()
+    const turn = {
+      provider,
+      userId: session.userId,
+      missionId: id,
+      userMessage: message,
+      history,
+      turnId,
+    }
+    const classify = (error: unknown) => ({
+      isDailyQuota: isDailyQuotaError(error),
+      isTransient: isTransientLlmError(error),
+    })
+    // Operational metrics only — never message content (NFR-SEC-5, NFR-PERF-1).
+    const logTurn = (run: AgentRunResult, firstTextAt: number | null, streamed: boolean) =>
+      console.info(
+        JSON.stringify({
+          event: "chat_turn",
+          turnId,
+          streamed,
+          steps: run.steps,
+          toolCalls: run.trace.length,
+          ttftMs: firstTextAt === null ? null : firstTextAt - startedAt,
+          totalMs: Date.now() - startedAt,
+        })
+      )
+
+    // Streaming (FR-AGT-1): the chat UI asks for NDJSON — one JSON event per
+    // line: text deltas, receipts as tools complete, then "done" (or "error").
+    // Other callers get the plain JSON response.
+    if (req.headers.get("accept")?.includes("application/x-ndjson")) {
+      const encoder = new TextEncoder()
+      const stream = new ReadableStream({
+        async start(controller) {
+          const send = (event: Record<string, unknown>) =>
+            controller.enqueue(encoder.encode(JSON.stringify(event) + "\n"))
+          let firstTextAt: number | null = null
+          try {
+            const run = await runAgentTurn({
+              ...turn,
+              onEvent: (event) => {
+                if (event.type === "text") {
+                  firstTextAt ??= Date.now()
+                  send({ type: "text", delta: event.delta })
+                } else {
+                  send({ type: "receipt", tool: event.receipt.tool, text: event.receipt.text })
+                }
+              },
+            })
+            await persistTurn(session.userId, id, message, sentAt, run)
+            logTurn(run, firstTextAt, true)
+            send({ type: "done", reply: run.reply, receipts: run.receipts, promptVersion: run.promptVersion, turnId })
+          } catch (error) {
+            const failure = describeLlmFailure(classify(error))
+            if (!failure) console.error("POST /api/missions/[id]/chat (stream)", error)
+            send({ type: "error", ...(failure ?? { code: "server_error", error: "Chat failed" }) })
+          } finally {
+            controller.close()
+          }
+        },
+      })
+      return new Response(stream, {
+        headers: {
+          "Content-Type": "application/x-ndjson; charset=utf-8",
+          "Cache-Control": "no-cache, no-transform",
+          "X-Accel-Buffering": "no",
+        },
+      })
+    }
+
+    let run: AgentRunResult
     try {
-      run = await runAgentTurn({
-        provider,
-        userId: session.userId,
-        missionId: id,
-        userMessage: message,
-        history,
-        turnId,
-      })
+      run = await runAgentTurn(turn)
     } catch (error) {
-      const unavailable = llmUnavailable(error, {
-        isDailyQuota: isDailyQuotaError(error),
-        isTransient: isTransientLlmError(error),
-      })
+      const unavailable = llmUnavailable(error, classify(error))
       if (unavailable) return unavailable
       throw error
     }
-
-    // Persist the exchange only once the turn completes, so a failed model
-    // call never leaves an unanswered user message in the history. Receipts
-    // are stored as their own messages, matching how the chat UI renders them
-    // live, so they survive a reload. Explicit timestamps keep the order stable.
-    const doneAt = Date.now()
-    await createMessage(session.userId, {
-      missionId: id,
-      type: "user",
-      text: message,
-      source: "user",
-      createdAt: sentAt,
-      turnId,
-    })
-    for (const [i, receipt] of run.receipts.entries()) {
-      await createMessage(session.userId, {
-        missionId: id,
-        type: "update",
-        text: `✓ ${receipt.text}`,
-        source: "agent",
-        tool: receipt.tool,
-        createdAt: new Date(doneAt + i).toISOString(),
-        turnId,
-      })
-    }
-    await createMessage(session.userId, {
-      missionId: id,
-      type: "reasoning",
-      text: run.reply,
-      source: "agent",
-      promptVersion: run.promptVersion,
-      createdAt: new Date(doneAt + run.receipts.length).toISOString(),
-      turnId,
-    })
+    await persistTurn(session.userId, id, message, sentAt, run)
+    logTurn(run, null, false)
 
     return NextResponse.json({
       success: true,
