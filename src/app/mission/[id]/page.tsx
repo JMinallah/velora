@@ -526,6 +526,7 @@ export default function MissionPage() {
           <div className="flex items-start justify-between gap-3">
             <MissionHeader
               mission={activeMission}
+              tasks={activeMissionTasks}
               onUpdated={(updated) =>
                 setMissions((cur) => ({ ...cur, [updated.id]: { ...cur[updated.id], ...updated } }))
               }

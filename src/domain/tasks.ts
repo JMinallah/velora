@@ -221,3 +221,14 @@ export async function checkDependencies(
   const withThis = tasks.some((t) => t.id === taskId) ? tasks : [...tasks, { id: taskId, label: "this task", dependsOn: [] }]
   return dependencyProblem(taskId, [...new Set(dependsOn)], withThis)
 }
+
+export type TaskRiskFacts = Pick<TaskRecord, "id" | "missionId" | "label" | "completed" | "dueDate" | "dependsOn">
+
+/** The fields the risk indicator needs, for all of a user's tasks, in one query (dashboard). */
+export async function listTaskRiskFacts(userId: string): Promise<TaskRiskFacts[]> {
+  const db = await getDb()
+  return db
+    .collection<TaskRecord>(COLLECTIONS.tasks)
+    .find({ userId }, { projection: { _id: 0, id: 1, missionId: 1, label: 1, completed: 1, dueDate: 1, dependsOn: 1 } })
+    .toArray()
+}

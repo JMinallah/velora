@@ -4,6 +4,7 @@ import * as missions from "@/domain/missions"
 import * as tasks from "@/domain/tasks"
 import * as reminders from "@/domain/reminders"
 import { isoDate } from "@/domain/schemas"
+import { computeRisk } from "@/domain/risk"
 import type { ToolDeclaration } from "@/agent/providers/types"
 import type { ChangeOrigin } from "@/domain/events"
 
@@ -53,7 +54,7 @@ const getMissionOverview = defineTool({
   name: "getMissionOverview",
   tier: "read",
   description:
-    "Get the current mission: title, status, overview, next step, target date, and task counts by completion. Use before answering any question about the mission's state.",
+    "Get the current mission: title, overview, next step, target date, computed risk (with reasons), and task counts by completion. Use before answering any question about the mission's state.",
   input: z.object({}),
   execute: async (userId, missionId) => {
     const mission = await missions.getMission(userId, missionId)
@@ -63,7 +64,7 @@ const getMissionOverview = defineTool({
       result: {
         title: mission.title,
         subtitle: mission.subtitle,
-        status: mission.status,
+        risk: computeRisk({ targetDate: mission.targetDate, tasks: all, today: new Date().toISOString().slice(0, 10) }),
         overview: mission.overview,
         nextStep: mission.nextStep,
         targetDate: mission.targetDate ?? null,

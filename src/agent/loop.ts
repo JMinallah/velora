@@ -4,6 +4,7 @@ import { toolRegistry, toolDeclarations, destructiveTools } from "./tools"
 import { coordinatorPrompt, PROMPT_VERSION } from "./prompts/coordinator.v2"
 import * as missions from "@/domain/missions"
 import * as tasks from "@/domain/tasks"
+import { computeRisk, RISK_LABEL } from "@/domain/risk"
 import { proposeAction } from "@/domain/pendingActions"
 import type { ProposedActionView } from "@/types"
 
@@ -65,6 +66,7 @@ export async function buildMissionSnapshot(userId: string, missionId: string): P
   if (!mission) return "No mission found."
   const all = await tasks.listTasks(userId, missionId)
   const open = all.filter((t) => !t.completed)
+  const risk = computeRisk({ targetDate: mission.targetDate, tasks: all, today: new Date().toISOString().slice(0, 10) })
   const soon = open
     .filter((t) => t.dueDate)
     .sort((a, b) => String(a.dueDate).localeCompare(String(b.dueDate)))
@@ -73,7 +75,7 @@ export async function buildMissionSnapshot(userId: string, missionId: string): P
   return [
     `Title: ${mission.title}`,
     mission.subtitle ? `Subtitle: ${mission.subtitle}` : null,
-    `Status: ${mission.status}`,
+    `Risk: ${RISK_LABEL[risk.level]} — ${risk.reasons.join(" ")}`,
     mission.overview ? `Overview: ${mission.overview}` : null,
     mission.nextStep ? `Next step: ${mission.nextStep}` : null,
     mission.targetDate ? `Target date: ${mission.targetDate.slice(0, 10)}` : null,
