@@ -3,6 +3,7 @@ import { cn } from "@/lib/utils";
 import { Message } from "@/types";
 import { ExtractedInfo } from "./documents/ExtractedInfo";
 import ReactMarkdown from "react-markdown";
+import { OriginBadge } from "@/components/OriginBadge";
 import remarkGfm from "remark-gfm";
 
 const messageConfig = {
@@ -76,6 +77,10 @@ export function AiMessage({ message }: { message: Message }) {
     >
       <Icon className={cn("mt-0.5 h-4 w-4 shrink-0", config.iconColor, config.darkIconColor)} />
       <div className="min-w-0 flex-1">
+        {message.type === "update" && (
+          // Change notes: receipts are Velora's actions; "Undone" notes are the user's.
+          <OriginBadge origin={message.source === "user" ? "user" : "agent"} className="mb-1" />
+        )}
         <div className="text-sm leading-6 whitespace-pre-wrap break-words [overflow-wrap:anywhere] prose prose-sm dark:prose-invert max-w-none prose-p:leading-relaxed prose-pre:p-0">
           {message.text ? (
             <ReactMarkdown remarkPlugins={[remarkGfm]}>

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import type { Event, Message } from "@/types";
+import { OriginBadge } from "@/components/OriginBadge";
 
 const EVENT_TYPES = [
   "all",
@@ -143,17 +144,19 @@ export default function MissionEventsPage() {
       {isLoading ? <div className="rounded-2xl border border-border/20 bg-muted/20 p-4 text-sm text-muted-foreground">Loading events...</div> : null}
       {error ? <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300">{error}</div> : null}
 
-      <div className="space-y-3">
+      <div className="space-y-3" role="list" aria-label="Activity">
         {!isLoading && filteredEvents.length === 0 ? (
           <div className="rounded-2xl border border-border/20 bg-muted/20 p-4 text-sm text-muted-foreground">No matching events yet.</div>
         ) : null}
 
         {filteredEvents.map((event) => (
-          <div key={event.id} className="rounded-2xl border border-border/20 bg-background p-4">
+          <div key={event.id} role="listitem" className="rounded-2xl border border-border/20 bg-background p-4">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="text-sm font-semibold capitalize">{formatEventType(event.type)}</p>
-                <p className="text-xs text-muted-foreground">{event.actor} • {formatTimestamp(event.createdAt)}</p>
+                <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <OriginBadge origin={event.actor} /> {formatTimestamp(event.createdAt)}
+                </p>
                 {event.cause && (
                   <p className="mt-2 text-sm">
                     {event.turnId && requestByTurn[event.turnId] ? (

@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth"
 import { listMissions } from "@/domain/missions"
 import { summarizeTasks } from "@/domain/tasks"
 import { formatDisplayDate } from "@/lib/dates"
+import { OriginBadge } from "@/components/OriginBadge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 
@@ -102,7 +103,10 @@ export default async function DashboardPage() {
                   >
                     <CalendarDays className="size-4 shrink-0 text-muted-foreground" />
                     <div className="min-w-0 flex-1">
-                      <p className="truncate font-medium">{task.label}</p>
+                      <p className="flex items-center gap-1.5">
+                        <span className="truncate font-medium">{task.label}</span>
+                        {task.source === "agent" && <OriginBadge origin="agent" title="Added by Velora" />}
+                      </p>
                       <p className="truncate text-sm text-muted-foreground">{missionTitles[task.missionId]}</p>
                     </div>
                     <div className="shrink-0 text-right text-sm">
