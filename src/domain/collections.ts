@@ -9,6 +9,7 @@ export const COLLECTIONS = {
   events: "events",
   rateLimits: "rate_limits",
   pendingActions: "pending_actions",
+  planProposals: "plan_proposals",
 } as const
 
 export type MissionRecord = Mission

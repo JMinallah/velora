@@ -138,7 +138,8 @@ export type Event = {
     | "replan-generated"
     | "action-proposed"
     | "action-rejected"
-    | "change-undone";
+    | "change-undone"
+    | "mission-accepted";
   actor: "user" | "agent" | "system";
   payload: Record<string, unknown>;
   createdAt: string;

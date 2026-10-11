@@ -43,4 +43,14 @@ export interface LlmProvider {
    * response, forwarding visible text to `onText` as it arrives.
    */
   generateStream?(input: GenerateInput & { onText: (delta: string) => void }): Promise<ProviderResponse>
+  /**
+   * Optional: a single JSON answer constrained by `jsonSchema` (no tools), e.g.
+   * a mission plan. Returns the raw text; callers must validate it.
+   */
+  generateStructured?(input: {
+    system: string
+    prompt: string
+    jsonSchema: Record<string, unknown>
+    signal?: AbortSignal
+  }): Promise<string>
 }

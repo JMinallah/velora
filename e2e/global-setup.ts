@@ -30,6 +30,8 @@ export default async function globalSetup() {
     })
 
     await mkdir("e2e/.auth", { recursive: true })
+    // Specs that seed data directly need to know who is signed in.
+    await writeFile("e2e/.auth/user.json", JSON.stringify({ userId: userId.toHexString() }))
     await writeFile(
       "e2e/.auth/state.json",
       JSON.stringify({

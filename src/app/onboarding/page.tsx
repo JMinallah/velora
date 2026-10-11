@@ -1,22 +1,26 @@
 "use client";
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Textarea } from "@/components/ui/textarea";
-import { Button } from "@/components/ui/button";
+import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { useState } from "react";
-import { saveLatestTransitionPlan } from "@/lib/coordination/session";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Textarea } from "@/components/ui/textarea";
+import { Button } from "@/components/ui/button";
 
+/**
+ * Onboarding (FR-MSN-1): describe a transition, and Velora drafts a plan.
+ * The draft is a proposal — the user reviews, edits and accepts it on
+ * /plan/[id] before any mission exists (FR-MSN-2). When AI is unavailable,
+ * the user is offered manual planning with their text carried over.
+ */
 export default function OnboardingPage() {
   const router = useRouter();
   const [goal, setGoal] = useState("");
   const [deadline, setDeadline] = useState("");
   const [concerns, setConcerns] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
-  const [plan, setPlan] = useState("");
-  // Set when AI planning failed or is disabled: the user is offered manual creation instead.
+  // Set when AI planning failed or is unavailable: the user is offered manual creation instead.
   const [aiProblem, setAiProblem] = useState<string | null>(null);
 
   // Carries what the user already typed over to the manual form.
@@ -31,81 +35,32 @@ export default function OnboardingPage() {
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
-    const trimmedGoal = goal.trim();
-    if (!trimmedGoal) return;
+    if (!goal.trim()) return;
 
     setIsGenerating(true);
     setAiProblem(null);
-
     try {
-      const response = await fetch("/api/plan", {
+      const response = await fetch("/api/plans", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          goal: trimmedGoal,
-          deadline: deadline.trim(),
-          concerns: concerns.trim(),
+          goal: goal.trim(),
+          deadline: deadline.trim() || undefined,
+          concerns: concerns.trim() || undefined,
         }),
       });
-
       const data = await response.json().catch(() => ({}));
-
-      if (!response.ok) {
-        setAiProblem(
-          data?.code === "agent_disabled"
-            ? data.error
-            : "We couldn't generate a plan right now. You can create the mission yourself and add tasks as you go."
-        );
+      if (response.ok && data?.success) {
+        router.push(`/plan/${data.data.id}`);
         return;
       }
-
-      const generatedPlan = data.response || "No plan returned.";
-      setPlan(generatedPlan);
-      saveLatestTransitionPlan(generatedPlan);
-
-      // Create a mission from the onboarding result
-      try {
-        const missionRes = await fetch(`/api/missions`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            title: trimmedGoal,
-            subtitle: deadline.trim() || undefined,
-            overview: generatedPlan,
-            nextStep: "Review plan and begin execution",
-            source: "onboarding",
-          }),
-        })
-
-        const missionData = await missionRes.json().catch(() => ({}))
-        if (!missionRes.ok || !missionData?.success) {
-          throw new Error(missionData?.error || "Failed to create mission")
-        }
-
-        const mission = missionData.data
-
-        // Create initial tasks by splitting the plan into lines (pick up to 3)
-        const lines = generatedPlan.split("\n").map((line: string) => line.trim()).filter(Boolean)
-        const initialTasks = lines.slice(0, 3)
-
-        for (const line of (initialTasks.length ? initialTasks : ["Review the generated plan"])) {
-          await fetch(`/api/missions/${mission.id}/tasks`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ label: line.slice(0, 300), category: "Initial", priority: "medium" }),
-          })
-        }
-
-        router.push(`/mission/${mission.id}`)
-      } catch (err) {
-        console.error("Failed to create mission/tasks from onboarding", err)
-        setPlan((currentPlan) => currentPlan || "We generated a plan, but could not create the mission yet. Please try again.")
-      }
-    } catch (error) {
-      console.error("Onboarding error:", error);
-      setPlan(error instanceof Error ? error.message : "Failed to generate plan.");
+      setAiProblem(
+        typeof data?.error === "string" && data?.code
+          ? data.error
+          : "We couldn't draft a plan right now. You can create the mission yourself and add tasks as you go."
+      );
+    } catch {
+      setAiProblem("We couldn't reach Velora. You can create the mission yourself and add tasks as you go.");
     } finally {
       setIsGenerating(false);
     }
@@ -121,52 +76,67 @@ export default function OnboardingPage() {
       >
         <Card className="w-full max-w-2xl mx-auto">
           <CardHeader className="text-center">
-            <CardTitle className="text-2xl">Welcome to Velora</CardTitle>
+            <CardTitle className="text-2xl">Plan a transition with Velora</CardTitle>
             <CardDescription>
-              Let&apos;s start by defining your mission. Describe the life transition
-              you&apos;re navigating.
+              Describe the change you&apos;re making. Velora drafts a plan for you to review — nothing is saved until
+              you accept it.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-              <Textarea
-                value={goal}
-                onChange={(event) => setGoal(event.target.value)}
-                placeholder="What are you trying to coordinate?"
-                className="min-h-24 resize-none"
-              />
-              <Textarea
-                value={deadline}
-                onChange={(event) => setDeadline(event.target.value)}
-                placeholder="Deadline or target date"
-                className="min-h-16 resize-none"
-              />
-              <Textarea
-                value={concerns}
-                onChange={(event) => setConcerns(event.target.value)}
-                placeholder="Any risks, blockers, or concerns?"
-                className="min-h-20 resize-none"
-              />
-              <Button type="submit" className="w-full" disabled={isGenerating}>
-                {isGenerating ? "Generating..." : "Generate My Transition Plan"}
+              <label className="flex flex-col gap-1.5 text-sm font-medium">
+                What are you planning?
+                <Textarea
+                  value={goal}
+                  onChange={(event) => setGoal(event.target.value)}
+                  placeholder="e.g. Moving from Nairobi to Seoul for a new job"
+                  className="min-h-24 resize-none"
+                  maxLength={1000}
+                  required
+                />
+              </label>
+              <label className="flex flex-col gap-1.5 text-sm font-medium">
+                Deadline or target date <span className="font-normal text-muted-foreground">(optional)</span>
+                <Textarea
+                  value={deadline}
+                  onChange={(event) => setDeadline(event.target.value)}
+                  placeholder="e.g. Start work on 1 December"
+                  className="min-h-16 resize-none"
+                  maxLength={200}
+                />
+              </label>
+              <label className="flex flex-col gap-1.5 text-sm font-medium">
+                Risks, blockers or concerns <span className="font-normal text-muted-foreground">(optional)</span>
+                <Textarea
+                  value={concerns}
+                  onChange={(event) => setConcerns(event.target.value)}
+                  placeholder="e.g. Moving with a dog; need a work visa"
+                  className="min-h-20 resize-none"
+                  maxLength={2000}
+                />
+              </label>
+              <Button type="submit" className="w-full" disabled={isGenerating || !goal.trim()}>
+                {isGenerating ? "Drafting your plan…" : "Draft my plan"}
               </Button>
+              {isGenerating && (
+                <p className="text-center text-sm text-muted-foreground" aria-live="polite">
+                  This can take up to a minute.
+                </p>
+              )}
               <Button asChild variant="outline" className="w-full">
                 <Link href={manualHref}>Plan it myself (no AI)</Link>
               </Button>
             </form>
 
             {aiProblem && (
-              <div role="alert" className="mt-6 flex flex-col gap-3 rounded-lg border border-border/40 bg-muted/20 p-4 text-sm">
+              <div
+                role="alert"
+                className="mt-6 flex flex-col gap-3 rounded-lg border border-border/40 bg-muted/20 p-4 text-sm"
+              >
                 <p>{aiProblem}</p>
                 <Button asChild className="self-start">
                   <Link href={manualHref}>Create it manually instead</Link>
                 </Button>
-              </div>
-            )}
-
-            {plan && (
-              <div className="mt-6 rounded-lg border border-border/20 bg-muted/20 p-4 text-sm whitespace-pre-wrap">
-                {plan}
               </div>
             )}
           </CardContent>

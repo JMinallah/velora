@@ -34,6 +34,12 @@ import { GET as getMissionRoute, PATCH as patchMissionRoute } from "@/app/api/mi
 import { POST as createTaskRoute } from "@/app/api/missions/[id]/tasks/route"
 import { PATCH as patchTaskRoute } from "@/app/api/missions/[id]/tasks/[taskId]/route"
 import { GET as getUndoRoute, POST as undoRoute } from "@/app/api/missions/[id]/undo/route"
+import { POST as createPlanRoute } from "@/app/api/plans/route"
+import { GET as getPlanRoute } from "@/app/api/plans/[id]/route"
+import { POST as acceptPlanRoute } from "@/app/api/plans/[id]/accept/route"
+import { POST as rejectPlanRoute } from "@/app/api/plans/[id]/reject/route"
+import { GET as listMissionsRoute } from "@/app/api/missions/route"
+import { createHash } from "node:crypto"
 import { LOCAL_UPLOAD_DIR } from "@/lib/storage/gcs"
 import { closeClient } from "@/adapters/db"
 
@@ -498,6 +504,144 @@ describeDb("agent tool setTaskDependency (4-2)", () => {
     const byId = Object.fromEntries(tasks.map((t: { id: string; dependsOn: string[] }) => [t.id, t.dependsOn]))
     expect(byId[movers]).toEqual([lease])
     expect(byId[lease]).toEqual([]) // the looping request was refused
+  })
+})
+
+describeDb("plan proposals: generate → review → accept or reject (4-3, 4-4)", () => {
+  const plan = {
+    title: "Move to Seoul",
+    summary: "Relocating from Nairobi for a new job",
+    targetDate: "2027-03-01",
+    phases: [
+      {
+        name: "Paperwork",
+        tasks: [
+          { key: "visa-reqs", label: "Check visa requirements on the embassy site" },
+          { key: "apply-visa", label: "Apply for work visa", dueDate: "2027-01-10", dependsOn: ["visa-reqs"] },
+        ],
+      },
+      { name: "Logistics", tasks: [{ key: "flights", label: "Book flights", dependsOn: ["apply-visa"] }] },
+    ],
+  }
+  const structured = (answers: (string | Error)[]) => {
+    let i = 0
+    provider = {
+      generate: async () => ({ text: "", toolCalls: [] }),
+      generateStructured: async () => {
+        const next = answers[Math.min(i++, answers.length - 1)]
+        if (next instanceof Error) throw next
+        return next
+      },
+    }
+  }
+  const draft = async (userId: string) => {
+    asUser(userId)
+    structured([JSON.stringify(plan)])
+    const res = await createPlanRoute(req("POST", "/api/plans", { goal: "Move from Nairobi to Seoul" }), ctx({}))
+    expect(res.status).toBe(201)
+    return (await res.json()).data as { id: string; status: string; plan: typeof plan }
+  }
+  const accept = (id: string, body: unknown) => acceptPlanRoute(req("POST", "/", body), ctx({ id }))
+  const reject = (id: string) => rejectPlanRoute(req("POST", "/", {}), ctx({ id }))
+  const missionsOf = async () => (await (await listMissionsRoute(req("GET", "/"), ctx({}))).json()).data as { id: string }[]
+
+  /** Hash of everything the user owns in the mission collections. */
+  const stateHash = async (userId: string) => {
+    const { getDb } = await import("@/adapters/db")
+    const db = await getDb()
+    const parts = await Promise.all(
+      ["missions", "tasks", "events"].map((c) => db.collection(c).find({ userId }).sort({ id: 1 }).toArray())
+    )
+    return createHash("sha256").update(JSON.stringify(parts)).digest("hex")
+  }
+
+  it("drafting creates a proposal only — no mission exists until it is accepted", async () => {
+    const proposal = await draft("user-plan-draft")
+    expect(proposal.status).toBe("proposed")
+    expect(await missionsOf()).toHaveLength(0)
+    const fetched = await getPlanRoute(req("GET", "/"), ctx({ id: proposal.id }))
+    expect((await fetched.json()).data.plan.title).toBe("Move to Seoul")
+
+    asUser("user-plan-stranger")
+    expect((await getPlanRoute(req("GET", "/"), ctx({ id: proposal.id }))).status).toBe(404)
+    expect((await accept(proposal.id, { plan })).status).toBe(404)
+  })
+
+  it("rejecting leaves all mission state byte-identical (exit gate)", async () => {
+    const proposal = await draft("user-plan-reject")
+    const before = await stateHash("user-plan-reject")
+    expect((await (await reject(proposal.id)).json()).data).toEqual({ status: "rejected" })
+    expect(await stateHash("user-plan-reject")).toBe(before)
+    expect((await reject(proposal.id)).status).toBe(409)
+    expect((await accept(proposal.id, { plan })).status).toBe(409)
+  })
+
+  it("accepting creates the mission, its tasks with real dependencies, and the acceptance event — once", async () => {
+    const proposal = await draft("user-plan-accept")
+    // The user edits the plan: renames the visa task.
+    const edited = structuredClone(plan)
+    edited.phases[0].tasks[1].label = "Apply for E-7 work visa"
+
+    const res = await accept(proposal.id, { plan: edited })
+    expect(res.status).toBe(200)
+    const { missionId } = (await res.json()).data
+
+    const mission = await (await getMissionRoute(req("GET", "/"), ctx({ id: missionId }))).json()
+    expect(mission.data).toMatchObject({ title: "Move to Seoul", overview: plan.summary, targetDate: "2027-03-01", source: "onboarding" })
+
+    const tasks = (await (await listTasksRoute(req("GET", "/"), ctx({ id: missionId }))).json()).data as {
+      id: string; label: string; phase: string; source: string; dependsOn: string[]
+    }[]
+    expect(tasks.map((t) => t.label)).toEqual(["Check visa requirements on the embassy site", "Apply for E-7 work visa", "Book flights"])
+    expect(tasks.every((t) => t.source === "agent")).toBe(true)
+    expect(tasks[1].dependsOn).toEqual([tasks[0].id]) // plan keys became task ids
+    expect(tasks[2]).toMatchObject({ phase: "Logistics", dependsOn: [tasks[1].id] })
+
+    const events = (await (await listEventsRoute(req("GET", "/"), ctx({ id: missionId }))).json()).data
+    expect(events).toContainEqual(
+      expect.objectContaining({ type: "mission-accepted", actor: "user", payload: expect.objectContaining({ proposalId: proposal.id, tasks: 3 }) })
+    )
+    expect((await accept(proposal.id, { plan })).status).toBe(409)
+  })
+
+  it("an accept that fails part-way leaves nothing behind (exit gate)", async () => {
+    const proposal = await draft("user-plan-atomic")
+    const before = await stateHash("user-plan-atomic")
+    const { acceptProposal } = await import("@/domain/proposals")
+    const { missionPlanSchema } = await import("@/domain/plan")
+    await expect(
+      acceptProposal("user-plan-atomic", proposal.id, missionPlanSchema.parse(plan), {
+        beforeCommit: async () => {
+          throw new Error("injected failure after the mission and tasks were written")
+        },
+      })
+    ).rejects.toThrow("injected failure")
+    expect(await stateHash("user-plan-atomic")).toBe(before)
+    expect((await (await getPlanRoute(req("GET", "/"), ctx({ id: proposal.id }))).json()).data.status).toBe("proposed")
+    expect((await accept(proposal.id, { plan })).status).toBe(200) // and it still works afterwards
+  })
+
+  it("re-validates the user's edits: loops and past dates are refused", async () => {
+    const proposal = await draft("user-plan-validate")
+    const looping = structuredClone(plan)
+    looping.phases[0].tasks[0].dependsOn = ["flights"] as never
+    expect((await accept(proposal.id, { plan: looping })).status).toBe(400)
+    const past = structuredClone(plan)
+    past.phases[1].tasks[0] = { ...past.phases[1].tasks[0], dueDate: "2020-01-01" } as never
+    expect((await accept(proposal.id, { plan: past })).status).toBe(400)
+  })
+
+  it("explains when AI is off (503), out of quota (503 llm_quota) or can't produce a valid plan (422)", async () => {
+    asUser("user-plan-errors")
+    const draftRes = () => createPlanRoute(req("POST", "/api/plans", { goal: "Move" }), ctx({}))
+    provider = null
+    expect((await (await draftRes()).json()).code).toBe("agent_disabled")
+    structured([Object.assign(new Error("quotaId GenerateRequestsPerDayPerProjectPerModel"), { status: 429 })])
+    expect((await (await draftRes()).json()).code).toBe("llm_quota")
+    structured(['{"title": ""}'])
+    const invalid = await draftRes()
+    expect(invalid.status).toBe(422)
+    expect((await invalid.json()).code).toBe("plan_invalid")
   })
 })
 

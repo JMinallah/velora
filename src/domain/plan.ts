@@ -56,3 +56,20 @@ export const missionPlanSchema = z
   })
 
 export type MissionPlan = z.infer<typeof missionPlanSchema>
+
+/**
+ * Date rules the schema can't express: nothing due in the past, and nothing
+ * after the target date when one is set. Returns readable problems.
+ */
+export function planDateIssues(plan: MissionPlan, today: string): string[] {
+  const issues: string[] = []
+  const target = plan.targetDate?.slice(0, 10)
+  if (target && target < today) issues.push(`targetDate ${target} is in the past (today is ${today})`)
+  for (const task of plan.phases.flatMap((p) => p.tasks)) {
+    const due = task.dueDate?.slice(0, 10)
+    if (!due) continue
+    if (due < today) issues.push(`task "${task.key}" is due ${due}, which is in the past (today is ${today})`)
+    else if (target && due > target) issues.push(`task "${task.key}" is due ${due}, after the target date ${target}`)
+  }
+  return issues
+}
