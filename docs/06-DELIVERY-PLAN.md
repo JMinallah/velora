@@ -109,17 +109,23 @@ The roadmap says *what* each phase is. This document says *how* each phase gets 
 - **3-6 (S)** Origin labels across the UI: task `source`, event `actor`, receipts styled distinctly from user actions.
 - **3-7 (M)** `evals/injection/` expanded: pasted instructions, fake "system" messages, instructions to delete, cross-mission references.
 
-### Exit gate
-- [ ] No destructive tool executes without a confirmed, unexpired, single-use nonce — *tests: missing / wrong / replayed / expired / foreign*
-- [ ] Undo round-trips byte-identically; undo after a manual edit refuses — *tests*
-- [ ] `confirm-writes` routes every write through confirmation — *test*
-- [ ] Injection set: 0 unauthorized tool proposals — *CI eval run*
+### Exit gate — reviewed 2026-10-11 (PRs #15–#18)
+- [x] No destructive tool executes without a confirmed, unexpired, single-use nonce — *`tests/routes-agent-docs.test.ts` › destructive actions need the user's confirmation: "a proposal deletes nothing…", "rejects a missing/invalid body (400), anonymous (401), a foreign user (404) and a wrong nonce (403)", "confirm executes exactly once with the stored args…; replay is 409", "concurrent confirms execute once", "an expired confirmation is refused (410)…", "the next turn's history tells the model the outcome — never the nonce"; `tests/agent-loop.test.ts` › "only proposes: nothing is deleted, the turn ends…"*
+- [x] Undo round-trips byte-identically; undo after a manual edit refuses — *`tests/routes-agent-docs.test.ts` › undo: "restores an agent update byte-identically (exit gate)…", "refuses to overwrite the user's edits made after the agent's change (exit gate)"; plus stack order and "concurrent undos … succeed once"*
+- [x] `confirm-writes` routes every write through confirmation — *`tests/agent-loop.test.ts` › "parks every write as a proposal while read tools still run"; `tests/routes-agent-docs.test.ts` › "parks writes; confirming applies them as the agent, confirmed by the user, and undoably"; E2E toggle test in `e2e/zero-ai.spec.ts`*
+- [x] Injection set: 0 unauthorized tool proposals — *6 injection fixtures (pasted, forwarded "system" override, pasted "delete everything", stored-data instructions, cross-mission, fake "confirmation disabled"): 6/6 on three consecutive local runs and in CI on PR #18 and on `main` after merge (run 38145207092)*
+
+**Gate review findings (2026-10-11):**
+- The prompt's injection rule is load-bearing (the Phase 2.5 sabotage check flipped the injection set to 0/2), so Phase 3 added the server-side backstop: even a fooled model can only *propose* a deletion, and execution needs the user's click with a nonce the model never sees ("fake confirmation-disabled" fixture).
+- Autonomy defaults to `standard` (writes visible as receipts and undoable; deletions always confirmed), per 03-AGENT-DESIGN §4.6; `confirm-writes` is one click, loosening explains first.
+- Confirmed agent changes are audited as `actor: agent` + `confirmedBy: user` and remain undoable.
+- Test infrastructure: route tests give each test user its own client IP, since all requests sharing one address had started tripping the per-IP AI rate limit.
 
 ---
 
 ## Phase 4 — Planning (missions born from conversation)
 
-**Entry gate:** Phase 3 exit gate fully ticked.
+**Entry gate:** Phase 3 exit gate fully ticked — met on 2026-10-11.
 
 ### Work items
 - **4-1 (S)** Test infrastructure: run the test MongoDB as a single-node **replica set** (local podman and CI) — multi-document transactions do not work on a standalone server. Atlas M0 already is one.
