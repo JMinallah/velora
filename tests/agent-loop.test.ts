@@ -27,8 +27,22 @@ vi.mock("@/domain/tasks", () => ({
     completed: false,
   })),
   updateTask: vi.fn(),
+  getTask: vi.fn().mockImplementation(async (_u: string, _m: string, taskId: string) =>
+    taskId === "t1" ? { id: "t1", label: "Book flights", dueDate: "2026-09-01" } : null
+  ),
+  deleteTask: vi.fn(),
 }))
 vi.mock("@/domain/reminders", () => ({ createReminder: vi.fn() }))
+vi.mock("@/domain/pendingActions", () => ({
+  proposeAction: vi.fn().mockImplementation(async (_u: string, input: { tool: string; summary: string }) => ({
+    id: "act-1",
+    nonce: "secret-nonce",
+    tool: input.tool,
+    summary: input.summary,
+    status: "pending",
+    expiresAt: "2026-10-11T12:10:00.000Z",
+  })),
+}))
 
 import { runAgentTurn } from "@/agent/loop"
 import * as tasks from "@/domain/tasks"
@@ -143,6 +157,35 @@ describe("runAgentTurn", () => {
     const run = await runAgentTurn({ provider, ...base })
     expect(run.trace).toEqual([{ tool: "createTask", ok: false }])
     expect(run.receipts).toHaveLength(0)
+  })
+
+  describe("destructive tools (03-AGENT-DESIGN §5)", () => {
+    it("only proposes: nothing is deleted, the turn ends, and the model never sees the nonce", async () => {
+      const provider = scriptedProvider([
+        { text: "", toolCalls: [{ name: "deleteTask", args: { taskId: "t1" } }] },
+        { text: "Deleted it!", toolCalls: [] }, // must never be reached
+      ])
+      const events: AgentStreamEvent[] = []
+      const run = await runAgentTurn({ provider, ...base, onEvent: (e) => events.push(e) })
+
+      expect(tasks.deleteTask).not.toHaveBeenCalled()
+      expect(provider.calls).toBe(1) // turn ended after the proposal
+      expect(run.reply).toMatch(/need your confirmation before deleting anything/)
+      expect(run.proposals).toEqual([expect.objectContaining({ id: "act-1", summary: 'Delete task "Book flights" (due 2026-09-01)' })])
+      expect(events).toContainEqual({ type: "confirmation", action: expect.objectContaining({ nonce: "secret-nonce" }) })
+      expect(run.receipts).toHaveLength(0)
+    })
+
+    it("feeds back a proposal for a task that does not exist instead of parking it", async () => {
+      const provider = scriptedProvider([
+        { text: "", toolCalls: [{ name: "deleteTask", args: { taskId: "nope" } }] },
+        { text: "I couldn't find that task.", toolCalls: [] },
+      ])
+      const run = await runAgentTurn({ provider, ...base })
+      expect(run.proposals).toHaveLength(0)
+      expect(run.trace).toEqual([{ tool: "deleteTask", ok: false }])
+      expect(run.reply).toBe("I couldn't find that task.")
+    })
   })
 
   describe("streaming", () => {

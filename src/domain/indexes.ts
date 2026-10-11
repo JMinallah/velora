@@ -27,6 +27,11 @@ export async function ensureIndexes(db: Db) {
   // The cron dispatcher queries across users by status + due time.
   await db.collection(COLLECTIONS.reminders).createIndex({ status: 1, dueAt: 1 })
 
+  // Proposed destructive actions: looked up by owner + id; kept a day past
+  // expiry so a late confirm gets "expired" (410), not "not found".
+  await db.collection(COLLECTIONS.pendingActions).createIndex({ userId: 1, id: 1 }, { unique: true })
+  await db.collection(COLLECTIONS.pendingActions).createIndex({ expiresAt: 1 }, { expireAfterSeconds: 24 * 60 * 60 })
+
   // Rate-limit counters expire with their window (expiresAt is a real Date).
   await db.collection(COLLECTIONS.rateLimits).createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 })
 }

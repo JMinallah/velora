@@ -1,11 +1,15 @@
+import type { ProposedActionView } from "@/types"
+
 /** Events the chat route streams as NDJSON (one JSON object per line). */
 export type ChatStreamEvent =
   | { type: "text"; delta: string }
   | { type: "receipt"; tool: string; text: string }
+  | { type: "confirmation"; action: ProposedActionView }
   | {
       type: "done"
       reply: string
       receipts: { tool: string; text: string }[]
+      proposals: ProposedActionView[]
       promptVersion: string
       turnId: string
     }

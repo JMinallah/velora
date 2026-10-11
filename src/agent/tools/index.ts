@@ -12,8 +12,9 @@ import type { ChangeOrigin } from "@/domain/events"
  * agent affects state. Every tool calls the same domain functions the REST
  * API uses — userId is injected by the loop, never model-supplied. Write-tier
  * tools return a receipt line that is shown to the user and stored.
- * No destructive-tier tools exist yet; they arrive with the server-side
- * confirmation flow in Phase 3.
+ * Destructive-tier tools never execute inside the loop: they only *propose*
+ * (docs/03-AGENT-DESIGN.md §5). The loop parks the call as a pending action;
+ * `perform` runs only from the confirmation endpoint, after the user confirms.
  */
 export type ToolTier = "read" | "write"
 
@@ -208,6 +209,72 @@ const createReminderTool = defineTool({
   },
 })
 
+/** Effect of a confirmed destructive action, so the UI can update without refetching. */
+export type DestructiveEffect = { kind: "task-deleted"; taskId: string } | { kind: "mission-deleted" }
+
+export type DestructiveToolDefinition<S extends z.ZodTypeAny = z.ZodTypeAny> = {
+  name: string
+  tier: "destructive"
+  description: string
+  input: S
+  /** What *would* happen, checked against current data; shown to the user on the confirmation card. */
+  describe: (userId: string, missionId: string, args: z.infer<S>) => Promise<{ summary: string } | { error: string }>
+  /** Only ever called by the confirmation endpoint, after the user confirmed. */
+  perform: (
+    userId: string,
+    missionId: string,
+    args: z.infer<S>,
+    origin: ChangeOrigin
+  ) => Promise<{ receipt: string; effect: DestructiveEffect } | { error: string }>
+}
+
+function defineDestructiveTool<S extends z.ZodTypeAny>(def: DestructiveToolDefinition<S>) {
+  return def
+}
+
+const deleteTaskTool = defineDestructiveTool({
+  name: "deleteTask",
+  tier: "destructive",
+  description:
+    "Propose deleting one task. Nothing is deleted until the user confirms on a card. Get the taskId from listTasks first. Use only when the user clearly asks to delete or remove a task.",
+  input: z.object({ taskId: z.string().min(1) }),
+  describe: async (userId, missionId, args) => {
+    const task = await tasks.getTask(userId, missionId, args.taskId)
+    if (!task) return { error: "task not found" }
+    return { summary: `Delete task "${task.label}"${task.dueDate ? ` (due ${task.dueDate.slice(0, 10)})` : ""}` }
+  },
+  perform: async (userId, missionId, args, origin) => {
+    const task = await tasks.getTask(userId, missionId, args.taskId)
+    if (!task) return { error: "That task no longer exists." }
+    await tasks.deleteTask(userId, missionId, args.taskId, origin)
+    return { receipt: `Deleted task "${task.label}"`, effect: { kind: "task-deleted", taskId: args.taskId } }
+  },
+})
+
+const deleteMissionTool = defineDestructiveTool({
+  name: "deleteMission",
+  tier: "destructive",
+  description:
+    "Propose deleting this entire mission with all its tasks, messages, documents and reminders. Nothing is deleted until the user confirms on a card. Use only when the user explicitly asks to delete the mission itself.",
+  input: z.object({}),
+  describe: async (userId, missionId) => {
+    const mission = await missions.getMission(userId, missionId)
+    if (!mission) return { error: "mission not found" }
+    const count = (await tasks.listTasks(userId, missionId)).length
+    return { summary: `Delete the whole mission "${mission.title}" and its ${count} task${count === 1 ? "" : "s"}` }
+  },
+  perform: async (userId, missionId, _args, origin) => {
+    const mission = await missions.getMission(userId, missionId)
+    if (!mission) return { error: "That mission no longer exists." }
+    await missions.deleteMission(userId, missionId, origin)
+    return { receipt: `Deleted mission "${mission.title}"`, effect: { kind: "mission-deleted" } }
+  },
+})
+
+export const destructiveTools: Record<string, DestructiveToolDefinition> = Object.fromEntries(
+  [deleteTaskTool, deleteMissionTool].map((t) => [t.name, t as unknown as DestructiveToolDefinition])
+)
+
 export const toolRegistry: Record<string, ToolDefinition> = Object.fromEntries(
   [getMissionOverview, listTasksTool, getUpcomingDeadlines, createTask, updateTaskTool, completeTask, createReminderTool].map(
     (t) => [t.name, t as unknown as ToolDefinition]
@@ -215,7 +282,7 @@ export const toolRegistry: Record<string, ToolDefinition> = Object.fromEntries(
 )
 
 export function toolDeclarations(): ToolDeclaration[] {
-  return Object.values(toolRegistry).map((t) => ({
+  return [...Object.values(toolRegistry), ...Object.values(destructiveTools)].map((t) => ({
     name: t.name,
     description: t.description,
     parameters: zodToJsonSchema(t.input, { $refStrategy: "none" }) as Record<string, unknown>,

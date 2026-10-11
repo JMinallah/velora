@@ -18,6 +18,8 @@ const EVENT_TYPES = [
   "reminder-due",
   "risk-updated",
   "replan-generated",
+  "action-proposed",
+  "action-rejected",
 ] as const;
 
 const EVENT_ACTORS = ["all", "user", "agent", "system"] as const;
@@ -162,6 +164,7 @@ export default function MissionEventsPage() {
                     )}
                     <span className="block text-xs text-muted-foreground">
                       via {event.cause.tool}({JSON.stringify(event.cause.args)})
+                      {event.confirmedBy === "user" && " · confirmed by you"}
                     </span>
                   </p>
                 )}

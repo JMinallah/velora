@@ -125,6 +125,7 @@ async function main() {
           reply: run.reply,
           tasks: () => listTasks(userId, mission.id),
           today: new Date().toISOString().slice(0, 10),
+          proposals: run.proposals.map((p) => ({ tool: p.tool, summary: p.summary })),
         })
         if (problem) {
           tally.failed++

@@ -27,6 +27,8 @@ import { loadLatestTransitionPlan } from "@/lib/coordination/session";
 import { MissionHeader } from "@/components/mission/MissionHeader";
 import { TaskList } from "@/components/mission/TaskList";
 import { readChatStream } from "@/lib/chat-stream";
+import { ConfirmationCard, type ConfirmationEffect } from "@/components/mission/ConfirmationCard";
+import type { PendingActionStatus } from "@/types";
 
 function resolveMissionId(value: string | string[] | undefined, availableIds: string[]) {
   const candidate = Array.isArray(value) ? value[0] : value;
@@ -322,6 +324,19 @@ export default function MissionPage() {
             const at = messages.findIndex((m) => m.id === replyId);
             return at < 0 ? [...messages, receipt] : [...messages.slice(0, at), receipt, ...messages.slice(at)];
           });
+        } else if (event.type === "confirmation") {
+          const card: Message = {
+            userId: "local",
+            id: `${replyId}-confirm-${event.action.id}`,
+            type: "confirmation",
+            text: event.action.summary,
+            action: event.action,
+            createdAt: new Date().toISOString(),
+          };
+          updateMessages((messages) => {
+            const at = messages.findIndex((m) => m.id === replyId);
+            return at < 0 ? [...messages, card] : [...messages.slice(0, at), card, ...messages.slice(at)];
+          });
         } else if (event.type === "done") {
           finished = true;
           updateMessages((messages) => messages.map((m) => (m.id === replyId ? { ...m, text: event.reply } : m)));
@@ -362,6 +377,36 @@ export default function MissionPage() {
     } finally {
       setIsSending(false);
     }
+  };
+
+  // A confirmation card was decided: keep its status and the affected data in step.
+  const handleDecided = (actionId: string, status: PendingActionStatus, effect?: ConfirmationEffect) => {
+    const missionId = activeMissionId;
+    if (effect?.kind === "mission-deleted") {
+      const remaining = Object.keys(missions).filter((id) => id !== missionId);
+      setMissions((cur) => {
+        const next = { ...cur };
+        delete next[missionId];
+        return next;
+      });
+      router.replace(remaining.length > 0 ? `/mission/${remaining[0]}` : "/mission/new");
+      return;
+    }
+    setMissions((cur) => {
+      const mission = cur[missionId];
+      if (!mission) return cur;
+      return {
+        ...cur,
+        [missionId]: {
+          ...mission,
+          messages: mission.messages.map((m) =>
+            m.action?.id === actionId ? { ...m, action: { ...m.action, status } } : m
+          ),
+          tasks:
+            effect?.kind === "task-deleted" ? mission.tasks.filter((t) => t.id !== effect.taskId) : mission.tasks,
+        },
+      };
+    });
   };
 
   const missionSwitcher = useMemo(
@@ -534,7 +579,11 @@ export default function MissionPage() {
                         exit={{ opacity: 0, scale: 0.98 }}
                         transition={{ duration: 0.25, ease: "easeOut" }}
                       >
-                        <AiMessage message={message} />
+                        {message.type === "confirmation" ? (
+                          <ConfirmationCard message={message} missionId={activeMissionId} onDecided={handleDecided} />
+                        ) : (
+                          <AiMessage message={message} />
+                        )}
                       </motion.div>
                     ))}
                   </AnimatePresence>

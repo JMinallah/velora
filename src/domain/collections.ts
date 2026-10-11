@@ -8,6 +8,7 @@ export const COLLECTIONS = {
   documents: "documents",
   events: "events",
   rateLimits: "rate_limits",
+  pendingActions: "pending_actions",
 } as const
 
 export type MissionRecord = Mission

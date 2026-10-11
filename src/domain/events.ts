@@ -9,7 +9,7 @@ import { COLLECTIONS, type EventRecord } from "./collections"
  */
 export type ChangeOrigin =
   | EventRecord["actor"]
-  | { actor: "agent"; turnId: string; tool: string; args: unknown }
+  | { actor: "agent"; turnId: string; tool: string; args: unknown; confirmedBy?: "user" }
 
 /**
  * The append-only audit trail (docs/02-ARCHITECTURE.md §3.1): every domain
@@ -35,7 +35,13 @@ export async function emitEvent(
     actor: typeof origin === "string" ? origin : origin.actor,
     payload: input.payload ?? {},
     createdAt: new Date().toISOString(),
-    ...(typeof origin === "string" ? {} : { turnId: origin.turnId, cause: { tool: origin.tool, args: origin.args } }),
+    ...(typeof origin === "string"
+      ? {}
+      : {
+          turnId: origin.turnId,
+          cause: { tool: origin.tool, args: origin.args },
+          ...(origin.confirmedBy ? { confirmedBy: origin.confirmedBy } : {}),
+        }),
   }
   await db.collection<EventRecord>(COLLECTIONS.events).insertOne(event)
   return event

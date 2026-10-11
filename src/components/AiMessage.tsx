@@ -60,7 +60,8 @@ export function AiMessage({ message }: { message: Message }) {
     );
   }
 
-  const config = messageConfig[message.type];
+  // Confirmation cards render via ConfirmationCard; fall back defensively.
+  const config = message.type === "confirmation" ? messageConfig.alert : messageConfig[message.type];
   const Icon = config.icon;
 
   return (

@@ -28,7 +28,20 @@ export async function createMessage(
     ...(input.promptVersion ? { promptVersion: input.promptVersion } : {}),
     ...(input.tool ? { tool: input.tool } : {}),
     ...(input.turnId ? { turnId: input.turnId } : {}),
+    ...(input.action ? { action: input.action } : {}),
   }
   await db.collection<MessageRecord>(COLLECTIONS.messages).insertOne(msg)
   return msg
+}
+
+/** Keeps a stored confirmation card in step with the user's decision. */
+export async function setConfirmationStatus(
+  userId: string,
+  actionId: string,
+  status: NonNullable<MessageRecord["action"]>["status"]
+): Promise<void> {
+  const db = await getDb()
+  await db
+    .collection<MessageRecord>(COLLECTIONS.messages)
+    .updateOne({ userId, type: "confirmation", "action.id": actionId }, { $set: { "action.status": status } })
 }

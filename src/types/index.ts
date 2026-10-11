@@ -7,7 +7,7 @@ export type Message = {
   id: string;
   userId: string;
   missionId?: string;
-  type: "suggestion" | "alert" | "update" | "reasoning" | "user";
+  type: "suggestion" | "alert" | "update" | "reasoning" | "user" | "confirmation";
   text: string;
   createdAt: string;
   extractedData?: ExtractedData;
@@ -18,6 +18,21 @@ export type Message = {
   tool?: string;
   /** Groups a chat turn: the user's message, its receipts, the reply, and the events it caused. */
   turnId?: string;
+  /** type "confirmation": a destructive action the agent proposed, awaiting the user's decision. */
+  action?: ProposedActionView;
+};
+
+export type PendingActionStatus = "pending" | "executed" | "rejected" | "expired" | "failed";
+
+/** What the user sees on a confirmation card (and needs to answer it). */
+export type ProposedActionView = {
+  id: string;
+  /** Single-use; required to confirm. Never shown to the model. */
+  nonce: string;
+  tool: string;
+  summary: string;
+  status: PendingActionStatus;
+  expiresAt: string;
 };
 
 export type MissionAction = {
@@ -106,7 +121,9 @@ export type Event = {
     | "reminder-created"
     | "reminder-due"
     | "risk-updated"
-    | "replan-generated";
+    | "replan-generated"
+    | "action-proposed"
+    | "action-rejected";
   actor: "user" | "agent" | "system";
   payload: Record<string, unknown>;
   createdAt: string;
@@ -114,4 +131,6 @@ export type Event = {
   turnId?: string;
   /** Agent changes: the validated tool call that made the change. */
   cause?: { tool: string; args: unknown };
+  /** Destructive agent changes: executed only after the user confirmed (03-AGENT-DESIGN §5). */
+  confirmedBy?: "user";
 };

@@ -1,9 +1,11 @@
 import { randomUUID } from "node:crypto"
 import type { AgentTurn, LlmProvider } from "./providers/types"
-import { toolRegistry, toolDeclarations } from "./tools"
-import { coordinatorPrompt, PROMPT_VERSION } from "./prompts/coordinator.v1"
+import { toolRegistry, toolDeclarations, destructiveTools } from "./tools"
+import { coordinatorPrompt, PROMPT_VERSION } from "./prompts/coordinator.v2"
 import * as missions from "@/domain/missions"
 import * as tasks from "@/domain/tasks"
+import { proposeAction } from "@/domain/pendingActions"
+import type { ProposedActionView } from "@/types"
 
 /**
  * The bounded reasoning loop (docs/03-AGENT-DESIGN.md §1.2). Hard bounds make
@@ -22,7 +24,13 @@ export type AgentReceipt = { tool: string; text: string }
 export type ToolTraceEntry = { tool: string; ok: boolean }
 
 /** Progress while a turn runs, for streaming to the user (FR-AGT-1). */
-export type AgentStreamEvent = { type: "text"; delta: string } | { type: "receipt"; receipt: AgentReceipt }
+export type AgentStreamEvent =
+  | { type: "text"; delta: string }
+  | { type: "receipt"; receipt: AgentReceipt }
+  | { type: "confirmation"; action: ProposedActionView }
+
+/** At most this many destructive proposals per turn ("clean up everything" must not flood the user). */
+const MAX_PROPOSALS_PER_TURN = 10
 
 export type AgentRunResult = {
   reply: string
@@ -33,6 +41,8 @@ export type AgentRunResult = {
   promptVersion: string
   /** Stamped on every event this turn's tools emitted (FR-TRS-2). */
   turnId: string
+  /** Destructive actions proposed this turn, awaiting the user's confirmation (03-AGENT-DESIGN §5). */
+  proposals: ProposedActionView[]
 }
 
 class TurnDeadlineExceeded extends Error {}
@@ -112,6 +122,7 @@ export async function runAgentTurn(input: {
   // It may already have been streamed to the user, so it stays part of the
   // reply: what was shown while streaming always matches what is stored.
   const preambles: string[] = []
+  const proposals: ProposedActionView[] = []
   const finish = (finalText: string, stepCount = steps): AgentRunResult => ({
     reply: [...preambles, finalText].filter(Boolean).join("\n\n"),
     receipts,
@@ -119,6 +130,7 @@ export async function runAgentTurn(input: {
     steps: stepCount,
     promptVersion: PROMPT_VERSION,
     turnId,
+    proposals,
   })
   const outOfTime = () =>
     finish(
@@ -169,6 +181,45 @@ export async function runAgentTurn(input: {
     })
 
     for (const call of response.toolCalls) {
+      // Destructive tools only propose: the call is validated, described from
+      // current data, and parked for the user's confirmation. Nothing executes.
+      const destructive = destructiveTools[call.name]
+      if (destructive) {
+        const parsed = destructive.input.safeParse(call.args ?? {})
+        const described = parsed.success
+          ? await destructive.describe(input.userId, input.missionId, parsed.data)
+          : { error: "invalid arguments" }
+        if (!parsed.success || "error" in described || proposals.length >= MAX_PROPOSALS_PER_TURN) {
+          consecutiveFailures++
+          trace.push({ tool: call.name, ok: false })
+          const error = !parsed.success
+            ? { error: "invalid arguments", issues: parsed.error.issues }
+            : "error" in described
+              ? described
+              : { error: `at most ${MAX_PROPOSALS_PER_TURN} deletions can be proposed at once` }
+          turns.push({ role: "tool", name: call.name, callId: call.id, result: error })
+          continue
+        }
+        const action = await proposeAction(input.userId, {
+          missionId: input.missionId,
+          turnId,
+          tool: call.name,
+          args: parsed.data,
+          summary: described.summary,
+        })
+        proposals.push(action)
+        trace.push({ tool: call.name, ok: true })
+        input.onEvent?.({ type: "confirmation", action })
+        // The model learns only that confirmation is pending — never the nonce.
+        turns.push({
+          role: "tool",
+          name: call.name,
+          callId: call.id,
+          result: { status: "awaiting_user_confirmation", summary: described.summary },
+        })
+        continue
+      }
+
       const tool = toolRegistry[call.name]
       if (!tool) {
         consecutiveFailures++
@@ -210,6 +261,16 @@ export async function runAgentTurn(input: {
           result: { error: error instanceof Error ? error.message : "tool execution failed" },
         })
       }
+    }
+
+    // A proposal ends the turn with a fixed reply: the model never gets to
+    // describe a deletion as done, and the user decides on the card.
+    if (proposals.length > 0) {
+      return finish(
+        proposals.length === 1
+          ? "I need your confirmation before deleting anything — nothing has changed yet. Confirm or cancel below."
+          : `I need your confirmation for these ${proposals.length} deletions — nothing has changed yet. Confirm or cancel each below.`
+      )
     }
 
     if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {

@@ -4,6 +4,7 @@ import type { TaskRecord } from "../src/domain/collections"
 export type EvalSet = "tool-selection" | "injection" | "regression"
 
 export const WRITE_TOOLS = new Set(["createTask", "updateTask", "completeTask", "createReminder"])
+export const DESTRUCTIVE_TOOLS = new Set(["deleteTask", "deleteMission"])
 
 /** What a fixture's check can inspect after one agent turn against a fresh mission. */
 export type EvalOutcome = {
@@ -13,6 +14,8 @@ export type EvalOutcome = {
   tasks: () => Promise<TaskRecord[]>
   /** The date the agent was told is today (YYYY-MM-DD). */
   today: string
+  /** Destructive actions the agent proposed (nothing executes without the user's confirmation). */
+  proposals: { tool: string; summary: string }[]
 }
 
 export type Fixture = {
@@ -24,3 +27,6 @@ export type Fixture = {
 
 export const tools = (outcome: EvalOutcome) => outcome.trace.map((t) => t.tool)
 export const writes = (outcome: EvalOutcome) => outcome.trace.filter((t) => WRITE_TOOLS.has(t.tool))
+/** Anything that changes, or proposes to change, the user's data. */
+export const changes = (outcome: EvalOutcome) =>
+  outcome.trace.filter((t) => WRITE_TOOLS.has(t.tool) || DESTRUCTIVE_TOOLS.has(t.tool))
