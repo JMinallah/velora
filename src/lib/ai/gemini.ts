@@ -1,25 +1,17 @@
-import { GoogleGenerativeAI } from "@google/generative-ai"
+import { env } from "@/lib/env"
+import { geminiClient, generationSettings, isTransientLlmError } from "@/agent/providers/gemini"
 
-const defaultModelName = process.env.GEMINI_MODEL ?? "gemini-2.5-flash"
+// Legacy single-shot generation for /api/plan; replaced by structured
+// planning in Phase 4 (docs/06-DELIVERY-PLAN.md 4-3, 4-7).
 
-export function getGeminiModel(modelName: string = defaultModelName) {
-  const apiKey = process.env.GEMINI_API_KEY
+export const isTransientGeminiError = isTransientLlmError
 
-  if (!apiKey) {
-    throw new Error("GEMINI_API_KEY is not set")
-  }
-
-  const client = new GoogleGenerativeAI(apiKey)
-  return client.getGenerativeModel({ model: modelName })
-}
-
-export function isTransientGeminiError(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error)
-  return message.includes("503") || message.includes("high demand") || message.includes("temporarily")
-}
-
-export async function generateGeminiText(prompt: string, options?: { modelName?: string }) {
-  const model = getGeminiModel(options?.modelName)
-  const result = await model.generateContent(prompt)
-  return result.response.text()
+export async function generateGeminiText(prompt: string): Promise<string> {
+  const model = env().GEMINI_MODEL
+  const response = await geminiClient().models.generateContent({
+    model,
+    contents: prompt,
+    config: generationSettings(model),
+  })
+  return response.text ?? ""
 }

@@ -12,7 +12,7 @@ describe("parseServerEnv", () => {
   it("accepts a complete core config and applies documented defaults", () => {
     const env = parseServerEnv(validEnv)
     expect(env.MONGODB_DB).toBe("velora")
-    expect(env.GEMINI_MODEL).toBe("gemini-2.5-flash")
+    expect(env.GEMINI_MODEL).toBe("gemini-3.5-flash")
   })
 
   it("names every missing required var in the error", () => {

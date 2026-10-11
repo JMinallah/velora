@@ -208,6 +208,6 @@ export function toolDeclarations(): ToolDeclaration[] {
   return Object.values(toolRegistry).map((t) => ({
     name: t.name,
     description: t.description,
-    parameters: zodToJsonSchema(t.input, { target: "openApi3" }) as Record<string, unknown>,
+    parameters: zodToJsonSchema(t.input, { $refStrategy: "none" }) as Record<string, unknown>,
   }))
 }
