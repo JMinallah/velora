@@ -1,9 +1,9 @@
 import { v4 as uuidv4 } from "uuid"
 import { getDb } from "@/adapters/db"
 import { COLLECTIONS, type MissionRecord, withoutProtectedFields } from "./collections"
-import { emitEvent } from "./events"
+import { emitEvent, type ChangeOrigin } from "./events"
 
-type Actor = "user" | "agent" | "system"
+type Actor = ChangeOrigin
 
 export async function listMissions(userId: string): Promise<MissionRecord[]> {
   const db = await getDb()

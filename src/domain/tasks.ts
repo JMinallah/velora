@@ -1,10 +1,10 @@
 import { v4 as uuidv4 } from "uuid"
 import { getDb } from "@/adapters/db"
 import { COLLECTIONS, type TaskRecord, withoutProtectedFields } from "./collections"
-import { emitEvent } from "./events"
+import { emitEvent, type ChangeOrigin } from "./events"
 import { getMission } from "./missions"
 
-type Actor = "user" | "agent" | "system"
+type Actor = ChangeOrigin
 
 export async function listTasks(userId: string, missionId: string): Promise<TaskRecord[]> {
   const db = await getDb()

@@ -30,6 +30,7 @@ vi.mock("@/domain/tasks", () => ({
 vi.mock("@/domain/reminders", () => ({ createReminder: vi.fn() }))
 
 import { runAgentTurn } from "@/agent/loop"
+import * as tasks from "@/domain/tasks"
 
 function scriptedProvider(responses: ProviderResponse[]): LlmProvider & { calls: number } {
   const provider = {
@@ -64,6 +65,21 @@ describe("runAgentTurn", () => {
     expect(run.receipts).toEqual([
       { tool: "createTask", text: 'Created task "Get visa photos"' },
     ])
+  })
+
+  it("records which turn and tool call caused each agent change (FR-TRS-2)", async () => {
+    const provider = scriptedProvider([
+      { text: "", toolCalls: [{ name: "createTask", args: { label: "Get visa photos" } }] },
+      { text: "Done.", toolCalls: [] },
+    ])
+    const run = await runAgentTurn({ provider, ...base, turnId: "turn-42" })
+    expect(run.turnId).toBe("turn-42")
+    expect(tasks.createTask).toHaveBeenLastCalledWith(
+      "u1",
+      "m1",
+      expect.objectContaining({ label: "Get visa photos", source: "agent" }),
+      { actor: "agent", turnId: "turn-42", tool: "createTask", args: { label: "Get visa photos" } }
+    )
   })
 
   it("feeds invalid arguments back to the model for self-correction", async () => {

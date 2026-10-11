@@ -5,6 +5,7 @@ import * as tasks from "@/domain/tasks"
 import * as reminders from "@/domain/reminders"
 import { isoDate } from "@/domain/schemas"
 import type { ToolDeclaration } from "@/agent/providers/types"
+import type { ChangeOrigin } from "@/domain/events"
 
 /**
  * Tool contract (docs/03-AGENT-DESIGN.md §2): tools are the ONLY way the
@@ -16,6 +17,9 @@ import type { ToolDeclaration } from "@/agent/providers/types"
  */
 export type ToolTier = "read" | "write"
 
+/** Per-turn context the loop passes to every tool. */
+export type ToolContext = { turnId: string }
+
 export type ToolDefinition<S extends z.ZodTypeAny = z.ZodTypeAny> = {
   name: string
   tier: ToolTier
@@ -24,8 +28,14 @@ export type ToolDefinition<S extends z.ZodTypeAny = z.ZodTypeAny> = {
   execute: (
     userId: string,
     missionId: string,
-    args: z.infer<S>
+    args: z.infer<S>,
+    ctx: ToolContext
   ) => Promise<{ result: unknown; receipt?: string }>
+}
+
+/** The origin recorded on events a write tool causes: this turn, this tool, these validated args (FR-TRS-2). */
+function byAgent(ctx: ToolContext, tool: string, args: unknown): ChangeOrigin {
+  return { actor: "agent", turnId: ctx.turnId, tool, args }
 }
 
 function defineTool<S extends z.ZodTypeAny>(def: ToolDefinition<S>): ToolDefinition<S> {
@@ -111,12 +121,12 @@ const createTask = defineTool({
     dueDate: isoDate.optional().describe("ISO date, e.g. 2026-09-12"),
     priority: z.enum(["low", "medium", "high"]).optional(),
   }),
-  execute: async (userId, missionId, args) => {
+  execute: async (userId, missionId, args, ctx) => {
     const task = await tasks.createTask(
       userId,
       missionId,
       { ...args, source: "agent" },
-      "agent"
+      byAgent(ctx, "createTask", args)
     )
     if (!task) return { result: { error: "mission not found" } }
     return {
@@ -143,9 +153,9 @@ const updateTaskTool = defineTool({
     .refine((a) => [a.label, a.category, a.dueDate, a.priority].some((v) => v !== undefined), {
       message: "provide at least one field to change",
     }),
-  execute: async (userId, missionId, args) => {
+  execute: async (userId, missionId, args, ctx) => {
     const { taskId, ...patch } = args
-    const updated = await tasks.updateTask(userId, missionId, taskId, patch, "agent")
+    const updated = await tasks.updateTask(userId, missionId, taskId, patch, byAgent(ctx, "updateTask", args))
     if (!updated) return { result: { error: "task not found" } }
     return {
       result: { id: updated.id, label: updated.label, dueDate: updated.dueDate },
@@ -162,13 +172,13 @@ const completeTask = defineTool({
     taskId: z.string().min(1),
     completed: z.boolean(),
   }),
-  execute: async (userId, missionId, args) => {
+  execute: async (userId, missionId, args, ctx) => {
     const updated = await tasks.updateTask(
       userId,
       missionId,
       args.taskId,
       { completed: args.completed },
-      "agent"
+      byAgent(ctx, "completeTask", args)
     )
     if (!updated) return { result: { error: "task not found" } }
     return {
@@ -188,8 +198,8 @@ const createReminderTool = defineTool({
     details: z.string().max(500).optional(),
     taskId: z.string().optional(),
   }),
-  execute: async (userId, missionId, args) => {
-    const reminder = await reminders.createReminder(userId, { ...args, missionId }, "agent")
+  execute: async (userId, missionId, args, ctx) => {
+    const reminder = await reminders.createReminder(userId, { ...args, missionId }, byAgent(ctx, "createReminder", args))
     if (!reminder) return { result: { error: "mission not found" } }
     return {
       result: { id: reminder.id, dueAt: reminder.dueAt },

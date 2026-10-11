@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto"
 import { NextResponse } from "next/server"
 import { withAuth } from "@/lib/with-auth"
 import { runAgentTurn } from "@/agent/loop"
@@ -62,6 +63,9 @@ export const POST = withAuth<{ id: string }>(async (req, session, { params }) =>
     // source of truth, not the client).
     const history = toHistory(await listMessages(session.userId, id))
     const sentAt = new Date().toISOString()
+    // One id ties the user's message, receipts, reply and every event the
+    // turn's tools emit together, so the activity feed can show why (FR-TRS-2).
+    const turnId = randomUUID()
 
     let run
     try {
@@ -71,6 +75,7 @@ export const POST = withAuth<{ id: string }>(async (req, session, { params }) =>
         missionId: id,
         userMessage: message,
         history,
+        turnId,
       })
     } catch (error) {
       const unavailable = llmUnavailable(error, {
@@ -86,7 +91,14 @@ export const POST = withAuth<{ id: string }>(async (req, session, { params }) =>
     // are stored as their own messages, matching how the chat UI renders them
     // live, so they survive a reload. Explicit timestamps keep the order stable.
     const doneAt = Date.now()
-    await createMessage(session.userId, { missionId: id, type: "user", text: message, source: "user", createdAt: sentAt })
+    await createMessage(session.userId, {
+      missionId: id,
+      type: "user",
+      text: message,
+      source: "user",
+      createdAt: sentAt,
+      turnId,
+    })
     for (const [i, receipt] of run.receipts.entries()) {
       await createMessage(session.userId, {
         missionId: id,
@@ -95,6 +107,7 @@ export const POST = withAuth<{ id: string }>(async (req, session, { params }) =>
         source: "agent",
         tool: receipt.tool,
         createdAt: new Date(doneAt + i).toISOString(),
+        turnId,
       })
     }
     await createMessage(session.userId, {
@@ -104,6 +117,7 @@ export const POST = withAuth<{ id: string }>(async (req, session, { params }) =>
       source: "agent",
       promptVersion: run.promptVersion,
       createdAt: new Date(doneAt + run.receipts.length).toISOString(),
+      turnId,
     })
 
     return NextResponse.json({

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto"
 import type { AgentTurn, LlmProvider } from "./providers/types"
 import { toolRegistry, toolDeclarations } from "./tools"
 import { coordinatorPrompt, PROMPT_VERSION } from "./prompts/coordinator.v1"
@@ -27,6 +28,8 @@ export type AgentRunResult = {
   trace: ToolTraceEntry[]
   steps: number
   promptVersion: string
+  /** Stamped on every event this turn's tools emitted (FR-TRS-2). */
+  turnId: string
 }
 
 class TurnDeadlineExceeded extends Error {}
@@ -78,8 +81,11 @@ export async function runAgentTurn(input: {
   history?: AgentTurn[]
   /** Overrides WALL_CLOCK_MS — for the eval harness, whose calls are paced to free-tier rate limits. */
   wallClockMs?: number
+  /** Links this turn's messages and events; generated when not given. */
+  turnId?: string
 }): Promise<AgentRunResult> {
   const startedAt = Date.now()
+  const turnId = input.turnId ?? randomUUID()
   const snapshot = await buildMissionSnapshot(input.userId, input.missionId)
   const system = coordinatorPrompt({
     missionSnapshot: snapshot,
@@ -104,6 +110,7 @@ export async function runAgentTurn(input: {
     trace,
     steps,
     promptVersion: PROMPT_VERSION,
+    turnId,
   })
   const generate = async (callTools: typeof tools) => {
     try {
@@ -128,6 +135,7 @@ export async function runAgentTurn(input: {
         trace,
         steps,
         promptVersion: PROMPT_VERSION,
+        turnId,
       }
     }
 
@@ -161,7 +169,7 @@ export async function runAgentTurn(input: {
       }
 
       try {
-        const { result, receipt } = await tool.execute(input.userId, input.missionId, parsed.data)
+        const { result, receipt } = await tool.execute(input.userId, input.missionId, parsed.data, { turnId })
         consecutiveFailures = 0
         trace.push({ tool: call.name, ok: true })
         if (receipt) receipts.push({ tool: tool.name, text: receipt })
@@ -190,6 +198,7 @@ export async function runAgentTurn(input: {
         trace,
         steps: steps + 1,
         promptVersion: PROMPT_VERSION,
+        turnId,
       }
     }
   }
@@ -202,5 +211,6 @@ export async function runAgentTurn(input: {
     trace,
     steps,
     promptVersion: PROMPT_VERSION,
+    turnId,
   }
 }

@@ -1,11 +1,11 @@
 import { v4 as uuidv4 } from "uuid"
 import { getDb } from "@/adapters/db"
 import { COLLECTIONS, type ReminderRecord } from "./collections"
-import { emitEvent } from "./events"
+import { emitEvent, type ChangeOrigin } from "./events"
 import { getMission } from "./missions"
 import { getTask } from "./tasks"
 
-type Actor = "user" | "agent" | "system"
+type Actor = ChangeOrigin
 
 /**
  * Returns null when the mission (or the linked task) doesn't exist or isn't
