@@ -69,11 +69,9 @@ test("runs a whole mission by hand: tasks, edits, deletes, activity log", async 
   // Edit the mission
   await page.getByRole("button", { name: "Edit mission" }).click()
   const editMission = page.getByRole("form", { name: "Edit mission" })
-  await editMission.getByLabel("Status").selectOption("Watch")
   await editMission.getByLabel("Next step").fill("Gather enrolment documents")
   await editMission.getByRole("button", { name: "Save mission" }).click()
   await expect(page.getByText("Next step: Gather enrolment documents")).toBeVisible()
-  await expect(page.getByText(/^Watch/)).toBeVisible()
 
   // Every change is in the activity log
   await open(page, `/mission/${missionId}/events`)
@@ -228,4 +226,33 @@ test("a drafted plan is reviewed, edited and accepted into a mission", async ({ 
   await expect(tasks.getByText("Apply for study permit online")).toBeVisible()
   await expect(tasks.getByText("Waiting on: Check study permit requirements")).toBeVisible()
   await expect(tasks.getByText("Buy a local SIM card")).toHaveCount(0)
+})
+
+test("the risk indicator explains itself and updates as tasks change", async ({ page }) => {
+  await open(page, "/mission/new")
+  await page.getByLabel("Mission title").fill("Move to Accra")
+  await page.getByRole("button", { name: "Create mission" }).click()
+  const risk = page.getByLabel("Mission risk")
+  await expect(risk).toContainText("On track")
+
+  const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+  const addTask = page.getByRole("form", { name: "Add task" })
+  await addTask.getByLabel("New task").fill("Renew passport")
+  await addTask.getByLabel("Due date").fill(yesterday)
+  await addTask.getByRole("button", { name: "Add" }).click()
+
+  await expect(risk).toContainText("At risk")
+  await expect(page.getByText('"Renew passport" is 1 day overdue.')).toBeVisible()
+
+  await page.getByLabel("Done: Renew passport").check()
+  await expect(risk).toContainText("On track")
+
+  // The toggle saves in the background; wait for the save before leaving the page
+  // (listen first, so a fast response can't slip past).
+  const saved = page.waitForResponse((r) => r.url().includes("/tasks/") && r.request().method() === "PATCH")
+  await page.getByLabel("Done: Renew passport").uncheck()
+  await saved
+  await expect(risk).toContainText("At risk")
+  await open(page, "/")
+  await expect(page.getByRole("list", { name: "Missions" }).getByRole("link", { name: /Move to Accra/ })).toContainText("At risk")
 })

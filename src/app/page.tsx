@@ -3,10 +3,12 @@ import { redirect } from "next/navigation"
 import { CalendarDays, Plus, Sparkles } from "lucide-react"
 import { auth } from "@/lib/auth"
 import { listMissions } from "@/domain/missions"
-import { summarizeTasks } from "@/domain/tasks"
+import { listTaskRiskFacts, summarizeTasks, type TaskRiskFacts } from "@/domain/tasks"
 import { listOpenProposals } from "@/domain/proposals"
 import { formatDisplayDate } from "@/lib/dates"
 import { OriginBadge } from "@/components/OriginBadge"
+import { RiskBadge } from "@/components/RiskBadge"
+import { computeRisk } from "@/domain/risk"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 
@@ -42,11 +44,15 @@ export default async function DashboardPage() {
   const userId = session?.user?.id
   if (!userId) redirect("/signin")
 
-  const [missions, summary, drafts] = await Promise.all([
+  const [missions, summary, drafts, riskFacts] = await Promise.all([
     listMissions(userId),
     summarizeTasks(userId),
     listOpenProposals(userId),
+    listTaskRiskFacts(userId),
   ])
+  const today = new Date().toISOString().slice(0, 10)
+  const tasksByMission = new Map<string, TaskRiskFacts[]>()
+  for (const task of riskFacts) tasksByMission.set(task.missionId, [...(tasksByMission.get(task.missionId) ?? []), task])
   // Plans Velora drafted that the user hasn't accepted or discarded yet.
   const draftsSection =
     drafts.length > 0 ? (
@@ -164,6 +170,7 @@ export default async function DashboardPage() {
             const counts = summary.counts[mission.id] ?? { total: 0, open: 0 }
             const done = counts.total - counts.open
             const target = formatDisplayDate(mission.targetDate)
+            const risk = computeRisk({ targetDate: mission.targetDate, tasks: tasksByMission.get(mission.id) ?? [], today })
             const targetDays = mission.targetDate ? daysUntil(mission.targetDate) : null
             return (
               <li key={mission.id}>
@@ -171,8 +178,8 @@ export default async function DashboardPage() {
                   <Card className="h-full transition-colors hover:bg-muted/40">
                     <CardHeader>
                       <CardTitle className="line-clamp-2">{mission.title}</CardTitle>
-                      <CardDescription>
-                        {mission.status ?? "On track"}
+                      <CardDescription className="flex flex-wrap items-center gap-x-1">
+                        <RiskBadge level={risk.level} />
                         {target && (
                           <>
                             {" · "}

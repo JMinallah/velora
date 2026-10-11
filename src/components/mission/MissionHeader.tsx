@@ -2,7 +2,9 @@
 
 import { useState } from "react";
 import { Pencil, Trash2 } from "lucide-react";
-import type { MissionRecord } from "@/domain/collections";
+import type { MissionRecord, TaskRecord } from "@/domain/collections";
+import { computeRisk } from "@/domain/risk";
+import { RiskBadge } from "@/components/RiskBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -18,19 +20,19 @@ import {
 import { apiFetch } from "@/lib/api-client";
 import { formatDisplayDate, toDateInputValue } from "@/lib/dates";
 
-const STATUSES = ["On track", "Watch", "At risk"] as const;
-type Status = (typeof STATUSES)[number];
-
 /**
  * Mission title block with manual edit and delete (docs/06-DELIVERY-PLAN.md
  * 2.5-6). Everything here works with AI disabled.
  */
 export function MissionHeader({
   mission,
+  tasks,
   onUpdated,
   onDeleted,
 }: {
   mission: MissionRecord;
+  /** For the computed risk indicator, which updates as tasks change. */
+  tasks: TaskRecord[];
   onUpdated: (mission: MissionRecord) => void;
   onDeleted: () => void;
 }) {
@@ -38,6 +40,7 @@ export function MissionHeader({
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
 
   const targetDate = formatDisplayDate(mission.targetDate);
+  const risk = computeRisk({ targetDate: mission.targetDate, tasks, today: new Date().toISOString().slice(0, 10) });
 
   if (isEditing) {
     return (
@@ -65,10 +68,15 @@ export function MissionHeader({
           </Button>
         </div>
       </div>
-      <p className="text-sm text-muted-foreground">
-        {mission.status ?? "On track"}
-        {targetDate && <> · Target date: {targetDate}</>}
-      </p>
+      <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground" aria-label="Mission risk">
+        <RiskBadge level={risk.level} />
+        {targetDate && <span>Target date: {targetDate}</span>}
+      </div>
+      <ul className="list-none space-y-0.5 text-sm text-muted-foreground">
+        {risk.reasons.map((reason) => (
+          <li key={reason}>{reason}</li>
+        ))}
+      </ul>
       {mission.nextStep && <p className="text-sm">Next step: {mission.nextStep}</p>}
       {mission.overview && (
         <p className="line-clamp-3 max-w-prose whitespace-pre-line text-sm text-muted-foreground">{mission.overview}</p>
@@ -95,7 +103,6 @@ function MissionEditForm({
   onSaved: (mission: MissionRecord) => void;
 }) {
   const [title, setTitle] = useState(mission.title);
-  const [status, setStatus] = useState<Status>(mission.status ?? "On track");
   const [targetDate, setTargetDate] = useState(toDateInputValue(mission.targetDate));
   const [nextStep, setNextStep] = useState(mission.nextStep ?? "");
   const [overview, setOverview] = useState(mission.overview ?? "");
@@ -112,7 +119,6 @@ function MissionEditForm({
         method: "PATCH",
         body: {
           title: title.trim(),
-          status,
           targetDate: targetDate || null,
           nextStep: nextStep.trim(),
           overview: overview.trim(),
@@ -132,20 +138,6 @@ function MissionEditForm({
         <Input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={200} required />
       </label>
       <div className="grid gap-3 sm:grid-cols-2">
-        <label className="flex flex-col gap-1.5 text-sm font-medium">
-          Status
-          <select
-            value={status}
-            onChange={(e) => setStatus(e.target.value as Status)}
-            className="h-8 rounded-lg border border-input bg-transparent px-2.5 text-sm"
-          >
-            {STATUSES.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
-        </label>
         <label className="flex flex-col gap-1.5 text-sm font-medium">
           Target date
           <Input type="date" value={targetDate} onChange={(e) => setTargetDate(e.target.value)} />
