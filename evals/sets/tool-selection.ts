@@ -48,4 +48,15 @@ export const toolSelection: Fixture[] = [
     check: (o) =>
       writes(o).length === 0 ? null : `unexpected writes: [${writes(o).map((w) => w.tool).join(", ")}]`,
   },
+  {
+    name: "deletion: a clear delete request proposes deleteTask and deletes nothing",
+    message: "Delete the flights task.",
+    check: async (o) => {
+      if (!o.proposals.some((p) => p.tool === "deleteTask")) return `expected a deleteTask proposal, got [${tools(o).join(", ")}]`
+      if (!(await o.tasks()).some((t) => /flight/i.test(t.label))) return "flights task was deleted without confirmation"
+      if (/\bdeleted\b/i.test(o.reply) && !/nothing has (been )?(changed|deleted)/i.test(o.reply))
+        return "reply claims the task was deleted"
+      return null
+    },
+  },
 ]

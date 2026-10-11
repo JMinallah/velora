@@ -29,6 +29,9 @@ import { GET as listEventsRoute } from "@/app/api/missions/[id]/events/route"
 import { GET as listTasksRoute } from "@/app/api/missions/[id]/tasks/route"
 import { GET as listDocumentsRoute, POST as attachDocumentRoute } from "@/app/api/missions/[id]/documents/route"
 import { POST as ingestRoute } from "@/app/api/missions/[id]/documents/ingest/route"
+import { POST as decideRoute } from "@/app/api/missions/[id]/pending-actions/[actionId]/route"
+import { GET as getMissionRoute } from "@/app/api/missions/[id]/route"
+import { POST as createTaskRoute } from "@/app/api/missions/[id]/tasks/route"
 import { LOCAL_UPLOAD_DIR } from "@/lib/storage/gcs"
 import { closeClient } from "@/adapters/db"
 
@@ -126,7 +129,8 @@ describeDb("chat route", () => {
     expect((await res.json()).data).toEqual({
       reply: "Added it.",
       receipts: [{ tool: "createTask", text: 'Created task "Book movers" — due 2026-11-01' }],
-      promptVersion: "coordinator.v1",
+      proposals: [],
+      promptVersion: "coordinator.v2",
     })
 
     const messages = (await (await listMessagesRoute(req("GET", "/"), ctx({ id: missionId }))).json()).data
@@ -135,7 +139,7 @@ describeDb("chat route", () => {
       ["update", '✓ Created task "Book movers" — due 2026-11-01'],
       ["reasoning", "Added it."],
     ])
-    expect(messages[2].promptVersion).toBe("coordinator.v1")
+    expect(messages[2].promptVersion).toBe("coordinator.v2")
 
     const tasks = (await (await listTasksRoute(req("GET", "/"), ctx({ id: missionId }))).json()).data
     expect(tasks).toEqual([expect.objectContaining({ label: "Book movers", source: "agent", dueDate: "2026-11-01" })])
@@ -177,6 +181,140 @@ describeDb("chat route", () => {
   })
 })
 
+describeDb("destructive actions need the user's confirmation (03-AGENT-DESIGN §5)", () => {
+  async function missionWithTask(userId: string, label = "Book flights") {
+    const missionId = await createMissionAs(userId)
+    const res = await createTaskRoute(req("POST", `/api/missions/${missionId}/tasks`, { label }), ctx({ id: missionId }))
+    return { missionId, taskId: (await res.json()).data.id as string }
+  }
+
+  /** The agent proposes via the real chat route (scripted model). */
+  async function propose(missionId: string, call: { name: string; args: Record<string, unknown> }) {
+    provider = scripted([{ text: "", toolCalls: [call] }]).provider
+    const res = await chat(missionId, { message: "please delete it" })
+    expect(res.status).toBe(200)
+    const data = (await res.json()).data
+    expect(data.proposals).toHaveLength(1)
+    return data.proposals[0] as { id: string; nonce: string; summary: string; status: string }
+  }
+
+  const decide = (missionId: string, actionId: string, body: unknown) =>
+    decideRoute(req("POST", `/api/missions/${missionId}/pending-actions/${actionId}`, body), ctx({ id: missionId, actionId }))
+
+  const taskIds = async (missionId: string) =>
+    ((await (await listTasksRoute(req("GET", "/"), ctx({ id: missionId }))).json()).data as { id: string }[]).map((t) => t.id)
+  const events = async (missionId: string) =>
+    (await (await listEventsRoute(req("GET", "/"), ctx({ id: missionId }))).json()).data as Record<string, unknown>[]
+  const messages = async (missionId: string) =>
+    (await (await listMessagesRoute(req("GET", "/"), ctx({ id: missionId }))).json()).data as Record<string, unknown>[]
+
+  it("a proposal deletes nothing, is audited, and is stored as a pending card", async () => {
+    const { missionId, taskId } = await missionWithTask("user-del-propose")
+    const action = await propose(missionId, { name: "deleteTask", args: { taskId } })
+
+    expect(action).toMatchObject({ status: "pending", summary: 'Delete task "Book flights"' })
+    expect(await taskIds(missionId)).toContain(taskId)
+    expect(await events(missionId)).toContainEqual(expect.objectContaining({ type: "action-proposed", actor: "agent" }))
+    const card = (await messages(missionId)).find((m) => m.type === "confirmation")
+    expect(card).toMatchObject({ action: { id: action.id, status: "pending" } })
+  })
+
+  it("rejects a missing/invalid body (400), anonymous (401), a foreign user (404) and a wrong nonce (403)", async () => {
+    const { missionId, taskId } = await missionWithTask("user-del-guard")
+    const action = await propose(missionId, { name: "deleteTask", args: { taskId } })
+
+    expect((await decide(missionId, action.id, { decision: "confirm" })).status).toBe(400)
+    asUser(null)
+    expect((await decide(missionId, action.id, { nonce: action.nonce, decision: "confirm" })).status).toBe(401)
+    asUser("user-del-stranger")
+    expect((await decide(missionId, action.id, { nonce: action.nonce, decision: "confirm" })).status).toBe(404)
+    asUser("user-del-guard")
+    expect((await decide(missionId, action.id, { nonce: "guessed", decision: "confirm" })).status).toBe(403)
+
+    expect(await taskIds(missionId)).toContain(taskId) // still nothing deleted
+  })
+
+  it("confirm executes exactly once with the stored args, audited as confirmed by the user; replay is 409", async () => {
+    const { missionId, taskId } = await missionWithTask("user-del-confirm")
+    const action = await propose(missionId, { name: "deleteTask", args: { taskId } })
+
+    const res = await decide(missionId, action.id, { nonce: action.nonce, decision: "confirm" })
+    expect(res.status).toBe(200)
+    expect((await res.json()).data).toEqual({
+      status: "executed",
+      receipt: 'Deleted task "Book flights"',
+      effect: { kind: "task-deleted", taskId },
+    })
+    expect(await taskIds(missionId)).not.toContain(taskId)
+
+    const deleted = (await events(missionId)).find((e) => e.type === "task-deleted")
+    expect(deleted).toMatchObject({ actor: "agent", confirmedBy: "user", cause: { tool: "deleteTask", args: { taskId } } })
+    expect((await messages(missionId)).find((m) => m.type === "confirmation")).toMatchObject({ action: { status: "executed" } })
+
+    const replay = await decide(missionId, action.id, { nonce: action.nonce, decision: "confirm" })
+    expect(replay.status).toBe(409)
+  })
+
+  it("concurrent confirms execute once", async () => {
+    const { missionId, taskId } = await missionWithTask("user-del-race")
+    const action = await propose(missionId, { name: "deleteTask", args: { taskId } })
+    const statuses = (
+      await Promise.all(Array.from({ length: 5 }, () => decide(missionId, action.id, { nonce: action.nonce, decision: "confirm" })))
+    ).map((r) => r.status)
+    expect(statuses.filter((s) => s === 200)).toHaveLength(1)
+    expect(statuses.filter((s) => s === 409)).toHaveLength(4)
+    expect((await events(missionId)).filter((e) => e.type === "task-deleted")).toHaveLength(1)
+  })
+
+  it("reject leaves everything in place and is audited", async () => {
+    const { missionId, taskId } = await missionWithTask("user-del-reject")
+    const action = await propose(missionId, { name: "deleteTask", args: { taskId } })
+
+    const res = await decide(missionId, action.id, { nonce: action.nonce, decision: "reject" })
+    expect((await res.json()).data).toEqual({ status: "rejected" })
+    expect(await taskIds(missionId)).toContain(taskId)
+    expect(await events(missionId)).toContainEqual(expect.objectContaining({ type: "action-rejected", actor: "user" }))
+    expect((await decide(missionId, action.id, { nonce: action.nonce, decision: "confirm" })).status).toBe(409)
+  })
+
+  it("an expired confirmation is refused (410) and nothing is deleted", async () => {
+    const { missionId, taskId } = await missionWithTask("user-del-expired")
+    const action = await propose(missionId, { name: "deleteTask", args: { taskId } })
+    const { getDb } = await import("@/adapters/db")
+    await (await getDb())
+      .collection("pending_actions")
+      .updateOne({ id: action.id }, { $set: { expiresAt: new Date(Date.now() - 1000) } })
+
+    expect((await decide(missionId, action.id, { nonce: action.nonce, decision: "confirm" })).status).toBe(410)
+    expect(await taskIds(missionId)).toContain(taskId)
+    expect((await messages(missionId)).find((m) => m.type === "confirmation")).toMatchObject({ action: { status: "expired" } })
+  })
+
+  it("deleteMission removes the mission only after confirmation", async () => {
+    const { missionId } = await missionWithTask("user-del-mission")
+    const action = await propose(missionId, { name: "deleteMission", args: {} })
+    expect(action.summary).toBe('Delete the whole mission "Move to Seoul" and its 1 task')
+    expect((await getMissionRoute(req("GET", "/"), ctx({ id: missionId }))).status).toBe(200)
+
+    const res = await decide(missionId, action.id, { nonce: action.nonce, decision: "confirm" })
+    expect((await res.json()).data.effect).toEqual({ kind: "mission-deleted" })
+    expect((await getMissionRoute(req("GET", "/"), ctx({ id: missionId }))).status).toBe(404)
+  })
+
+  it("the next turn's history tells the model the outcome — never the nonce", async () => {
+    const { missionId, taskId } = await missionWithTask("user-del-history")
+    const action = await propose(missionId, { name: "deleteTask", args: { taskId } })
+    await decide(missionId, action.id, { nonce: action.nonce, decision: "reject" })
+
+    const script = scripted([{ text: "Okay, kept it.", toolCalls: [] }])
+    provider = script.provider
+    await chat(missionId, { message: "fine, keep it" })
+    const history = JSON.stringify(script.seen[0])
+    expect(history).toContain("status: rejected")
+    expect(history).not.toContain(action.nonce)
+  })
+})
+
 describeDb("chat route — streaming (NDJSON)", () => {
   const streamChat = async (missionId: string, message: string) => {
     const res = await chatRoute(
@@ -209,7 +347,7 @@ describeDb("chat route — streaming (NDJSON)", () => {
     expect(res.headers.get("content-type")).toContain("application/x-ndjson")
     expect(lines.map((l) => l.type)).toEqual(["receipt", "text", "text", "done"])
     expect(lines[0]).toMatchObject({ tool: "createTask", text: 'Created task "Pack books"' })
-    expect(lines[3]).toMatchObject({ reply: "Added it.", promptVersion: "coordinator.v1", turnId: expect.any(String) })
+    expect(lines[3]).toMatchObject({ reply: "Added it.", promptVersion: "coordinator.v2", turnId: expect.any(String) })
 
     const messages = (await (await listMessagesRoute(req("GET", "/"), ctx({ id: missionId }))).json()).data
     expect(messages.map((m: { type: string }) => m.type)).toEqual(["user", "update", "reasoning"])

@@ -23,9 +23,14 @@ function toHistory(stored: MessageRecord[]): AgentTurn[] {
   const turns: { role: "user" | "assistant"; text: string }[] = []
   for (const m of stored.slice(-HISTORY_LIMIT)) {
     const role = m.type === "user" ? "user" : "assistant"
+    // The model sees what it proposed and how the user decided — never the nonce.
+    const text =
+      m.type === "confirmation" && m.action
+        ? `[Proposed, needs the user's confirmation: ${m.action.summary} — status: ${m.action.status}]`
+        : m.text
     const last = turns[turns.length - 1]
-    if (last?.role === role) last.text += `\n${m.text}`
-    else turns.push({ role, text: m.text })
+    if (last?.role === role) last.text += `\n${text}`
+    else turns.push({ role, text })
   }
   // A window that opens mid-exchange starts with the assistant; drop it.
   while (turns[0]?.role === "assistant") turns.shift()
@@ -60,13 +65,26 @@ async function persistTurn(userId: string, missionId: string, message: string, s
       turnId: run.turnId,
     })
   }
+  // Confirmation cards are stored so they survive a reload; their status is
+  // updated when the user decides (pending-actions route).
+  for (const [i, action] of run.proposals.entries()) {
+    await createMessage(userId, {
+      missionId,
+      type: "confirmation",
+      text: action.summary,
+      source: "agent",
+      action,
+      createdAt: new Date(doneAt + run.receipts.length + i).toISOString(),
+      turnId: run.turnId,
+    })
+  }
   await createMessage(userId, {
     missionId,
     type: "reasoning",
     text: run.reply,
     source: "agent",
     promptVersion: run.promptVersion,
-    createdAt: new Date(doneAt + run.receipts.length).toISOString(),
+    createdAt: new Date(doneAt + run.receipts.length + run.proposals.length).toISOString(),
     turnId: run.turnId,
   })
 }
@@ -150,14 +168,23 @@ export const POST = withAuth<{ id: string }>(async (req, session, { params }) =>
                 if (event.type === "text") {
                   firstTextAt ??= Date.now()
                   send({ type: "text", delta: event.delta })
-                } else {
+                } else if (event.type === "receipt") {
                   send({ type: "receipt", tool: event.receipt.tool, text: event.receipt.text })
+                } else {
+                  send({ type: "confirmation", action: event.action })
                 }
               },
             })
             await persistTurn(session.userId, id, message, sentAt, run)
             logTurn(run, firstTextAt, true)
-            send({ type: "done", reply: run.reply, receipts: run.receipts, promptVersion: run.promptVersion, turnId })
+            send({
+              type: "done",
+              reply: run.reply,
+              receipts: run.receipts,
+              proposals: run.proposals,
+              promptVersion: run.promptVersion,
+              turnId,
+            })
           } catch (error) {
             const failure = describeLlmFailure(classify(error))
             if (!failure) console.error("POST /api/missions/[id]/chat (stream)", error)
@@ -189,7 +216,7 @@ export const POST = withAuth<{ id: string }>(async (req, session, { params }) =>
 
     return NextResponse.json({
       success: true,
-      data: { reply: run.reply, receipts: run.receipts, promptVersion: run.promptVersion },
+      data: { reply: run.reply, receipts: run.receipts, proposals: run.proposals, promptVersion: run.promptVersion },
     })
   } catch (err) {
     return serverError("POST /api/missions/[id]/chat", err)
