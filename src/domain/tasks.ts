@@ -51,12 +51,13 @@ export async function createTask(
     updatedAt: now,
   }
 
-  await db.collection<TaskRecord>(COLLECTIONS.tasks).insertOne(task)
+  await db.collection<TaskRecord>(COLLECTIONS.tasks).insertOne({ ...task })
   await emitEvent(userId, {
     missionId,
     type: "task-created",
     actor,
     payload: { taskId: task.id, label: task.label, dueDate: task.dueDate },
+    undo: { kind: "delete-task", taskId: task.id, label: task.label, afterUpdatedAt: now },
   })
   return task
 }
@@ -71,22 +72,25 @@ export async function updateTask(
   const db = await getDb()
   const now = new Date().toISOString()
   const safePatch = withoutProtectedFields(patch)
-  const updated = await db
+  // The pre-image comes from the same atomic operation as the write, so undo
+  // restores exactly what this change replaced.
+  const before = await db
     .collection<TaskRecord>(COLLECTIONS.tasks)
     .findOneAndUpdate(
       { userId, missionId, id: taskId },
       { $set: { ...safePatch, updatedAt: now } },
-      { returnDocument: "after" }
+      { returnDocument: "before", projection: { _id: 0 } }
     )
+  if (!before) return null
+  const updated: TaskRecord = { ...before, ...safePatch, updatedAt: now }
 
-  if (updated) {
-    await emitEvent(userId, {
-      missionId,
-      type: "task-updated",
-      actor,
-      payload: { taskId, fields: Object.keys(safePatch) },
-    })
-  }
+  await emitEvent(userId, {
+    missionId,
+    type: "task-updated",
+    actor,
+    payload: { taskId, label: updated.label, fields: Object.keys(safePatch) },
+    undo: { kind: "restore-task", taskId, label: before.label, before, afterUpdatedAt: now },
+  })
   return updated
 }
 

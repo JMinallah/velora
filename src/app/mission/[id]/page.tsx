@@ -28,6 +28,7 @@ import { MissionHeader } from "@/components/mission/MissionHeader";
 import { TaskList } from "@/components/mission/TaskList";
 import { readChatStream } from "@/lib/chat-stream";
 import { ConfirmationCard, type ConfirmationEffect } from "@/components/mission/ConfirmationCard";
+import { UndoBar } from "@/components/mission/UndoBar";
 import type { PendingActionStatus } from "@/types";
 
 function resolveMissionId(value: string | string[] | undefined, availableIds: string[]) {
@@ -66,6 +67,8 @@ export default function MissionPage() {
   const activeMissionId = resolveMissionId(paramsForResolve, availableIds)
   const [attachmentMenuOpen, setAttachmentMenuOpen] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  // Bumped after each chat turn / decision so the undo bar re-checks.
+  const [chatRevision, setChatRevision] = useState(0);
   const [latestPlan] = useState(() => loadLatestTransitionPlan());
   const [selectedDocumentsByMission, setSelectedDocumentsByMission] = useState<Record<string, string[]>>(() => ({}));
   const messageListRef = useRef<HTMLDivElement | null>(null);
@@ -376,10 +379,38 @@ export default function MissionPage() {
       });
     } finally {
       setIsSending(false);
+      setChatRevision((n) => n + 1);
     }
   };
 
   // A confirmation card was decided: keep its status and the affected data in step.
+  // After an undo: reload the tasks (the change could be any of them) and
+  // note it in the chat. The activity log records the undo itself.
+  const handleUndone = async (description: string) => {
+    const missionId = activeMissionId;
+    const res = await fetch(`/api/missions/${missionId}/tasks`).catch(() => null);
+    const data = res ? await res.json().catch(() => null) : null;
+    setMissions((cur) => {
+      const mission = cur[missionId];
+      if (!mission) return cur;
+      const note: Message = {
+        userId: "local",
+        id: `undo-${Date.now()}`,
+        type: "update",
+        text: `↩ Undone: ${description}`,
+        createdAt: new Date().toISOString(),
+      };
+      return {
+        ...cur,
+        [missionId]: {
+          ...mission,
+          tasks: data?.success ? data.data : mission.tasks,
+          messages: [...mission.messages, note],
+        },
+      };
+    });
+  };
+
   const handleDecided = (actionId: string, status: PendingActionStatus, effect?: ConfirmationEffect) => {
     const missionId = activeMissionId;
     if (effect?.kind === "mission-deleted") {
@@ -590,6 +621,7 @@ export default function MissionPage() {
                 </div>
 
                 <div className="shrink-0 border-t border-border/60 pt-2 md:pt-3">
+                  <UndoBar missionId={activeMissionId} refreshKey={chatRevision} onUndone={handleUndone} />
                   {selectedDocuments.length > 0 && (
                     <div className="mb-3 flex flex-wrap gap-2">
                       {selectedDocuments.map((documentName) => (

@@ -32,6 +32,8 @@ import { POST as ingestRoute } from "@/app/api/missions/[id]/documents/ingest/ro
 import { POST as decideRoute } from "@/app/api/missions/[id]/pending-actions/[actionId]/route"
 import { GET as getMissionRoute } from "@/app/api/missions/[id]/route"
 import { POST as createTaskRoute } from "@/app/api/missions/[id]/tasks/route"
+import { PATCH as patchTaskRoute } from "@/app/api/missions/[id]/tasks/[taskId]/route"
+import { GET as getUndoRoute, POST as undoRoute } from "@/app/api/missions/[id]/undo/route"
 import { LOCAL_UPLOAD_DIR } from "@/lib/storage/gcs"
 import { closeClient } from "@/adapters/db"
 
@@ -56,12 +58,17 @@ afterAll(async () => {
 })
 
 const asUser = (id: string | null) => (currentUserId = id)
+// Each test user gets their own client address, as real users would; otherwise
+// every request shares one per-IP rate-limit bucket ("unknown").
+const clientHeaders = () => ({ "x-forwarded-for": `test-ip-${currentUserId ?? "anonymous"}` })
 const req = (method: string, urlPath: string, body?: unknown) =>
   new NextRequest(`http://localhost${urlPath}`, {
     method,
-    ...(body !== undefined
-      ? { body: typeof body === "string" ? body : JSON.stringify(body), headers: { "content-type": "application/json" } }
-      : {}),
+    headers: {
+      ...clientHeaders(),
+      ...(body !== undefined ? { "content-type": "application/json" } : {}),
+    },
+    ...(body !== undefined ? { body: typeof body === "string" ? body : JSON.stringify(body) } : {}),
   })
 const ctx = <P extends Record<string, string>>(params: P) => ({ params: Promise.resolve(params) })
 
@@ -315,13 +322,119 @@ describeDb("destructive actions need the user's confirmation (03-AGENT-DESIGN §
   })
 })
 
+describeDb("undo for the agent's changes (FR-AGT-6)", () => {
+  const rawTask = async (taskId: string) => {
+    const { getDb } = await import("@/adapters/db")
+    return (await getDb()).collection("tasks").findOne({ id: taskId })
+  }
+  const agentDoes = async (missionId: string, calls: { name: string; args: Record<string, unknown> }[]) => {
+    provider = scripted([{ text: "", toolCalls: calls }, { text: "Done.", toolCalls: [] }]).provider
+    expect((await chat(missionId, { message: "please do it" })).status).toBe(200)
+  }
+  const latest = async (missionId: string) =>
+    (await (await getUndoRoute(req("GET", "/"), ctx({ id: missionId }))).json()).data as { eventId: string; description: string } | null
+  const undo = (missionId: string, eventId: string) =>
+    undoRoute(req("POST", `/api/missions/${missionId}/undo`, { eventId }), ctx({ id: missionId }))
+  const userTask = async (missionId: string, label: string) =>
+    (await (await createTaskRoute(req("POST", "/", { label }), ctx({ id: missionId }))).json()).data.id as string
+
+  it("restores an agent update byte-identically (exit gate) and records the undo", async () => {
+    const missionId = await createMissionAs("user-undo-update")
+    const taskId = await userTask(missionId, "Book flights")
+    const before = await rawTask(taskId)
+    expect(await latest(missionId)).toBeNull() // the user's own changes are not the agent's to undo
+
+    await agentDoes(missionId, [{ name: "updateTask", args: { taskId, label: "Book cheaper flights", priority: "high" } }])
+    expect((await rawTask(taskId))?.label).toBe("Book cheaper flights")
+    const change = await latest(missionId)
+    expect(change?.description).toBe('Updated task "Book flights"')
+
+    const res = await undo(missionId, change!.eventId)
+    expect(res.status).toBe(200)
+    expect((await res.json()).data).toMatchObject({ undid: 'Updated task "Book flights"', next: null })
+    expect(await rawTask(taskId)).toEqual(before) // identical, including _id and updatedAt
+
+    const events = (await (await listEventsRoute(req("GET", "/"), ctx({ id: missionId }))).json()).data
+    expect(events).toContainEqual(
+      expect.objectContaining({ type: "change-undone", actor: "user", payload: expect.objectContaining({ eventId: change!.eventId }) })
+    )
+  })
+
+  it("undoes an agent-created task by removing it, and a completion by reopening", async () => {
+    const missionId = await createMissionAs("user-undo-create")
+    const mine = await userTask(missionId, "Find apartment")
+    await agentDoes(missionId, [{ name: "completeTask", args: { taskId: mine, completed: true } }])
+    const completion = await latest(missionId)
+    expect(completion?.description).toBe('Completed task "Find apartment"')
+    expect((await undo(missionId, completion!.eventId)).status).toBe(200)
+    expect((await rawTask(mine))?.completed).toBe(false)
+
+    await agentDoes(missionId, [{ name: "createTask", args: { label: "Buy adapter plugs" } }])
+    const created = await latest(missionId)
+    expect(created?.description).toBe('Created task "Buy adapter plugs"')
+    expect((await undo(missionId, created!.eventId)).status).toBe(200)
+    const tasks = (await (await listTasksRoute(req("GET", "/"), ctx({ id: missionId }))).json()).data
+    expect(tasks.map((t: { label: string }) => t.label)).toEqual(["Find apartment"])
+  })
+
+  it("refuses to overwrite the user's edits made after the agent's change (exit gate)", async () => {
+    const missionId = await createMissionAs("user-undo-conflict")
+    await agentDoes(missionId, [{ name: "createTask", args: { label: "Get visa photos" } }])
+    const change = await latest(missionId)
+    const taskId = ((await (await listTasksRoute(req("GET", "/"), ctx({ id: missionId }))).json()).data[0] as { id: string }).id
+    await patchTaskRoute(req("PATCH", "/", { label: "Get visa photos (2 copies)" }), ctx({ id: missionId, taskId }))
+
+    const res = await undo(missionId, change!.eventId)
+    expect(res.status).toBe(409)
+    expect(await res.json()).toMatchObject({ code: "edited_since", error: expect.stringMatching(/overwrite your edits/) })
+    expect((await rawTask(taskId))?.label).toBe("Get visa photos (2 copies)")
+  })
+
+  it("only the most recent change can be undone; then the one before it", async () => {
+    const missionId = await createMissionAs("user-undo-stack")
+    await agentDoes(missionId, [
+      { name: "createTask", args: { label: "First" } },
+      { name: "createTask", args: { label: "Second" } },
+    ])
+    const newest = await latest(missionId)
+    expect(newest?.description).toBe('Created task "Second"')
+    const { getDb } = await import("@/adapters/db")
+    const older = await (await getDb())
+      .collection("events")
+      .findOne({ missionId, type: "task-created", "payload.label": "First" })
+
+    expect((await (await undo(missionId, older!.id)).json()).code).toBe("not_latest")
+    expect((await undo(missionId, newest!.eventId)).status).toBe(200)
+    expect((await latest(missionId))?.eventId).toBe(older!.id)
+    expect((await undo(missionId, older!.id)).status).toBe(200)
+    expect(await latest(missionId)).toBeNull()
+  })
+
+  it("concurrent undos of the same change succeed once", async () => {
+    const missionId = await createMissionAs("user-undo-race")
+    const taskId = await userTask(missionId, "Ship boxes")
+    await agentDoes(missionId, [{ name: "updateTask", args: { taskId, label: "Ship 12 boxes" } }])
+    const change = await latest(missionId)
+    const statuses = (await Promise.all(Array.from({ length: 4 }, () => undo(missionId, change!.eventId)))).map((r) => r.status)
+    expect(statuses.filter((s) => s === 200)).toHaveLength(1)
+    expect(statuses.filter((s) => s === 409)).toHaveLength(3)
+  })
+
+  it("another user's mission is 404", async () => {
+    const missionId = await createMissionAs("user-undo-owner")
+    asUser("user-undo-stranger")
+    expect((await getUndoRoute(req("GET", "/"), ctx({ id: missionId }))).status).toBe(404)
+    expect((await undo(missionId, "anything")).status).toBe(404)
+  })
+})
+
 describeDb("chat route — streaming (NDJSON)", () => {
   const streamChat = async (missionId: string, message: string) => {
     const res = await chatRoute(
       new NextRequest(`http://localhost/api/missions/${missionId}/chat`, {
         method: "POST",
         body: JSON.stringify({ message }),
-        headers: { "content-type": "application/json", accept: "application/x-ndjson" },
+        headers: { ...clientHeaders(), "content-type": "application/json", accept: "application/x-ndjson" },
       }),
       ctx({ id: missionId })
     )

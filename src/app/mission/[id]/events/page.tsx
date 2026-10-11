@@ -20,6 +20,7 @@ const EVENT_TYPES = [
   "replan-generated",
   "action-proposed",
   "action-rejected",
+  "change-undone",
 ] as const;
 
 const EVENT_ACTORS = ["all", "user", "agent", "system"] as const;

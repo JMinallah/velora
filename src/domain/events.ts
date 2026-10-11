@@ -23,6 +23,8 @@ export async function emitEvent(
     type: EventRecord["type"]
     actor: ChangeOrigin
     payload?: Record<string, unknown>
+    /** Stored only for agent changes — user changes are not undoable through the agent's undo. */
+    undo?: EventRecord["undo"]
   }
 ): Promise<EventRecord> {
   const db = await getDb()
@@ -41,6 +43,7 @@ export async function emitEvent(
           turnId: origin.turnId,
           cause: { tool: origin.tool, args: origin.args },
           ...(origin.confirmedBy ? { confirmedBy: origin.confirmedBy } : {}),
+          ...(input.undo ? { undo: input.undo } : {}),
         }),
   }
   await db.collection<EventRecord>(COLLECTIONS.events).insertOne(event)
