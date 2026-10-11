@@ -76,6 +76,10 @@ test("runs a whole mission by hand: tasks, edits, deletes, activity log", async 
   for (const type of ["mission created", "mission updated", "task created", "task updated", "task deleted"]) {
     await expect(page.locator("p").filter({ hasText: new RegExp(`^${type}$`) }).first()).toBeVisible()
   }
+  // Every change here was the user's own: labelled "You", never "Velora" (3-6).
+  const activity = page.getByRole("list", { name: "Activity" })
+  await expect(activity.getByText("You", { exact: true }).first()).toBeVisible()
+  await expect(activity.getByText("Velora", { exact: true })).toHaveCount(0)
 
   // Delete the mission
   await open(page, missionUrl.replace(/^https?:\/\/[^/]+/, ""))

@@ -6,6 +6,7 @@ import type { TaskRecord } from "@/domain/collections";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { apiFetch } from "@/lib/api-client";
+import { OriginBadge } from "@/components/OriginBadge";
 import { formatDisplayDate, toDateInputValue } from "@/lib/dates";
 
 type Priority = "low" | "medium" | "high";
@@ -208,11 +209,13 @@ function TaskRow({
         onChange={(e) => toggleCompleted(e.target.checked)}
       />
       <div className="min-w-0 flex-1">
-        <p className={`font-medium ${task.completed ? "text-muted-foreground line-through" : ""}`}>{task.label}</p>
+        <p className="flex items-center gap-1.5">
+          <span className={`font-medium ${task.completed ? "text-muted-foreground line-through" : ""}`}>{task.label}</span>
+          {task.source === "agent" && <OriginBadge origin="agent" title="Added by Velora" />}
+        </p>
         <p className="text-sm text-muted-foreground">
           {meta}
           {due && <> · Due {due}</>}
-          {task.source === "agent" && <> · added by Velora</>}
         </p>
       </div>
       {mode === "confirm-delete" ? (

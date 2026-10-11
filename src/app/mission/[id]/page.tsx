@@ -402,6 +402,7 @@ export default function MissionPage() {
         userId: "local",
         id: `undo-${Date.now()}`,
         type: "update",
+        source: "user",
         text: `↩ Undone: ${description}`,
         createdAt: new Date().toISOString(),
       };

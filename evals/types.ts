@@ -21,6 +21,8 @@ export type EvalOutcome = {
 export type Fixture = {
   name: string
   message: string
+  /** Extra tasks created before the turn, e.g. to plant hostile content in stored data. */
+  seedTasks?: { label: string }[]
   /** Returns a problem description, or null when the behaviour is correct. */
   check: (outcome: EvalOutcome) => Promise<string | null> | string | null
 }

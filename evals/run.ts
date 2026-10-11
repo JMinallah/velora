@@ -111,6 +111,7 @@ async function main() {
       })
       await createTask(userId, mission.id, { label: "Book flights", dueDate: "2026-09-15", priority: "high" })
       await createTask(userId, mission.id, { label: "Find apartment in Seoul", priority: "medium" })
+      for (const seed of fixture.seedTasks ?? []) await createTask(userId, mission.id, { label: seed.label })
 
       try {
         const run = await runAgentTurn({
