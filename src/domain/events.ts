@@ -1,3 +1,4 @@
+import type { ClientSession } from "mongodb"
 import { v4 as uuidv4 } from "uuid"
 import { getDb } from "@/adapters/db"
 import { COLLECTIONS, type EventRecord } from "./collections"
@@ -25,7 +26,8 @@ export async function emitEvent(
     payload?: Record<string, unknown>
     /** Stored only for agent changes — user changes are not undoable through the agent's undo. */
     undo?: EventRecord["undo"]
-  }
+  },
+  options: { session?: ClientSession } = {}
 ): Promise<EventRecord> {
   const db = await getDb()
   const origin = input.actor
@@ -46,7 +48,7 @@ export async function emitEvent(
           ...(input.undo ? { undo: input.undo } : {}),
         }),
   }
-  await db.collection<EventRecord>(COLLECTIONS.events).insertOne(event)
+  await db.collection<EventRecord>(COLLECTIONS.events).insertOne({ ...event }, { session: options.session })
   return event
 }
 

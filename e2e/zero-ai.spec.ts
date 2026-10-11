@@ -1,4 +1,8 @@
 import { test, expect, type Page } from "@playwright/test"
+import { readFileSync } from "node:fs"
+import { randomUUID } from "node:crypto"
+import { MongoClient } from "mongodb"
+import { E2E_DB } from "../playwright.config"
 
 /** Waits for React to hydrate; typing into server-rendered inputs before then is lost. */
 async function open(page: Page, path: string) {
@@ -162,4 +166,66 @@ test("a task can wait on another; it shows what it's waiting on until that is do
   await page.getByLabel("Done: Sign lease").check()
   await expect(tasks.getByText("After: Sign lease")).toBeVisible()
   await expect(tasks.getByText("Waiting on: Sign lease")).toHaveCount(0)
+})
+
+test("onboarding without AI explains and offers to plan by hand", async ({ page }) => {
+  await open(page, "/onboarding")
+  await page.getByLabel("What are you planning?").fill("Start university in Lyon")
+  await page.getByRole("button", { name: "Draft my plan" }).click()
+  // Filter by text: Next.js renders its own (empty) role="alert" route announcer.
+  const problem = page.getByRole("alert").filter({ hasText: "AI planning is not available right now" })
+  await expect(problem).toBeVisible()
+  await problem.getByRole("link", { name: "Create it manually instead" }).click()
+  await expect(page.getByLabel("Mission title")).toHaveValue("Start university in Lyon")
+})
+
+test("a drafted plan is reviewed, edited and accepted into a mission", async ({ page }) => {
+  // Drafting needs the model, which E2E runs without — seed the proposal directly.
+  const { userId } = JSON.parse(readFileSync("e2e/.auth/user.json", "utf8"))
+  const id = randomUUID()
+  const client = await new MongoClient(process.env.TEST_MONGODB_URI ?? "mongodb://127.0.0.1:27017").connect()
+  await client.db(E2E_DB).collection("plan_proposals").insertOne({
+    id,
+    userId,
+    status: "proposed",
+    createdAt: new Date().toISOString(),
+    promptVersion: "planner.v1",
+    model: "seeded",
+    attempts: 1,
+    request: { goal: "Move to Toronto" },
+    plan: {
+      title: "Move to Toronto",
+      summary: "Relocating for a master's programme",
+      targetDate: null,
+      phases: [
+        {
+          name: "Paperwork",
+          tasks: [
+            { key: "permit", label: "Check study permit requirements", dependsOn: [], rationale: "Rules change often" },
+            { key: "apply", label: "Apply for study permit", dependsOn: ["permit"] },
+          ],
+        },
+        { name: "Arrival", tasks: [{ key: "sim", label: "Buy a local SIM card", dependsOn: [] }] },
+      ],
+    },
+  })
+  await client.close()
+
+  // The dashboard lists it as awaiting review.
+  await open(page, "/")
+  await page.getByRole("list", { name: "Draft plans" }).getByRole("link", { name: /Move to Toronto/ }).click()
+  await expect(page.getByText("Nothing is saved until you accept")).toBeVisible()
+  await expect(page.getByText("3 tasks in 2 phases")).toBeVisible()
+  await expect(page.getByText("After: Check study permit requirements")).toBeVisible()
+
+  await page.getByLabel("Task: Apply for study permit").fill("Apply for study permit online")
+  await page.getByRole("button", { name: 'Remove "Buy a local SIM card"' }).click()
+  await expect(page.getByText("2 tasks in 1 phase")).toBeVisible()
+
+  await page.getByRole("button", { name: "Accept plan" }).click()
+  await expect(page.getByRole("heading", { level: 1, name: "Move to Toronto" })).toBeVisible()
+  const tasks = page.getByRole("list", { name: "Tasks" })
+  await expect(tasks.getByText("Apply for study permit online")).toBeVisible()
+  await expect(tasks.getByText("Waiting on: Check study permit requirements")).toBeVisible()
+  await expect(tasks.getByText("Buy a local SIM card")).toHaveCount(0)
 })

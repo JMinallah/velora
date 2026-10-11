@@ -23,7 +23,6 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { loadLatestTransitionPlan } from "@/lib/coordination/session";
 import { MissionHeader } from "@/components/mission/MissionHeader";
 import { TaskList } from "@/components/mission/TaskList";
 import { readChatStream } from "@/lib/chat-stream";
@@ -69,7 +68,6 @@ export default function MissionPage() {
   const [isSending, setIsSending] = useState(false);
   // Bumped after each chat turn / decision so the undo bar re-checks.
   const [chatRevision, setChatRevision] = useState(0);
-  const [latestPlan] = useState(() => loadLatestTransitionPlan());
   const [selectedDocumentsByMission, setSelectedDocumentsByMission] = useState<Record<string, string[]>>(() => ({}));
   const messageListRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -179,7 +177,6 @@ export default function MissionPage() {
     return () => { cancelled = true }
   }, [activeMissionId])
 
-  // latestPlan is initialized lazily above to avoid synchronous setState in an effect
 
   const addSelectedDocument = (documentName: string) => {
     setSelectedDocumentsByMission((currentDocumentsByMission) => {
@@ -598,14 +595,6 @@ export default function MissionPage() {
             </div>
           ) : activeMission && (
             <>
-              {latestPlan && (
-                <div className="rounded-2xl border border-border/20 bg-muted/20 p-4 text-sm text-muted-foreground">
-                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-foreground">
-                    Latest generated plan
-                  </p>
-                  <p className="whitespace-pre-wrap">{latestPlan}</p>
-                </div>
-              )}
 
               <div className="flex min-h-0 max-h-[calc(100dvh-16rem)] flex-col gap-3 overflow-hidden rounded-2xl bg-background px-3 pt-3 pb-2 md:max-h-[calc(100dvh-17rem)] md:px-4 md:pt-4 md:pb-2 xl:max-h-none xl:flex-1">
                 <div

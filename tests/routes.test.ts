@@ -38,7 +38,7 @@ import {
 import { GET as listEventsRoute } from "@/app/api/missions/[id]/events/route"
 import { GET as cronRemindersRoute } from "@/app/api/cron/reminders/route"
 import { GET as listRemindersRoute, POST as createReminderRoute } from "@/app/api/reminders/route"
-import { POST as planRoute } from "@/app/api/plan/route"
+import { POST as planRoute } from "@/app/api/plans/route"
 import { POST as createMessageRoute, GET as listMessagesRoute } from "@/app/api/missions/[id]/messages/route"
 import { closeClient } from "@/adapters/db"
 
@@ -164,12 +164,12 @@ describeDb("zero-AI mission creation", () => {
 
   it("plan route reports AI as disabled (503 agent_disabled) so the client can offer manual planning", async () => {
     asUser("user-manual")
-    const res = await planRoute(req("POST", "/api/plan", { goal: "Move to Seoul" }), ctx({}))
+    const res = await planRoute(req("POST", "/api/plans", { goal: "Move to Seoul" }), ctx({}))
     expect(res.status).toBe(503)
     expect((await res.json()).code).toBe("agent_disabled")
 
     asUser(null)
-    const anon = await planRoute(req("POST", "/api/plan", { goal: "Move to Seoul" }), ctx({}))
+    const anon = await planRoute(req("POST", "/api/plans", { goal: "Move to Seoul" }), ctx({}))
     expect(anon.status).toBe(401)
   })
 })
@@ -467,7 +467,7 @@ describeDb("rate limiting", () => {
     const statuses: number[] = []
     let last: Response | undefined
     for (let i = 0; i < 7; i++) {
-      last = await planRoute(req("POST", "/api/plan", { goal: "Move" }), ctx({}))
+      last = await planRoute(req("POST", "/api/plans", { goal: "Move" }), ctx({}))
       statuses.push(last.status)
     }
     expect(statuses.slice(0, 6)).toEqual(Array(6).fill(503)) // allowed through (AI disabled in tests)
@@ -476,7 +476,7 @@ describeDb("rate limiting", () => {
     expect(await last!.json()).toMatchObject({ code: "rate_limited", error: expect.stringMatching(/try again in/) })
 
     asUser("user-llm-other") // another user is unaffected
-    expect((await planRoute(req("POST", "/api/plan", { goal: "Move" }), ctx({}))).status).toBe(503)
+    expect((await planRoute(req("POST", "/api/plans", { goal: "Move" }), ctx({}))).status).toBe(503)
   })
 })
 

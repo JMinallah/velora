@@ -126,6 +126,27 @@ export class GeminiProvider implements LlmProvider {
     return toProviderResponse(response.candidates?.[0]?.content?.parts ?? [])
   }
 
+  async generateStructured(input: {
+    system: string
+    prompt: string
+    jsonSchema: Record<string, unknown>
+    signal?: AbortSignal
+  }): Promise<string> {
+    const model = env().GEMINI_MODEL
+    const response = await geminiClient().models.generateContent({
+      model,
+      contents: input.prompt,
+      config: {
+        systemInstruction: input.system,
+        ...generationSettings(model),
+        responseMimeType: "application/json",
+        responseJsonSchema: input.jsonSchema,
+        ...(input.signal ? { abortSignal: input.signal } : {}),
+      },
+    })
+    return response.text ?? ""
+  }
+
   async generateStream(input: GenerateInput & { onText: (delta: string) => void }): Promise<ProviderResponse> {
     const stream = await geminiClient().models.generateContentStream(this.request(input))
     const parts: Part[] = []

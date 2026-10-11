@@ -4,6 +4,7 @@ import { CalendarDays, Plus, Sparkles } from "lucide-react"
 import { auth } from "@/lib/auth"
 import { listMissions } from "@/domain/missions"
 import { summarizeTasks } from "@/domain/tasks"
+import { listOpenProposals } from "@/domain/proposals"
 import { formatDisplayDate } from "@/lib/dates"
 import { OriginBadge } from "@/components/OriginBadge"
 import { Button } from "@/components/ui/button"
@@ -41,12 +42,39 @@ export default async function DashboardPage() {
   const userId = session?.user?.id
   if (!userId) redirect("/signin")
 
-  const [missions, summary] = await Promise.all([listMissions(userId), summarizeTasks(userId)])
+  const [missions, summary, drafts] = await Promise.all([
+    listMissions(userId),
+    summarizeTasks(userId),
+    listOpenProposals(userId),
+  ])
+  // Plans Velora drafted that the user hasn't accepted or discarded yet.
+  const draftsSection =
+    drafts.length > 0 ? (
+      <section aria-labelledby="drafts-heading" className="space-y-3">
+        <h2 id="drafts-heading" className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+          Plans awaiting your review
+        </h2>
+        <ul className="divide-y rounded-xl border bg-background" aria-label="Draft plans">
+          {drafts.map((draft) => (
+            <li key={draft.id}>
+              <Link href={`/plan/${draft.id}`} className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/40">
+                <OriginBadge origin="agent" />
+                <span className="min-w-0 flex-1 truncate font-medium">{draft.plan.title}</span>
+                <span className="shrink-0 text-sm text-muted-foreground">
+                  {draft.plan.phases.reduce((n, p) => n + p.tasks.length, 0)} tasks · Review
+                </span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </section>
+    ) : null
   const missionTitles = Object.fromEntries(missions.map((m) => [m.id, m.title]))
 
   if (missions.length === 0) {
     return (
       <div className="mx-auto flex max-w-md flex-1 flex-col items-center justify-center gap-4 text-center">
+        {draftsSection && <div className="w-full text-left">{draftsSection}</div>}
         <h1 className="text-2xl font-semibold">Start your first mission</h1>
         <p className="text-muted-foreground">
           A mission is one big change — a move, a new job, starting university — broken into tasks with dates.
@@ -84,6 +112,8 @@ export default async function DashboardPage() {
           </Button>
         </div>
       </div>
+
+      {draftsSection}
 
       <section aria-labelledby="upcoming-heading" className="space-y-3">
         <h2 id="upcoming-heading" className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
