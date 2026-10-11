@@ -379,6 +379,50 @@ describeDb("dashboard task summary", () => {
   })
 })
 
+describeDb("rate limiting", () => {
+  it("counts per subject within a window and resets in the next one", async () => {
+    const { consume } = await import("@/adapters/ratelimit")
+    const rule = { name: "test-rule", limit: 2, windowMs: 60_000 }
+    const t0 = Date.UTC(2026, 9, 11, 12, 0, 5)
+
+    expect((await consume(rule, "alice", t0)).allowed).toBe(true)
+    const second = await consume(rule, "alice", t0 + 1000)
+    expect(second).toMatchObject({ allowed: true, remaining: 0 })
+    const third = await consume(rule, "alice", t0 + 2000)
+    expect(third.allowed).toBe(false)
+    expect(third.retryAfterSeconds).toBe(53) // window ends at 12:01:00
+
+    expect((await consume(rule, "bob", t0)).allowed).toBe(true) // other subject, own counter
+    expect((await consume(rule, "alice", t0 + 60_000)).allowed).toBe(true) // next window
+  })
+
+  it("counts concurrent first requests exactly (upsert race)", async () => {
+    const { consume } = await import("@/adapters/ratelimit")
+    const rule = { name: "test-race", limit: 100, windowMs: 60_000 }
+    const results = await Promise.all(Array.from({ length: 12 }, () => consume(rule, "racer")))
+    expect(results.map((r) => r.remaining).sort((a, b) => a - b)).toEqual(
+      Array.from({ length: 12 }, (_, i) => 88 + i)
+    )
+  })
+
+  it("limits LLM routes per user with 429, Retry-After, and a readable message", async () => {
+    asUser("user-llm-limit")
+    const statuses: number[] = []
+    let last: Response | undefined
+    for (let i = 0; i < 7; i++) {
+      last = await planRoute(req("POST", "/api/plan", { goal: "Move" }), ctx({}))
+      statuses.push(last.status)
+    }
+    expect(statuses.slice(0, 6)).toEqual(Array(6).fill(503)) // allowed through (AI disabled in tests)
+    expect(statuses[6]).toBe(429)
+    expect(Number(last!.headers.get("Retry-After"))).toBeGreaterThan(0)
+    expect(await last!.json()).toMatchObject({ code: "rate_limited", error: expect.stringMatching(/try again in/) })
+
+    asUser("user-llm-other") // another user is unaffected
+    expect((await planRoute(req("POST", "/api/plan", { goal: "Move" }), ctx({}))).status).toBe(503)
+  })
+})
+
 describeDb("cron dispatch route", () => {
   it("rejects a missing or wrong bearer token", async () => {
     const noAuth = await cronRemindersRoute(new Request("http://localhost/api/cron/reminders"))

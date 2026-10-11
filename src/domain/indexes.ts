@@ -26,4 +26,7 @@ export async function ensureIndexes(db: Db) {
   await db.collection(COLLECTIONS.reminders).createIndex({ userId: 1, dueAt: 1 })
   // The cron dispatcher queries across users by status + due time.
   await db.collection(COLLECTIONS.reminders).createIndex({ status: 1, dueAt: 1 })
+
+  // Rate-limit counters expire with their window (expiresAt is a real Date).
+  await db.collection(COLLECTIONS.rateLimits).createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 })
 }

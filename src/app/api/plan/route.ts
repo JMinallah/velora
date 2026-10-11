@@ -46,4 +46,4 @@ export const POST = withAuth(async (request) => {
   } catch (error) {
     return serverError("Plan API Error:", error)
   }
-})
+}, { rateLimit: "llm" })
