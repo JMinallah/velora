@@ -77,6 +77,9 @@ export async function buildMissionSnapshot(userId: string, missionId: string): P
     mission.overview ? `Overview: ${mission.overview}` : null,
     mission.nextStep ? `Next step: ${mission.nextStep}` : null,
     mission.targetDate ? `Target date: ${mission.targetDate.slice(0, 10)}` : null,
+    mission.settings?.autonomy === "confirm-writes"
+      ? "Velora permissions: the user asked to confirm every change before it is applied — your changes will be shown to them as proposals."
+      : null,
     `Tasks: ${all.length} total, ${open.length} open`,
     soon.length > 0
       ? `Nearest deadlines:\n${soon.map((t) => `  - ${t.label} (due ${String(t.dueDate).slice(0, 10)})`).join("\n")}`
@@ -101,6 +104,8 @@ export async function runAgentTurn(input: {
 }): Promise<AgentRunResult> {
   const startedAt = Date.now()
   const turnId = input.turnId ?? randomUUID()
+  // FR-TRS-4: with "confirm-writes", every write tool proposes like a destructive one.
+  const askFirst = (await missions.getMission(input.userId, input.missionId))?.settings?.autonomy === "confirm-writes"
   const snapshot = await buildMissionSnapshot(input.userId, input.missionId)
   const system = coordinatorPrompt({
     missionSnapshot: snapshot,
@@ -181,13 +186,19 @@ export async function runAgentTurn(input: {
     })
 
     for (const call of response.toolCalls) {
-      // Destructive tools only propose: the call is validated, described from
+      // Destructive tools — and, when the user asked to confirm every change,
+      // write tools too — only propose: the call is validated, described from
       // current data, and parked for the user's confirmation. Nothing executes.
-      const destructive = destructiveTools[call.name]
-      if (destructive) {
-        const parsed = destructive.input.safeParse(call.args ?? {})
+      const writeTool = toolRegistry[call.name]
+      const confirmable =
+        destructiveTools[call.name] ??
+        (askFirst && writeTool?.tier === "write" && writeTool.describe
+          ? { input: writeTool.input, describe: writeTool.describe }
+          : undefined)
+      if (confirmable) {
+        const parsed = confirmable.input.safeParse(call.args ?? {})
         const described = parsed.success
-          ? await destructive.describe(input.userId, input.missionId, parsed.data)
+          ? await confirmable.describe(input.userId, input.missionId, parsed.data)
           : { error: "invalid arguments" }
         if (!parsed.success || "error" in described || proposals.length >= MAX_PROPOSALS_PER_TURN) {
           consecutiveFailures++
@@ -266,10 +277,12 @@ export async function runAgentTurn(input: {
     // A proposal ends the turn with a fixed reply: the model never gets to
     // describe a deletion as done, and the user decides on the card.
     if (proposals.length > 0) {
+      const onlyDeletions = proposals.every((p) => p.tool in destructiveTools)
+      const what = onlyDeletions ? "deleting anything" : "making changes"
       return finish(
         proposals.length === 1
-          ? "I need your confirmation before deleting anything — nothing has changed yet. Confirm or cancel below."
-          : `I need your confirmation for these ${proposals.length} deletions — nothing has changed yet. Confirm or cancel each below.`
+          ? `I need your confirmation before ${what} — nothing has changed yet. Confirm or cancel below.`
+          : `I need your confirmation for these ${proposals.length} ${onlyDeletions ? "deletions" : "changes"} — nothing has changed yet. Confirm or cancel each below.`
       )
     }
 

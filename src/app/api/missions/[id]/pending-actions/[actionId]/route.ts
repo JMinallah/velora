@@ -2,9 +2,9 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 import { withAuth } from "@/lib/with-auth"
 import { readJson, serverError, validationError } from "@/lib/http"
-import { claimAction, finishAction } from "@/domain/pendingActions"
+import { claimAction, finishAction, type PendingActionRecord } from "@/domain/pendingActions"
 import { setConfirmationStatus } from "@/domain/messages"
-import { destructiveTools } from "@/agent/tools"
+import { destructiveTools, toolRegistry, type DestructiveEffect } from "@/agent/tools"
 
 const decisionSchema = z.object({
   nonce: z.string().min(1).max(200),
@@ -20,6 +20,46 @@ const decisionSchema = z.object({
  *   unknown or another user's action → 404   wrong nonce → 403
  *   already decided (incl. replay)  → 409    expired     → 410
  */
+/** A confirmed change's effect, so the UI can update without guessing. */
+type ConfirmedEffect = DestructiveEffect | { kind: "data-changed" }
+
+/**
+ * Runs a claimed action with the arguments stored at proposal time: a
+ * destructive tool's perform(), or — for missions that confirm every change —
+ * a write tool's normal execute(), marked as confirmed by the user (which
+ * still records its undo snapshot).
+ */
+async function execute(
+  userId: string,
+  missionId: string,
+  action: PendingActionRecord
+): Promise<{ receipt: string; effect: ConfirmedEffect } | { error: string }> {
+  const unavailable = { error: "This action can no longer be performed." }
+  const destructive = destructiveTools[action.tool]
+  if (destructive) {
+    const args = destructive.input.safeParse(action.args)
+    if (!args.success) return unavailable
+    return destructive.perform(userId, missionId, args.data, {
+      actor: "agent",
+      turnId: action.turnId,
+      tool: action.tool,
+      args: action.args,
+      confirmedBy: "user",
+    })
+  }
+  const write = toolRegistry[action.tool]
+  if (write?.tier !== "write") return unavailable
+  const args = write.input.safeParse(action.args)
+  if (!args.success) return unavailable
+  const { result, receipt } = await write.execute(userId, missionId, args.data, {
+    turnId: action.turnId,
+    confirmedBy: "user",
+  })
+  const failed = result && typeof result === "object" && "error" in result
+  if (failed || !receipt) return { error: "That change can no longer be made — the item may have changed." }
+  return { receipt, effect: { kind: "data-changed" } }
+}
+
 export const POST = withAuth<{ id: string; actionId: string }>(async (req, session, { params }) => {
   try {
     const { id: missionId, actionId } = await params
@@ -50,19 +90,7 @@ export const POST = withAuth<{ id: string; actionId: string }>(async (req, sessi
     }
 
     // Claimed for execution — exactly once.
-    const { action } = outcome
-    const tool = destructiveTools[action.tool]
-    const args = tool?.input.safeParse(action.args)
-    const result =
-      tool && args?.success
-        ? await tool.perform(session.userId, missionId, args.data, {
-            actor: "agent",
-            turnId: action.turnId,
-            tool: action.tool,
-            args: action.args,
-            confirmedBy: "user",
-          })
-        : { error: "This action can no longer be performed." }
+    const result = await execute(session.userId, missionId, outcome.action)
 
     if ("error" in result) {
       await finishAction(session.userId, actionId, "failed")
