@@ -48,11 +48,15 @@ export const missionPatchSchema = z
   })
   .partial()
 
+const taskIds = z.array(z.string().min(1).max(100)).max(50)
+
 export const taskCreateSchema = z.object({
   label: z.string().trim().min(1).max(300),
   category: z.string().max(100).optional(),
   dueDate: isoDate.nullable().optional(),
   priority: priority.optional(),
+  dependsOn: taskIds.optional(),
+  phase: z.string().trim().max(100).optional(),
 })
 
 export const taskPatchSchema = z
@@ -62,6 +66,8 @@ export const taskPatchSchema = z
     dueDate: isoDate.nullable(),
     priority,
     completed: z.boolean(),
+    dependsOn: taskIds,
+    phase: z.string().trim().max(100),
   })
   .partial()
 

@@ -295,6 +295,63 @@ describeDb("tasks routes", () => {
   })
 })
 
+describeDb("task dependencies (4-2)", () => {
+  const post = (missionId: string, body: Record<string, unknown>) =>
+    createTaskRoute(req("POST", `/api/missions/${missionId}/tasks`, body), ctx({ id: missionId }))
+  const patch = (missionId: string, taskId: string, body: Record<string, unknown>) =>
+    patchTaskRoute(req("PATCH", `/api/missions/${missionId}/tasks/${taskId}`, body), ctx({ id: missionId, taskId }))
+
+  it("accepts valid dependencies and rejects self, foreign, unknown and looping ones", async () => {
+    const missionId = await createMissionAs("user-deps")
+    const lease = (await (await post(missionId, { label: "Sign lease" })).json()).data.id
+    const movers = await post(missionId, { label: "Book movers", dependsOn: [lease] })
+    expect(movers.status).toBe(201)
+    const moversId = (await movers.json()).data.id
+
+    const loop = await patch(missionId, lease, { dependsOn: [moversId] })
+    expect(loop.status).toBe(400)
+    expect((await loop.json()).error).toBe("That would create a loop: Sign lease → Book movers → Sign lease.")
+    expect((await patch(missionId, lease, { dependsOn: [lease] })).status).toBe(400)
+    expect((await post(missionId, { label: "x", dependsOn: ["no-such-task"] })).status).toBe(400)
+
+    const otherMission = await createMissionAs("user-deps")
+    const foreign = (await (await post(otherMission, { label: "elsewhere" })).json()).data.id
+    expect((await patch(missionId, lease, { dependsOn: [foreign] })).status).toBe(400)
+
+    const dedup = await patch(missionId, moversId, { dependsOn: [lease, lease] })
+    expect((await dedup.json()).data.dependsOn).toEqual([lease])
+  })
+
+  it("deleting a task removes it from other tasks' dependencies", async () => {
+    const missionId = await createMissionAs("user-deps-delete")
+    const lease = (await (await post(missionId, { label: "Sign lease" })).json()).data.id
+    const movers = (await (await post(missionId, { label: "Book movers", dependsOn: [lease] })).json()).data.id
+    await deleteTaskRoute(req("DELETE", `/api/missions/${missionId}/tasks/${lease}`), ctx({ id: missionId, taskId: lease }))
+    const tasks = (await (await listTasksRoute(req("GET", "/"), ctx({ id: missionId }))).json()).data
+    expect(tasks.find((t: { id: string }) => t.id === movers).dependsOn).toEqual([])
+  })
+})
+
+describeDb("transactions (4-1)", () => {
+  it("commits all writes together, or none when the transaction fails", async () => {
+    const { withTransaction, getDb } = await import("@/adapters/db")
+    const col = (await getDb()).collection("txn_probe")
+    await withTransaction(async (session) => {
+      await col.insertOne({ n: 1 }, { session })
+      await col.insertOne({ n: 2 }, { session })
+    })
+    expect(await col.countDocuments()).toBe(2)
+
+    await expect(
+      withTransaction(async (session) => {
+        await col.insertOne({ n: 3 }, { session })
+        throw new Error("boom")
+      })
+    ).rejects.toThrow("boom")
+    expect(await col.countDocuments()).toBe(2) // the insert before the failure was rolled back
+  })
+})
+
 describeDb("reminders and messages routes", () => {
   it("ignores server-owned reminder fields and normalizes dueAt to UTC", async () => {
     const missionId = await createMissionAs("user-rem")

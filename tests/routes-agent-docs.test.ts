@@ -477,6 +477,30 @@ describeDb('autonomy "confirm-writes": every agent change waits for the user (FR
   })
 })
 
+describeDb("agent tool setTaskDependency (4-2)", () => {
+  it("sets dependencies with a receipt, and a loop is refused without changing anything", async () => {
+    const missionId = await createMissionAs("user-agent-deps")
+    const add = async (label: string) =>
+      (await (await createTaskRoute(req("POST", "/", { label }), ctx({ id: missionId }))).json()).data.id as string
+    const lease = await add("Sign lease")
+    const movers = await add("Book movers")
+
+    provider = scripted([
+      { text: "", toolCalls: [{ name: "setTaskDependency", args: { taskId: movers, dependsOn: [lease] } }] },
+      { text: "", toolCalls: [{ name: "setTaskDependency", args: { taskId: lease, dependsOn: [movers] } }] },
+      { text: "Done.", toolCalls: [] },
+    ]).provider
+    const res = await chat(missionId, { message: "movers after lease, and lease after movers" })
+    const data = (await res.json()).data
+    expect(data.receipts).toEqual([{ tool: "setTaskDependency", text: '"Book movers" now waits for 1 task' }])
+
+    const tasks = (await (await listTasksRoute(req("GET", "/"), ctx({ id: missionId }))).json()).data
+    const byId = Object.fromEntries(tasks.map((t: { id: string; dependsOn: string[] }) => [t.id, t.dependsOn]))
+    expect(byId[movers]).toEqual([lease])
+    expect(byId[lease]).toEqual([]) // the looping request was refused
+  })
+})
+
 describeDb("chat route — streaming (NDJSON)", () => {
   const streamChat = async (missionId: string, message: string) => {
     const res = await chatRoute(

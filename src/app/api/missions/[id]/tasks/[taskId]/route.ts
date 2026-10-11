@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { withAuth } from "@/lib/with-auth"
-import { updateTask, deleteTask } from "@/domain/tasks"
+import { updateTask, deleteTask, checkDependencies } from "@/domain/tasks"
 import { taskPatchSchema } from "@/domain/schemas"
 import { readJson, serverError, validationError } from "@/lib/http"
 
@@ -11,6 +11,12 @@ export const PATCH = withAuth<{ id: string; taskId: string }>(async (req, sessio
     if (!parsed.success) return validationError(parsed.error)
     if (Object.keys(parsed.data).length === 0) {
       return NextResponse.json({ success: false, error: "no updatable fields provided" }, { status: 400 })
+    }
+
+    if (parsed.data.dependsOn) {
+      const problem = await checkDependencies(session.userId, id, taskId, parsed.data.dependsOn)
+      if (problem) return NextResponse.json({ success: false, error: problem }, { status: 400 })
+      parsed.data.dependsOn = [...new Set(parsed.data.dependsOn)]
     }
 
     const updated = await updateTask(session.userId, id, taskId, parsed.data)

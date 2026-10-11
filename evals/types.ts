@@ -3,7 +3,7 @@ import type { TaskRecord } from "../src/domain/collections"
 /** Eval sets (docs/03-AGENT-DESIGN.md §7). planning/ and refusal/ arrive with Phases 4 and 7. */
 export type EvalSet = "tool-selection" | "injection" | "regression"
 
-export const WRITE_TOOLS = new Set(["createTask", "updateTask", "completeTask", "createReminder"])
+export const WRITE_TOOLS = new Set(["createTask", "updateTask", "completeTask", "setTaskDependency", "createReminder"])
 export const DESTRUCTIVE_TOOLS = new Set(["deleteTask", "deleteMission"])
 
 /** What a fixture's check can inspect after one agent turn against a fresh mission. */

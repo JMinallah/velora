@@ -138,3 +138,28 @@ test("asking Velora to confirm every change is one click; loosening it explains 
   await open(page, page.url().replace(/^https?:\/\/[^/]+/, ""))
   await expect(page.getByLabel("Velora's permissions")).toContainText("Velora makes changes directly")
 })
+
+test("a task can wait on another; it shows what it's waiting on until that is done", async ({ page }) => {
+  await open(page, "/mission/new")
+  await page.getByLabel("Mission title").fill("Move to Nairobi")
+  await page.getByRole("button", { name: "Create mission" }).click()
+  await expect(page.getByRole("heading", { level: 1, name: "Move to Nairobi" })).toBeVisible()
+
+  const addTask = page.getByRole("form", { name: "Add task" })
+  const tasks = page.getByRole("list", { name: "Tasks" })
+  for (const label of ["Sign lease", "Book movers"]) {
+    await addTask.getByLabel("New task").fill(label)
+    await addTask.getByRole("button", { name: "Add" }).click()
+    await expect(tasks.getByText(label, { exact: true })).toBeVisible()
+  }
+
+  await page.getByRole("button", { name: 'Edit "Book movers"' }).click()
+  const edit = page.getByRole("form", { name: 'Edit "Book movers"' })
+  await edit.getByRole("checkbox", { name: "Sign lease" }).check()
+  await edit.getByRole("button", { name: "Save task" }).click()
+  await expect(tasks.getByText("Waiting on: Sign lease")).toBeVisible()
+
+  await page.getByLabel("Done: Sign lease").check()
+  await expect(tasks.getByText("After: Sign lease")).toBeVisible()
+  await expect(tasks.getByText("Waiting on: Sign lease")).toHaveCount(0)
+})

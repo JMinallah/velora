@@ -1,4 +1,4 @@
-import { MongoClient, Db } from "mongodb"
+import { MongoClient, Db, type ClientSession } from "mongodb"
 import { env } from "@/lib/env"
 import { ensureIndexes } from "@/domain/indexes"
 
@@ -39,4 +39,23 @@ export async function closeClient() {
   globalForDb._mongoClient = undefined
   globalForDb._mongoDb = undefined
   if (pending) await (await pending).close()
+}
+
+/**
+ * Runs `fn` in a multi-document transaction: every write passed the session
+ * commits together or not at all (e.g. accepting a plan). Requires a replica
+ * set — Atlas always is one; local and CI test databases run as single-node
+ * replica sets. Retries transient transaction errors (driver default).
+ */
+export async function withTransaction<T>(fn: (session: ClientSession) => Promise<T>): Promise<T> {
+  const session = (await getClient()).startSession()
+  try {
+    let result: T | undefined
+    await session.withTransaction(async () => {
+      result = await fn(session)
+    })
+    return result as T
+  } finally {
+    await session.endSession()
+  }
 }
