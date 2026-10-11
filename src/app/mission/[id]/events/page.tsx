@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import type { Event } from "@/types";
+import type { Event, Message } from "@/types";
 
 const EVENT_TYPES = [
   "all",
@@ -35,6 +35,8 @@ export default function MissionEventsPage() {
   const params = useParams();
   const missionId = params ? String(params.id ?? "") : "";
   const [events, setEvents] = useState<Event[]>([]);
+  // The user message behind each chat turn, so agent changes show why they happened (FR-TRS-2).
+  const [requestByTurn, setRequestByTurn] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [typeFilter, setTypeFilter] = useState<(typeof EVENT_TYPES)[number]>("all");
@@ -49,8 +51,12 @@ export default function MissionEventsPage() {
         setIsLoading(true);
         setError(null);
 
-        const response = await fetch(`/api/missions/${missionId}/events`);
+        const [response, messagesResponse] = await Promise.all([
+          fetch(`/api/missions/${missionId}/events`),
+          fetch(`/api/missions/${missionId}/messages`),
+        ]);
         const data = await response.json().catch(() => ({}));
+        const messagesData = await messagesResponse.json().catch(() => ({}));
 
         if (!response.ok || !data?.success) {
           throw new Error(data?.error || "Failed to load events");
@@ -58,6 +64,13 @@ export default function MissionEventsPage() {
 
         if (!cancelled) {
           setEvents(data.data ?? []);
+          setRequestByTurn(
+            Object.fromEntries(
+              ((messagesData?.data ?? []) as Message[])
+                .filter((m) => m.type === "user" && m.turnId)
+                .map((m) => [m.turnId as string, m.text])
+            )
+          );
         }
       } catch (loadError) {
         if (!cancelled) {
@@ -138,6 +151,20 @@ export default function MissionEventsPage() {
               <div>
                 <p className="text-sm font-semibold capitalize">{formatEventType(event.type)}</p>
                 <p className="text-xs text-muted-foreground">{event.actor} • {formatTimestamp(event.createdAt)}</p>
+                {event.cause && (
+                  <p className="mt-2 text-sm">
+                    {event.turnId && requestByTurn[event.turnId] ? (
+                      <>
+                        Because you asked: <q className="italic">{requestByTurn[event.turnId]}</q>
+                      </>
+                    ) : (
+                      "Made by Velora from chat"
+                    )}
+                    <span className="block text-xs text-muted-foreground">
+                      via {event.cause.tool}({JSON.stringify(event.cause.args)})
+                    </span>
+                  </p>
+                )}
               </div>
               <span className="rounded-full bg-muted px-2 py-1 text-xs text-muted-foreground">{event.id.slice(0, 8)}</span>
             </div>

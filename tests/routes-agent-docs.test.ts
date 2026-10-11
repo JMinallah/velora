@@ -139,8 +139,23 @@ describeDb("chat route", () => {
 
     const tasks = (await (await listTasksRoute(req("GET", "/"), ctx({ id: missionId }))).json()).data
     expect(tasks).toEqual([expect.objectContaining({ label: "Book movers", source: "agent", dueDate: "2026-11-01" })])
+    // Every message of the turn and the event it caused share one turn id,
+    // and the event records the validated tool call (FR-TRS-2).
+    const turnIds = new Set(messages.map((m: { turnId?: string }) => m.turnId))
+    expect(turnIds.size).toBe(1)
+    const [turnId] = turnIds
+    expect(turnId).toEqual(expect.any(String))
     const events = (await (await listEventsRoute(req("GET", "/"), ctx({ id: missionId }))).json()).data
-    expect(events).toContainEqual(expect.objectContaining({ type: "task-created", actor: "agent" }))
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "task-created",
+        actor: "agent",
+        turnId,
+        cause: { tool: "createTask", args: { label: "Book movers", dueDate: "2026-11-01" } },
+      })
+    )
+    // Changes made by hand carry no agent provenance.
+    expect(events.find((e: { type: string }) => e.type === "mission-created")).not.toHaveProperty("turnId")
 
     // The next turn's history comes from the database, receipts included.
     await chat(missionId, { message: "Thanks!" })

@@ -27,6 +27,7 @@ export async function createMessage(
     source: input.source ?? "agent",
     ...(input.promptVersion ? { promptVersion: input.promptVersion } : {}),
     ...(input.tool ? { tool: input.tool } : {}),
+    ...(input.turnId ? { turnId: input.turnId } : {}),
   }
   await db.collection<MessageRecord>(COLLECTIONS.messages).insertOne(msg)
   return msg

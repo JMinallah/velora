@@ -16,6 +16,8 @@ export type Message = {
   promptVersion?: string;
   /** Tool that produced a receipt message. */
   tool?: string;
+  /** Groups a chat turn: the user's message, its receipts, the reply, and the events it caused. */
+  turnId?: string;
 };
 
 export type MissionAction = {
@@ -108,4 +110,8 @@ export type Event = {
   actor: "user" | "agent" | "system";
   payload: Record<string, unknown>;
   createdAt: string;
+  /** Agent changes: the chat turn that caused them (matches Message.turnId). */
+  turnId?: string;
+  /** Agent changes: the validated tool call that made the change. */
+  cause?: { tool: string; args: unknown };
 };
