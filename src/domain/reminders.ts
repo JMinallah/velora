@@ -42,12 +42,13 @@ export async function createReminder(
     updatedAt: now,
   }
 
-  await db.collection<ReminderRecord>(COLLECTIONS.reminders).insertOne(reminder)
+  await db.collection<ReminderRecord>(COLLECTIONS.reminders).insertOne({ ...reminder })
   await emitEvent(userId, {
     missionId: reminder.missionId,
     type: "reminder-created",
     actor,
     payload: { reminderId: reminder.id, title: reminder.title, channel: reminder.channel },
+    undo: { kind: "delete-reminder", reminderId: reminder.id, label: reminder.title, afterUpdatedAt: now },
   })
   return reminder
 }

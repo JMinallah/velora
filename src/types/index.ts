@@ -123,7 +123,8 @@ export type Event = {
     | "risk-updated"
     | "replan-generated"
     | "action-proposed"
-    | "action-rejected";
+    | "action-rejected"
+    | "change-undone";
   actor: "user" | "agent" | "system";
   payload: Record<string, unknown>;
   createdAt: string;
@@ -133,4 +134,16 @@ export type Event = {
   cause?: { tool: string; args: unknown };
   /** Destructive agent changes: executed only after the user confirmed (03-AGENT-DESIGN §5). */
   confirmedBy?: "user";
+  /** Agent writes: how to reverse this change (FR-AGT-6). Never set on user changes. */
+  undo?: UndoSnapshot;
 };
+
+/**
+ * Enough to reverse one agent write exactly. `afterUpdatedAt` is the record's
+ * updatedAt right after the change: undo refuses if it has changed since
+ * (the user edited the record), so undo never overwrites the user's work.
+ */
+export type UndoSnapshot =
+  | { kind: "delete-task"; taskId: string; label: string; afterUpdatedAt: string }
+  | { kind: "restore-task"; taskId: string; label: string; before: Task; afterUpdatedAt: string }
+  | { kind: "delete-reminder"; reminderId: string; label: string; afterUpdatedAt: string };
