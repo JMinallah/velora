@@ -14,6 +14,8 @@
 /coverage
 /e2e/.auth/
 /test-results/
+# development document uploads (src/lib/storage) — never web-served
+/.data/
 /playwright-report/
 
 # next.js

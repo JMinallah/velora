@@ -50,10 +50,21 @@ export async function updateDocument(
   id: string,
   patch: Partial<
     Pick<DocumentRecord, "name" | "mimeType" | "storageUrl" | "extractedText" | "summary" | "extractedFields">
-  >
+  >,
+  actor: Actor = "user"
 ): Promise<DocumentRecord | null> {
   const db = await getDb()
-  return db
+  const updated = await db
     .collection<DocumentRecord>(COLLECTIONS.documents)
     .findOneAndUpdate({ userId, id }, { $set: patch }, { returnDocument: "after" })
+
+  if (updated) {
+    await emitEvent(userId, {
+      missionId: updated.missionId,
+      type: "document-updated",
+      actor,
+      payload: { documentId: id, name: updated.name, fields: Object.keys(patch) },
+    })
+  }
+  return updated
 }

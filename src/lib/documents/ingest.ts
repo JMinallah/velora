@@ -1,13 +1,8 @@
-import fs from "fs"
-import path from "path"
 import { getDb } from "@/adapters/db"
 import { COLLECTIONS, type DocumentRecord } from "@/domain/collections"
+import { updateDocument } from "@/domain/documents"
 
-export async function processDocumentRecord(
-  userId: string,
-  documentId: string,
-  input: { filePath?: string; buffer?: Buffer }
-) {
+export async function processDocumentRecord(userId: string, documentId: string, input: { buffer: Buffer }) {
   try {
     const db = await getDb()
     const doc = await db
@@ -15,8 +10,7 @@ export async function processDocumentRecord(
       .findOne({ userId, id: documentId })
     if (!doc) throw new Error("document not found")
 
-    const buffer = input.buffer ?? (input.filePath ? await fs.promises.readFile(input.filePath) : null)
-    if (!buffer) throw new Error("document content is required")
+    const { buffer } = input
     let extractedText = ""
 
     // Plain text
@@ -53,41 +47,12 @@ export async function processDocumentRecord(
 
     const summary = extractedText ? extractedText.slice(0, 400) : ""
 
-    await db
-      .collection(COLLECTIONS.documents)
-      .updateOne({ userId, id: documentId }, { $set: { extractedText, summary } })
-
-    // processed marker file
-    if (input.filePath) {
-      try {
-        await fs.promises.writeFile(path.join(path.dirname(input.filePath), `${path.basename(input.filePath)}.processed`), new Date().toISOString())
-      } catch {
-        // ignore
-      }
-    }
+    // Through the domain layer so the extraction is recorded in the activity feed.
+    await updateDocument(userId, documentId, { extractedText, summary }, "system")
 
     return { success: true }
   } catch (error) {
     console.error("processDocumentRecord error", error)
     return { success: false, error: error instanceof Error ? error.message : String(error) }
-  }
-}
-
-export async function scanAndProcessPendingUploads() {
-  const uploadsDir = path.join(process.cwd(), "public", "uploads")
-  try {
-    const files = await fs.promises.readdir(uploadsDir)
-    for (const file of files) {
-      if (file.endsWith(".processed")) continue
-      const filePath = path.join(uploadsDir, file)
-      const db = await getDb()
-      const storageUrl = `/uploads/${file}`
-      const doc = await db.collection<DocumentRecord>(COLLECTIONS.documents).findOne({ storageUrl })
-      if (doc && !doc.extractedText) {
-        await processDocumentRecord(doc.userId, doc.id, { filePath })
-      }
-    }
-  } catch {
-    // ignore if folder missing
   }
 }
