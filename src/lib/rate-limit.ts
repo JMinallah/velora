@@ -5,7 +5,9 @@ import { consume, type RateRule } from "@/adapters/ratelimit"
  * Rate-limit policy (NFR-SEC-3, 04-SECURITY §5). Every authenticated route
  * gets a tier through withAuth: GETs are "read", everything else "mutation"
  * unless the route asks for "llm" — the tier that protects the shared,
- * free-tier model quota (Gemini allows ~5 requests/min per project).
+ * free-tier model quota. That quota is per project, not per user: Gemini 3.5
+ * Flash-Lite allows 15 requests/min and 500/day (AI Studio, 2026-10-11), and
+ * one chat message costs 2–3 model requests.
  */
 export type RateTier = "read" | "mutation" | "llm"
 
@@ -24,7 +26,8 @@ const POLICY: Record<RateTier, { perUser: RateRule[]; perIp: RateRule[] }> = {
   llm: {
     perUser: [
       { name: "llm-user-min", limit: 6, windowMs: MINUTE },
-      { name: "llm-user-day", limit: 100, windowMs: DAY },
+      // ~50 messages ≈ 125 model requests: one heavy user can't take most of the 500/day.
+      { name: "llm-user-day", limit: 50, windowMs: DAY },
     ],
     // Several accounts behind one address (or one abuser with many) share this.
     perIp: [{ name: "llm-ip-min", limit: 20, windowMs: MINUTE }],

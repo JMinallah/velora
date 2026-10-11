@@ -2,12 +2,12 @@ import { NextResponse } from "next/server"
 import { withAuth } from "@/lib/with-auth"
 import { runAgentTurn } from "@/agent/loop"
 import { getLlmProvider } from "@/agent/providers"
-import { isTransientLlmError } from "@/agent/providers/gemini"
+import { isDailyQuotaError, isTransientLlmError } from "@/agent/providers/gemini"
 import type { AgentTurn } from "@/agent/providers/types"
 import { getMission } from "@/domain/missions"
 import { listMessages, createMessage } from "@/domain/messages"
 import type { MessageRecord } from "@/domain/collections"
-import { readJson, serverError } from "@/lib/http"
+import { llmUnavailable, readJson, serverError } from "@/lib/http"
 
 const HISTORY_LIMIT = 20
 
@@ -73,12 +73,11 @@ export const POST = withAuth<{ id: string }>(async (req, session, { params }) =>
         history,
       })
     } catch (error) {
-      if (isTransientLlmError(error)) {
-        return NextResponse.json(
-          { success: false, error: "The AI service is briefly overloaded — try again in a moment.", code: "llm_transient" },
-          { status: 503 }
-        )
-      }
+      const unavailable = llmUnavailable(error, {
+        isDailyQuota: isDailyQuotaError(error),
+        isTransient: isTransientLlmError(error),
+      })
+      if (unavailable) return unavailable
       throw error
     }
 

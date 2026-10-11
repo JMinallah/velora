@@ -93,8 +93,19 @@ export class GeminiProvider implements LlmProvider {
   }
 }
 
-/** Rate limits (429) and server-side failures are worth a retry; bad requests are not. */
+/**
+ * The project's per-model *daily* request quota is spent (free tier: e.g. 500/day
+ * for Flash-Lite). Unlike a per-minute limit, retrying won't help until it
+ * resets at midnight Pacific.
+ */
+export function isDailyQuotaError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error)
+  return /PerDay/i.test(message)
+}
+
+/** Rate limits (429) and server-side failures are worth a retry; bad requests and spent daily quotas are not. */
 export function isTransientLlmError(error: unknown): boolean {
+  if (isDailyQuotaError(error)) return false
   const status = (error as { status?: unknown } | null)?.status
   if (typeof status === "number") return status === 429 || status >= 500
   const message = error instanceof Error ? error.message : String(error)

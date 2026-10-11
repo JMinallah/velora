@@ -162,6 +162,21 @@ describeDb("chat route", () => {
   })
 })
 
+describeDb("chat route — daily quota", () => {
+  it("says the daily AI limit is reached (503 llm_quota), not 'briefly overloaded', and stores nothing", async () => {
+    const missionId = await createMissionAs("user-chat-quota")
+    provider = scripted([
+      Object.assign(new Error("quotaId GenerateRequestsPerDayPerProjectPerModel-FreeTier"), { status: 429 }),
+    ]).provider
+
+    const res = await chat(missionId, { message: "hello?" })
+    expect(res.status).toBe(503)
+    expect(await res.json()).toMatchObject({ code: "llm_quota", error: expect.stringMatching(/daily limit/) })
+    const messages = (await (await listMessagesRoute(req("GET", "/"), ctx({ id: missionId }))).json()).data
+    expect(messages).toHaveLength(0)
+  })
+})
+
 describeDb("documents route", () => {
   it("validates input, keeps extraction server-owned, and is scoped per user", async () => {
     const missionId = await createMissionAs("user-docs")
