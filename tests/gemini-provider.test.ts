@@ -5,7 +5,7 @@
  * signatures — so they are pinned here without network access.
  */
 import { describe, it, expect } from "vitest"
-import { toContents, generationSettings, isTransientLlmError } from "@/agent/providers/gemini"
+import { toContents, generationSettings, isTransientLlmError, isDailyQuotaError } from "@/agent/providers/gemini"
 
 describe("toContents", () => {
   it("returns tool results in one user turn, echoing call ids", () => {
@@ -63,5 +63,24 @@ describe("isTransientLlmError", () => {
     expect(isTransientLlmError(Object.assign(new Error("down"), { status: 503 }))).toBe(true)
     expect(isTransientLlmError(Object.assign(new Error("bad"), { status: 400 }))).toBe(false)
     expect(isTransientLlmError(new Error("RESOURCE_EXHAUSTED"))).toBe(true)
+  })
+})
+
+describe("isDailyQuotaError", () => {
+  // Shape of the real error the free tier returned in CI (2026-10-11).
+  const dailyQuota = Object.assign(
+    new Error('{"error":{"code":429,"message":"You exceeded your current quota","details":[{"violations":[{"quotaId":"GenerateRequestsPerDayPerProjectPerModel-FreeTier","quotaValue":"20"}]}]}}'),
+    { status: 429 }
+  )
+
+  it("recognises a spent daily quota and does not treat it as retryable", () => {
+    expect(isDailyQuotaError(dailyQuota)).toBe(true)
+    expect(isTransientLlmError(dailyQuota)).toBe(false)
+  })
+
+  it("leaves per-minute limits retryable", () => {
+    const perMinute = Object.assign(new Error("quotaId: GenerateRequestsPerMinutePerProjectPerModel"), { status: 429 })
+    expect(isDailyQuotaError(perMinute)).toBe(false)
+    expect(isTransientLlmError(perMinute)).toBe(true)
   })
 })

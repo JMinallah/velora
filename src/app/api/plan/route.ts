@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server"
 import { withAuth } from "@/lib/with-auth"
-import { serverError } from "@/lib/http"
+import { llmUnavailable, serverError } from "@/lib/http"
 import { agentEnabled } from "@/lib/env"
 import { generateGeminiText, isTransientGeminiError } from "@/lib/ai/gemini"
+import { isDailyQuotaError } from "@/agent/providers/gemini"
 import { buildTransitionPlanPrompt, type TransitionPlanInput } from "@/lib/coordination/plan"
 
 async function generateWithRetry(prompt: string) {
@@ -44,6 +45,10 @@ export const POST = withAuth(async (request) => {
 
     return NextResponse.json({ success: true, response })
   } catch (error) {
-    return serverError("Plan API Error:", error)
+    const unavailable = llmUnavailable(error, {
+      isDailyQuota: isDailyQuotaError(error),
+      isTransient: isTransientGeminiError(error),
+    })
+    return unavailable ?? serverError("Plan API Error:", error)
   }
 }, { rateLimit: "llm" })

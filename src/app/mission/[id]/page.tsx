@@ -278,7 +278,7 @@ export default function MissionPage() {
       if (!response.ok || !data?.success) {
         // Rate limits, AI disabled and provider overload carry messages written
         // for users ("try again in 40 seconds"); anything else stays generic.
-        const userFacing = ["rate_limited", "agent_disabled", "llm_transient"].includes(data?.code);
+        const userFacing = ["rate_limited", "agent_disabled", "llm_transient", "llm_quota"].includes(data?.code);
         throw new ChatError(userFacing ? data.error : "Chat failed", userFacing);
       }
 

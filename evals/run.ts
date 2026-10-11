@@ -7,7 +7,8 @@
  *   GEMINI_API_KEY      — Gemini free tier is enough; fixtures are few
  *   TEST_MONGODB_URI    — local: podman start velora-test-mongo; CI: service
  *   EVAL_MIN_INTERVAL_MS (optional) — spacing between model calls; the
- *                         default suits the free tier's 5 requests/minute.
+ *                         default suits Flash-Lite's free 15 requests/minute
+ *                         (use 13000 for a 5/minute model).
  *                         Set 0 on a paid key.
  *
  * Usage: npm run evals
@@ -36,7 +37,7 @@ process.env.AUTH_GOOGLE_SECRET = process.env.AUTH_GOOGLE_SECRET ?? "eval-client-
 
 async function main() {
   const { runAgentTurn } = await import("../src/agent/loop")
-  const { GeminiProvider, isTransientLlmError } = await import("../src/agent/providers/gemini")
+  const { GeminiProvider, isTransientLlmError, isDailyQuotaError } = await import("../src/agent/providers/gemini")
   type Provider = import("../src/agent/providers/types").LlmProvider
   const { createMission } = await import("../src/domain/missions")
   const { createTask, listTasks } = await import("../src/domain/tasks")
@@ -44,9 +45,9 @@ async function main() {
   const { env } = await import("../src/lib/env")
 
   const WRITE_TOOLS = new Set(["createTask", "updateTask", "completeTask", "createReminder"])
-  // Paced to the free tier (5 requests/minute) with one retry on a rate
+  // Paced to the free tier's per-minute limit with one retry on a rate
   // limit, so a run measures agent behaviour rather than quota luck.
-  const minIntervalMs = Number(process.env.EVAL_MIN_INTERVAL_MS ?? 13_000)
+  const minIntervalMs = Number(process.env.EVAL_MIN_INTERVAL_MS ?? 4_500) // Flash-Lite free tier: 15/min
   const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
   const gemini = new GeminiProvider()
   let lastCallAt = 0
@@ -62,17 +63,12 @@ async function main() {
           return await gemini.generate(input)
         } catch (error) {
           // A spent daily quota will not recover within this run; don't wait.
-          if (attempt > 0 || !isTransientLlmError(error) || isDailyQuotaError(error)) throw error
+          if (attempt > 0 || !isTransientLlmError(error)) throw error
           await sleep(Math.max(minIntervalMs, 15_000))
         }
       }
     },
   }
-  function isDailyQuotaError(error: unknown): boolean {
-    const message = error instanceof Error ? error.message : String(error)
-    return /PerDay/i.test(message)
-  }
-
   // Pacing happens inside the turn, so the turn needs a larger budget than
   // the 30 s users get. Latency is measured separately (NFR-PERF-1).
   const wallClockMs = 6 * Math.max(minIntervalMs, 10_000)
