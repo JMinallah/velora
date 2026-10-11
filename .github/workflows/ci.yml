@@ -1,9 +1,13 @@
 name: CI
 
+# One run per change: PRs are checked via pull_request, merges via push to
+# main. (Pushing feature branches too used to run everything twice per PR.)
+# workflow_dispatch runs the full suite, evals included, on demand.
 on:
   push:
-    branches: [main, "v2/**"]
+    branches: [main]
   pull_request:
+  workflow_dispatch:
 
 jobs:
   checks:
@@ -16,16 +20,16 @@ jobs:
     env:
       TEST_MONGODB_URI: mongodb://localhost:27017
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0 # gitleaks scans full history
 
       - name: Scan for secrets
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -52,7 +56,7 @@ jobs:
 
       - name: Upload Playwright report
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-report
           path: |
@@ -60,10 +64,38 @@ jobs:
             test-results/
           retention-days: 7
 
-      - name: Agent evals (skips without GEMINI_API_KEY secret)
-        run: npm run evals
+      # Evals call the real model and spend free-tier quota (~10 requests,
+      # ~2 min), so they run only when the change can affect the agent: its
+      # code, the domain layer its tools call, the eval suite, or dependencies.
+      - name: Detect agent-affecting changes
+        id: changes
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            base="${{ github.event.pull_request.base.sha }}"
+          else
+            base="${{ github.event.before }}"
+          fi
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ -z "$base" ] \
+             || ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
+            echo "agent=true" >> "$GITHUB_OUTPUT"
+          elif git diff --name-only "$base" HEAD \
+             | grep -qE '^(src/agent/|src/domain/|evals/|src/lib/env\.ts$|package(-lock)?\.json$)'; then
+            echo "agent=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "agent=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Merge-blocking when they run: a missing key fails instead of skipping.
+      - name: Agent evals
+        if: steps.changes.outputs.agent == 'true'
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          if [ -z "$GEMINI_API_KEY" ]; then
+            echo "::error::Agent-affecting change but the GEMINI_API_KEY secret is not set"
+            exit 1
+          fi
+          npm run evals
 
       # Shipped code is held to high+; dev tooling to critical. Dev-only highs
       # can be unpatchable upstream (e.g. braces via eslint-config-next, which
