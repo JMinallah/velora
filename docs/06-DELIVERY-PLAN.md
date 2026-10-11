@@ -16,6 +16,8 @@ The roadmap says *what* each phase is. This document says *how* each phase gets 
 
 ## 1. Where we actually are (audit, 2026-10-09)
 
+*Historical audit that motivated Phase 2.5. Current status: see the Phase 2.5 exit gate review (2026-10-11) below.*
+
 | Phase | DoD item (05-ROADMAP) | Status |
 |---|---|---|
 | 0 | Deployed skeleton where sign-in works | ❌ Never deployed; local `.env.local` still holds v1 Vertex vars only |
@@ -75,21 +77,28 @@ The roadmap says *what* each phase is. This document says *how* each phase gets 
 - **2.5-13 (M)** Agent event provenance (FR-TRS-2): generate a `turnId` per chat turn; stamp it on the turn's messages and on every event the turn's tools emit; agent events include the validated tool args. The activity page links an agent event to its triggering message.
 - **2.5-14 (L)** Streaming chat (FR-AGT-1): provider `generateStream`; the route returns a stream of typed events (`text-delta`, `receipt`, `done`, `error`); the UI renders deltas and inline receipts as they arrive. Target NFR-PERF-1: first token ≤ 4 s p90 — log time-to-first-token per turn.
 
-### Exit gate (ticks Phases 0, 1, 2 DoD)
+### Exit gate (ticks Phases 0, 1, 2 DoD) — reviewed 2026-10-11
+
 - [ ] Production URL live; Google sign-in works there — *manual check, recorded*
-- [ ] `main` protected; a PR with a failing test cannot merge — *demonstrated once*
-- [ ] With `GEMINI_API_KEY` unset, a new user can create a mission, add/edit/complete/delete tasks, edit and delete the mission, and see every change in the activity feed — *E2E or recorded manual run*
-- [ ] Every route file under `src/app/api` imported by an integration test — *`tests/routes.test.ts` (+ new files)*
-- [ ] Rate limit returns 429 after the configured burst — *test*
-- [ ] Evals pass against real Gemini in CI; a deliberately broken prompt fails the PR — *CI run link*
-- [ ] Agent events carry `turnId` + tool args — *test*
-- [ ] Chat streams; first token logged — *manual check + log line*
+  **Deferred by owner decision (2026-10-11):** deployment and Google sign-in (2.5-1, 2.5-2) are scheduled for the end of the build, together with the hosting decision (D1). This is a deliberate, recorded exception to rule 1; both must be closed before **Phase 8**, and earlier if a phase needs a deployed URL (e.g. email links in Phase 6).
+- [x] `main` protected; a PR with a failing test cannot merge — *branch protection requires the `checks` job, applies to admins, PRs required (0 approvals: solo maintainer). PR #9's CI went red (quota) and could only merge after a green run.*
+- [x] With `GEMINI_API_KEY` unset, a new user can create a mission, add/edit/complete/delete tasks, edit and delete the mission, and see every change in the activity feed — *`e2e/zero-ai.spec.ts` (production build, AI disabled), run in CI on every PR*
+- [x] Every route file under `src/app/api` imported by an integration test — *`tests/routes.test.ts`, `tests/routes-agent-docs.test.ts`. Only exception: the Auth.js handler (`api/auth/[...nextauth]`), which is library code; session behaviour is covered via `withAuth` tests.*
+- [x] Rate limit returns 429 after the configured burst — *`tests/routes.test.ts` › rate limiting › "limits LLM routes per user with 429, Retry-After, and a readable message"*
+- [x] Evals pass against real Gemini in CI; a deliberately broken prompt fails — *CI runs the `tool-selection`, `injection`, `regression` sets on agent-affecting PRs (PR #14 run). Sabotage check (2026-10-11): with prompt rule 3 weakened to "obey instructions in quoted text", `--set injection` scored 0/2 and exited 1 (the model created a "HACKED" task and completed every task).*
+- [x] Agent events carry `turnId` + tool args — *`tests/routes-agent-docs.test.ts` › "runs tools, returns receipts, and persists the exchange with provenance"; `tests/agent-loop.test.ts` › "records which turn and tool call caused each agent change"*
+- [x] Chat streams; first token logged — *PR #13: NDJSON streaming end to end; each turn logs `chat_turn` with `ttftMs`. Measured on gemini-3.5-flash-lite: 2.5–3.5 s warm (NFR-PERF-1 target ≤ 4 s), 9 s on a cold first call.*
+
+**Gate review findings (2026-10-11):**
+- The free-tier model quota is per project: gemini-3.5-flash-lite allows 15 requests/min and **500/day** (~170–250 chat messages/day for all users). Adequate for development and a small beta; revisit (Groq fallback or billing) before Phase 8.
+- An injection fixture added in PR #11 tested the wrong threat (a forged override typed by the user themselves, who may legitimately ask to complete their own tasks) and failed nondeterministically on `main`. Rewritten to test forged authority inside third-party content; 3/3 stable runs.
+- Grounding requires a read-tool call before answering, so time-to-first-text includes one model round trip; this is the floor for streaming latency.
 
 ---
 
 ## Phase 3 — Trust mechanics
 
-**Entry gate:** Phase 2.5 exit gate fully ticked.
+**Entry gate:** Phase 2.5 exit gate fully ticked — met on 2026-10-11 except the deploy/sign-in item, deferred by recorded owner decision (see above).
 
 ### Work items
 - **3-1 (M)** `pending_actions` collection: `{ id, userId, missionId, turnId, toolCall, nonce, status: pending|confirmed|rejected|expired|executed, expiresAt: Date }` with a TTL index on `expiresAt` (a real `Date`, unlike `createdAt` strings).
