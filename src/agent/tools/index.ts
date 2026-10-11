@@ -93,6 +93,8 @@ const listTasksTool = defineTool({
         completed: t.completed,
         dueDate: t.dueDate,
         priority: t.priority,
+        ...(t.phase ? { phase: t.phase } : {}),
+        ...(t.dependsOn?.length ? { dependsOn: t.dependsOn } : {}),
       })),
     }
   },
@@ -237,6 +239,41 @@ const createReminderTool = defineTool({
   },
 })
 
+const setTaskDependency = defineTool({
+  name: "setTaskDependency",
+  tier: "write",
+  description:
+    "Set which tasks must be done before a task (replaces its current list; [] clears it). Use task ids from listTasks. Loops are rejected.",
+  input: z.object({
+    taskId: z.string().min(1),
+    dependsOn: z.array(z.string().min(1)).max(20).describe("ids of tasks that must be completed first"),
+  }),
+  describe: async (userId, missionId, args) => {
+    const all = await tasks.listTasks(userId, missionId)
+    const task = all.find((t) => t.id === args.taskId)
+    if (!task) return { error: "task not found" }
+    const names = args.dependsOn.map((id) => `"${all.find((t) => t.id === id)?.label ?? id}"`)
+    return {
+      summary: names.length
+        ? `Make "${task.label}" wait for ${names.join(", ")}`
+        : `Remove what "${task.label}" waits for`,
+    }
+  },
+  execute: async (userId, missionId, args, ctx) => {
+    const problem = await tasks.checkDependencies(userId, missionId, args.taskId, args.dependsOn)
+    if (problem) return { result: { error: problem } }
+    const dependsOn = [...new Set(args.dependsOn)]
+    const updated = await tasks.updateTask(userId, missionId, args.taskId, { dependsOn }, byAgent(ctx, "setTaskDependency", args))
+    if (!updated) return { result: { error: "task not found" } }
+    return {
+      result: { id: updated.id, dependsOn },
+      receipt: dependsOn.length
+        ? `"${updated.label}" now waits for ${dependsOn.length} task${dependsOn.length === 1 ? "" : "s"}`
+        : `"${updated.label}" no longer waits for other tasks`,
+    }
+  },
+})
+
 /** Effect of a confirmed destructive action, so the UI can update without refetching. */
 export type DestructiveEffect = { kind: "task-deleted"; taskId: string } | { kind: "mission-deleted" }
 
@@ -304,7 +341,16 @@ export const destructiveTools: Record<string, DestructiveToolDefinition> = Objec
 )
 
 export const toolRegistry: Record<string, ToolDefinition> = Object.fromEntries(
-  [getMissionOverview, listTasksTool, getUpcomingDeadlines, createTask, updateTaskTool, completeTask, createReminderTool].map(
+  [
+    getMissionOverview,
+    listTasksTool,
+    getUpcomingDeadlines,
+    createTask,
+    updateTaskTool,
+    completeTask,
+    setTaskDependency,
+    createReminderTool,
+  ].map(
     (t) => [t.name, t as unknown as ToolDefinition]
   )
 )

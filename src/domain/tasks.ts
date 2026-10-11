@@ -3,6 +3,7 @@ import { getDb } from "@/adapters/db"
 import { COLLECTIONS, type TaskRecord, withoutProtectedFields } from "./collections"
 import { emitEvent, type ChangeOrigin } from "./events"
 import { getMission } from "./missions"
+import { dependencyProblem } from "./dependencies"
 
 type Actor = ChangeOrigin
 
@@ -47,6 +48,8 @@ export async function createTask(
     priority: input.priority ?? "medium",
     risk: input.risk ?? "low",
     source: input.source ?? "user",
+    dependsOn: input.dependsOn ?? [],
+    ...(input.phase ? { phase: input.phase } : {}),
     createdAt: now,
     updatedAt: now,
   }
@@ -105,6 +108,12 @@ export async function deleteTask(
   if (!task) return false
 
   await db.collection<TaskRecord>(COLLECTIONS.tasks).deleteOne({ userId, missionId, id: taskId })
+  // Nothing can wait on a task that no longer exists. A cascade of the
+  // deletion (recorded by its task-deleted event), not an edit: updatedAt is
+  // left alone so undo snapshots of those tasks stay valid.
+  await db
+    .collection<TaskRecord>(COLLECTIONS.tasks)
+    .updateMany({ userId, missionId, dependsOn: taskId }, { $pull: { dependsOn: taskId } })
   await emitEvent(userId, {
     missionId,
     type: "task-deleted",
@@ -195,4 +204,20 @@ export async function summarizeTasks(userId: string, upcomingLimit = 8): Promise
     counts: Object.fromEntries(grouped.map((g) => [g._id, { total: g.total, open: g.open }])),
     upcoming,
   }
+}
+
+/**
+ * Checks a task's proposed dependency list against the mission (same mission,
+ * no self-dependency, no cycle). Returns a user-readable problem or null.
+ * Pass the id a new task *will* have to check before creating it.
+ */
+export async function checkDependencies(
+  userId: string,
+  missionId: string,
+  taskId: string,
+  dependsOn: string[]
+): Promise<string | null> {
+  const tasks = await listTasks(userId, missionId)
+  const withThis = tasks.some((t) => t.id === taskId) ? tasks : [...tasks, { id: taskId, label: "this task", dependsOn: [] }]
+  return dependencyProblem(taskId, [...new Set(dependsOn)], withThis)
 }

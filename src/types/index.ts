@@ -53,6 +53,10 @@ export type Task = {
   priority?: "low" | "medium" | "high";
   risk?: "low" | "medium" | "high";
   source?: "agent" | "user" | "import";
+  /** Ids of tasks in the same mission that must be done first. */
+  dependsOn?: string[];
+  /** Plan phase this task belongs to, e.g. "Before you go". */
+  phase?: string;
   createdAt: string;
   updatedAt: string;
 };

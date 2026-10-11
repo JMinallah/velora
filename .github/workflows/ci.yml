@@ -12,14 +12,25 @@ on:
 jobs:
   checks:
     runs-on: ubuntu-latest
-    services:
-      mongo:
-        image: mongo:7
-        ports:
-          - 27017:27017
     env:
-      TEST_MONGODB_URI: mongodb://localhost:27017
+      # Single-node replica set: multi-document transactions (accepting a plan
+      # applies all of its changes or none) need one. Atlas always is one.
+      TEST_MONGODB_URI: mongodb://127.0.0.1:27017/?directConnection=true
     steps:
+      # A service container can't pass --replSet, so start MongoDB here.
+      - name: Start MongoDB (single-node replica set)
+        run: |
+          docker run -d --name mongo -p 27017:27017 mongo:7 --replSet rs0 --bind_ip_all
+          for i in $(seq 1 60); do
+            docker exec mongo mongosh --quiet --eval "db.runCommand({ ping: 1 }).ok" >/dev/null 2>&1 && break
+            sleep 1
+          done
+          docker exec mongo mongosh --quiet --eval 'rs.initiate({ _id: "rs0", members: [{ _id: 0, host: "127.0.0.1:27017" }] })'
+          for i in $(seq 1 60); do
+            [ "$(docker exec mongo mongosh --quiet --eval 'db.hello().isWritablePrimary')" = "true" ] && break
+            sleep 1
+          done
+
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0 # gitleaks scans full history

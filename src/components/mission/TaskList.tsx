@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Pencil, Trash2 } from "lucide-react";
+import { Lock, Pencil, Trash2 } from "lucide-react";
 import type { TaskRecord } from "@/domain/collections";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -51,6 +51,7 @@ export function TaskList({
               key={task.id}
               missionId={missionId}
               task={task}
+              allTasks={tasks}
               onUpdated={replaceTask}
               onDeleted={() => onChange((cur) => cur.filter((t) => t.id !== task.id))}
               onError={setError}
@@ -135,12 +136,14 @@ function NewTaskForm({ missionId, onCreated }: { missionId: string; onCreated: (
 function TaskRow({
   missionId,
   task,
+  allTasks,
   onUpdated,
   onDeleted,
   onError,
 }: {
   missionId: string;
   task: TaskRecord;
+  allTasks: TaskRecord[];
   onUpdated: (task: TaskRecord) => void;
   onDeleted: () => void;
   onError: (message: string | null) => void;
@@ -149,7 +152,11 @@ function TaskRow({
   const [isBusy, setIsBusy] = useState(false);
   const taskUrl = `/api/missions/${missionId}/tasks/${task.id}`;
   const due = formatDisplayDate(task.dueDate);
-  const meta = [task.category, task.priority].filter(Boolean).join(" · ");
+  const meta = [task.phase, task.category, task.priority].filter(Boolean).join(" · ");
+  const prerequisites = (task.dependsOn ?? [])
+    .map((id) => allTasks.find((t) => t.id === id))
+    .filter((t): t is TaskRecord => Boolean(t));
+  const waitingOn = task.completed ? [] : prerequisites.filter((t) => !t.completed);
 
   const run = async (action: () => Promise<void>, failure: string) => {
     setIsBusy(true);
@@ -187,6 +194,7 @@ function TaskRow({
       <li>
         <TaskEditForm
           task={task}
+          otherTasks={allTasks.filter((t) => t.id !== task.id)}
           taskUrl={taskUrl}
           onCancel={() => setMode("view")}
           onSaved={(updated) => {
@@ -217,6 +225,15 @@ function TaskRow({
           {meta}
           {due && <> · Due {due}</>}
         </p>
+        {waitingOn.length > 0 ? (
+          <p className="flex items-center gap-1 text-xs text-amber-700 dark:text-amber-400">
+            <Lock className="size-3" aria-hidden /> Waiting on: {waitingOn.map((t) => t.label).join(", ")}
+          </p>
+        ) : (
+          prerequisites.length > 0 && (
+            <p className="text-xs text-muted-foreground">After: {prerequisites.map((t) => t.label).join(", ")}</p>
+          )
+        )}
       </div>
       {mode === "confirm-delete" ? (
         <div className="flex shrink-0 items-center gap-1 text-sm">
@@ -249,11 +266,13 @@ function TaskRow({
 
 function TaskEditForm({
   task,
+  otherTasks,
   taskUrl,
   onCancel,
   onSaved,
 }: {
   task: TaskRecord;
+  otherTasks: TaskRecord[];
   taskUrl: string;
   onCancel: () => void;
   onSaved: (task: TaskRecord) => void;
@@ -262,6 +281,7 @@ function TaskEditForm({
   const [category, setCategory] = useState(task.category ?? "");
   const [dueDate, setDueDate] = useState(toDateInputValue(task.dueDate));
   const [priority, setPriority] = useState<Priority>(task.priority ?? "medium");
+  const [dependsOn, setDependsOn] = useState<string[]>(task.dependsOn ?? []);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -273,7 +293,7 @@ function TaskEditForm({
     try {
       const updated = await apiFetch<TaskRecord>(taskUrl, {
         method: "PATCH",
-        body: { label: label.trim(), category: category.trim() || "General", dueDate: dueDate || null, priority },
+        body: { label: label.trim(), category: category.trim() || "General", dueDate: dueDate || null, priority, dependsOn },
       });
       onSaved(updated);
     } catch (err) {
@@ -321,6 +341,25 @@ function TaskEditForm({
           ))}
         </select>
       </div>
+      {otherTasks.length > 0 && (
+        <fieldset className="space-y-1">
+          <legend className="text-xs font-medium text-muted-foreground">Must be done first</legend>
+          <div className="flex max-h-32 flex-col gap-1 overflow-y-auto">
+            {otherTasks.map((other) => (
+              <label key={other.id} className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={dependsOn.includes(other.id)}
+                  onChange={(e) =>
+                    setDependsOn((cur) => (e.target.checked ? [...cur, other.id] : cur.filter((id) => id !== other.id)))
+                  }
+                />
+                {other.label}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+      )}
       {error && (
         <p role="alert" className="text-sm text-destructive">
           {error}
