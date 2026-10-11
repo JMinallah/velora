@@ -5,6 +5,7 @@
  */
 import { describe, it, expect, vi, afterEach } from "vitest"
 import type { LlmProvider, ProviderResponse } from "@/agent/providers/types"
+import type { AgentStreamEvent } from "@/agent/loop"
 
 // The loop imports domain modules; stub them so no DB is needed.
 vi.mock("@/domain/missions", () => ({
@@ -144,18 +145,63 @@ describe("runAgentTurn", () => {
     expect(run.receipts).toHaveLength(0)
   })
 
+  describe("streaming", () => {
+    it("streams text and receipts in order, and keeps pre-tool text in the stored reply", async () => {
+      let call = 0
+      const provider: LlmProvider = {
+        generate: async () => ({ text: "", toolCalls: [] }),
+        async generateStream({ onText }) {
+          call++
+          if (call === 1) {
+            onText("Let me add that. ")
+            return { text: "Let me add that. ", toolCalls: [{ name: "createTask", args: { label: "Book movers" } }] }
+          }
+          onText("Done — ")
+          onText("added it.")
+          return { text: "Done — added it.", toolCalls: [] }
+        },
+      }
+      const events: AgentStreamEvent[] = []
+      const run = await runAgentTurn({ provider, ...base, onEvent: (e) => events.push(e) })
+
+      expect(events).toEqual([
+        { type: "text", delta: "Let me add that. " },
+        { type: "receipt", receipt: { tool: "createTask", text: 'Created task "Book movers"' } },
+        { type: "text", delta: "Done — " },
+        { type: "text", delta: "added it." },
+      ])
+      // Everything the user saw stream is in the reply that gets stored.
+      expect(run.reply).toBe("Let me add that. \n\nDone — added it.")
+    })
+
+    it("uses plain generate when no one is listening", async () => {
+      const generateStream = vi.fn()
+      const provider: LlmProvider = { generate: async () => ({ text: "Hi", toolCalls: [] }), generateStream }
+      const run = await runAgentTurn({ provider, ...base })
+      expect(run.reply).toBe("Hi")
+      expect(generateStream).not.toHaveBeenCalled()
+    })
+  })
+
   describe("wall-clock budget", () => {
     afterEach(() => {
       vi.useRealTimers()
     })
 
-    it("abandons a model call that hangs past the turn budget", async () => {
+    it("abandons a model call that hangs past the turn budget, aborting the request", async () => {
       vi.useFakeTimers()
-      const provider: LlmProvider = { generate: () => new Promise(() => {}) } // never resolves
+      let signal: AbortSignal | undefined
+      const provider: LlmProvider = {
+        generate: (input) => {
+          signal = input.signal
+          return new Promise(() => {}) // never resolves
+        },
+      }
       const pending = runAgentTurn({ provider, ...base })
       await vi.advanceTimersByTimeAsync(30_001)
       const run = await pending
       expect(run.reply).toMatch(/ran out of time/i)
+      expect(signal?.aborted).toBe(true)
     })
 
     it("keeps receipts from steps that finished before the budget ran out", async () => {

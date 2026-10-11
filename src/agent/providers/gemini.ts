@@ -1,6 +1,6 @@
 import { GoogleGenAI, ThinkingLevel, type Content, type GenerateContentConfig, type Part } from "@google/genai"
 import { env } from "@/lib/env"
-import type { AgentTurn, LlmProvider, ProviderResponse, ToolDeclaration } from "./types"
+import type { AgentTurn, GenerateInput, LlmProvider, ProviderResponse, ToolDeclaration } from "./types"
 
 export function geminiClient(): GoogleGenAI {
   const apiKey = env().GEMINI_API_KEY
@@ -68,28 +68,74 @@ function toFunctionDeclaration(tool: ToolDeclaration) {
   }
 }
 
+/**
+ * Streamed responses arrive as many small parts. Adjacent plain-text parts are
+ * joined back into one (keeping any thought signature — Gemini 3 may attach
+ * it to the last, sometimes empty, chunk), so the assistant turn replays as
+ * the model produced it. Function-call parts are kept as they are.
+ */
+export function mergeStreamParts(parts: Part[]): Part[] {
+  const merged: Part[] = []
+  for (const part of parts) {
+    const last = merged[merged.length - 1]
+    const isText = typeof part.text === "string" && !part.functionCall
+    const lastIsText = last && typeof last.text === "string" && !last.functionCall
+    if (isText && lastIsText && Boolean(last.thought) === Boolean(part.thought)) {
+      merged[merged.length - 1] = {
+        ...last,
+        text: (last.text ?? "") + (part.text ?? ""),
+        ...(part.thoughtSignature ? { thoughtSignature: part.thoughtSignature } : {}),
+      }
+    } else {
+      merged.push({ ...part })
+    }
+  }
+  return merged
+}
+
+function toProviderResponse(parts: Part[]): ProviderResponse {
+  return {
+    text: parts
+      .filter((p) => typeof p.text === "string" && !p.thought)
+      .map((p) => p.text)
+      .join(""),
+    toolCalls: parts
+      .filter((p) => p.functionCall)
+      .map((p) => ({ name: p.functionCall?.name ?? "", args: p.functionCall?.args ?? {}, id: p.functionCall?.id })),
+    providerParts: parts,
+  }
+}
+
 export class GeminiProvider implements LlmProvider {
-  async generate(input: { system: string; turns: AgentTurn[]; tools: ToolDeclaration[] }): Promise<ProviderResponse> {
+  private request(input: GenerateInput) {
     const model = env().GEMINI_MODEL
-    const response = await geminiClient().models.generateContent({
+    return {
       model,
       contents: toContents(input.turns),
       config: {
         systemInstruction: input.system,
         ...generationSettings(model),
         ...(input.tools.length > 0 ? { tools: [{ functionDeclarations: input.tools.map(toFunctionDeclaration) }] } : {}),
+        ...(input.signal ? { abortSignal: input.signal } : {}),
       },
-    })
-
-    const parts = response.candidates?.[0]?.content?.parts ?? []
-    return {
-      text: parts
-        .filter((p) => typeof p.text === "string" && !p.thought)
-        .map((p) => p.text)
-        .join(""),
-      toolCalls: (response.functionCalls ?? []).map((c) => ({ name: c.name ?? "", args: c.args ?? {}, id: c.id })),
-      providerParts: parts,
     }
+  }
+
+  async generate(input: GenerateInput): Promise<ProviderResponse> {
+    const response = await geminiClient().models.generateContent(this.request(input))
+    return toProviderResponse(response.candidates?.[0]?.content?.parts ?? [])
+  }
+
+  async generateStream(input: GenerateInput & { onText: (delta: string) => void }): Promise<ProviderResponse> {
+    const stream = await geminiClient().models.generateContentStream(this.request(input))
+    const parts: Part[] = []
+    for await (const chunk of stream) {
+      for (const part of chunk.candidates?.[0]?.content?.parts ?? []) {
+        parts.push(part)
+        if (typeof part.text === "string" && part.text && !part.thought) input.onText(part.text)
+      }
+    }
+    return toProviderResponse(mergeStreamParts(parts))
   }
 }
 
