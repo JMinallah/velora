@@ -172,8 +172,9 @@ test("onboarding without AI explains and offers to plan by hand", async ({ page 
   await open(page, "/onboarding")
   await page.getByLabel("What are you planning?").fill("Start university in Lyon")
   await page.getByRole("button", { name: "Draft my plan" }).click()
-  const problem = page.getByRole("alert")
-  await expect(problem).toContainText("AI planning is not available right now")
+  // Filter by text: Next.js renders its own (empty) role="alert" route announcer.
+  const problem = page.getByRole("alert").filter({ hasText: "AI planning is not available right now" })
+  await expect(problem).toBeVisible()
   await problem.getByRole("link", { name: "Create it manually instead" }).click()
   await expect(page.getByLabel("Mission title")).toHaveValue("Start university in Lyon")
 })
