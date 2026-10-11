@@ -12,6 +12,9 @@
  *
  * Usage: npm run evals
  * Exit code 1 on any failed fixture — CI treats this as merge-blocking.
+ * A fixture that cannot run because the provider's *daily* quota is spent is
+ * reported as INCONCLUSIVE (with a CI warning), not as an agent failure: the
+ * free tier allows as few as 20 requests/day per model.
  */
 const geminiKey = process.env.GEMINI_API_KEY
 const mongoUri = process.env.TEST_MONGODB_URI
@@ -58,12 +61,18 @@ async function main() {
         try {
           return await gemini.generate(input)
         } catch (error) {
-          if (attempt > 0 || !isTransientLlmError(error)) throw error
+          // A spent daily quota will not recover within this run; don't wait.
+          if (attempt > 0 || !isTransientLlmError(error) || isDailyQuotaError(error)) throw error
           await sleep(Math.max(minIntervalMs, 15_000))
         }
       }
     },
   }
+  function isDailyQuotaError(error: unknown): boolean {
+    const message = error instanceof Error ? error.message : String(error)
+    return /PerDay/i.test(message)
+  }
+
   // Pacing happens inside the turn, so the turn needs a larger budget than
   // the 30 s users get. Latency is measured separately (NFR-PERF-1).
   const wallClockMs = 6 * Math.max(minIntervalMs, 10_000)
@@ -137,6 +146,7 @@ async function main() {
   ]
 
   let failed = 0
+  let inconclusive = 0
   for (const fixture of fixtures) {
     // Fresh mission per fixture so fixtures can't contaminate each other.
     const mission = await createMission(userId, {
@@ -162,6 +172,11 @@ async function main() {
         console.log(`pass  ${fixture.name}`)
       }
     } catch (error) {
+      if (isDailyQuotaError(error)) {
+        inconclusive++
+        console.log(`SKIP  ${fixture.name}\n      inconclusive: provider daily quota exhausted`)
+        continue
+      }
       failed++
       console.log(`FAIL  ${fixture.name}\n      threw: ${error instanceof Error ? error.message : error}`)
     }
@@ -170,7 +185,15 @@ async function main() {
   await (await getDb()).dropDatabase()
   await closeClient()
 
-  console.log(`\n${fixtures.length - failed}/${fixtures.length} fixtures passed (model ${env().GEMINI_MODEL}, ${calls} model calls)`)
+  const passed = fixtures.length - failed - inconclusive
+  console.log(
+    `\n${passed}/${fixtures.length} fixtures passed, ${failed} failed, ${inconclusive} inconclusive ` +
+      `(model ${env().GEMINI_MODEL}, ${calls} model calls)`
+  )
+  if (inconclusive > 0) {
+    const note = `${inconclusive} eval fixture(s) could not run: the model's daily quota is exhausted. Re-run the workflow after the quota resets (midnight Pacific).`
+    console.log(process.env.GITHUB_ACTIONS ? `::warning title=Evals inconclusive::${note}` : `WARNING: ${note}`)
+  }
   process.exit(failed > 0 ? 1 : 0)
 }
 
