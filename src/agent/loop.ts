@@ -1,12 +1,12 @@
 import { randomUUID } from "node:crypto"
 import type { AgentTurn, LlmProvider } from "./providers/types"
 import { toolRegistry, toolDeclarations, destructiveTools } from "./tools"
-import { coordinatorPrompt, PROMPT_VERSION } from "./prompts/coordinator.v2"
+import { coordinatorPrompt, PROMPT_VERSION } from "./prompts/coordinator.v3"
 import * as missions from "@/domain/missions"
 import * as tasks from "@/domain/tasks"
 import { computeRisk, RISK_LABEL } from "@/domain/risk"
 import { proposeAction } from "@/domain/pendingActions"
-import type { ProposedActionView } from "@/types"
+import type { ProposedActionView, ReplanCardView } from "@/types"
 
 /**
  * The bounded reasoning loop (docs/03-AGENT-DESIGN.md §1.2). Hard bounds make
@@ -29,6 +29,7 @@ export type AgentStreamEvent =
   | { type: "text"; delta: string }
   | { type: "receipt"; receipt: AgentReceipt }
   | { type: "confirmation"; action: ProposedActionView }
+  | { type: "replan"; replan: ReplanCardView }
 
 /** At most this many destructive proposals per turn ("clean up everything" must not flood the user). */
 const MAX_PROPOSALS_PER_TURN = 10
@@ -44,6 +45,8 @@ export type AgentRunResult = {
   turnId: string
   /** Destructive actions proposed this turn, awaiting the user's confirmation (03-AGENT-DESIGN §5). */
   proposals: ProposedActionView[]
+  /** Re-plans proposed this turn, awaiting the user's review (FR-MSN-4). */
+  replans: ReplanCardView[]
 }
 
 class TurnDeadlineExceeded extends Error {}
@@ -130,6 +133,7 @@ export async function runAgentTurn(input: {
   // reply: what was shown while streaming always matches what is stored.
   const preambles: string[] = []
   const proposals: ProposedActionView[] = []
+  const replans: ReplanCardView[] = []
   const finish = (finalText: string, stepCount = steps): AgentRunResult => ({
     reply: [...preambles, finalText].filter(Boolean).join("\n\n"),
     receipts,
@@ -138,6 +142,7 @@ export async function runAgentTurn(input: {
     promptVersion: PROMPT_VERSION,
     turnId,
     proposals,
+    replans,
   })
   const outOfTime = () =>
     finish(
@@ -255,7 +260,11 @@ export async function runAgentTurn(input: {
       }
 
       try {
-        const { result, receipt } = await tool.execute(input.userId, input.missionId, parsed.data, { turnId })
+        const { result, receipt, replan } = await tool.execute(input.userId, input.missionId, parsed.data, { turnId })
+        if (replan) {
+          replans.push(replan)
+          input.onEvent?.({ type: "replan", replan })
+        }
         consecutiveFailures = 0
         trace.push({ tool: call.name, ok: true })
         if (receipt) {

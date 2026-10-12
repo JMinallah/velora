@@ -39,6 +39,9 @@ import { GET as getPlanRoute } from "@/app/api/plans/[id]/route"
 import { POST as acceptPlanRoute } from "@/app/api/plans/[id]/accept/route"
 import { POST as rejectPlanRoute } from "@/app/api/plans/[id]/reject/route"
 import { GET as listMissionsRoute } from "@/app/api/missions/route"
+import { GET as getReplanRoute } from "@/app/api/missions/[id]/replans/[replanId]/route"
+import { POST as acceptReplanRoute } from "@/app/api/missions/[id]/replans/[replanId]/accept/route"
+import { POST as rejectReplanRoute } from "@/app/api/missions/[id]/replans/[replanId]/reject/route"
 import { createHash } from "node:crypto"
 import { LOCAL_UPLOAD_DIR } from "@/lib/storage/gcs"
 import { closeClient } from "@/adapters/db"
@@ -143,7 +146,8 @@ describeDb("chat route", () => {
       reply: "Added it.",
       receipts: [{ tool: "createTask", text: 'Created task "Book movers" — due 2026-11-01' }],
       proposals: [],
-      promptVersion: "coordinator.v2",
+      replans: [],
+      promptVersion: "coordinator.v3",
     })
 
     const messages = (await (await listMessagesRoute(req("GET", "/"), ctx({ id: missionId }))).json()).data
@@ -152,7 +156,7 @@ describeDb("chat route", () => {
       ["update", '✓ Created task "Book movers" — due 2026-11-01'],
       ["reasoning", "Added it."],
     ])
-    expect(messages[2].promptVersion).toBe("coordinator.v2")
+    expect(messages[2].promptVersion).toBe("coordinator.v3")
 
     const tasks = (await (await listTasksRoute(req("GET", "/"), ctx({ id: missionId }))).json()).data
     expect(tasks).toEqual([expect.objectContaining({ label: "Book movers", source: "agent", dueDate: "2026-11-01" })])
@@ -645,6 +649,123 @@ describeDb("plan proposals: generate → review → accept or reject (4-3, 4-4)"
   })
 })
 
+describeDb("re-planning: the agent proposes a diff; nothing changes until accepted (4-5, FR-MSN-4)", () => {
+  const missionHash = async (userId: string) => {
+    const { getDb } = await import("@/adapters/db")
+    const db = await getDb()
+    const parts = await Promise.all(["missions", "tasks"].map((c) => db.collection(c).find({ userId }).sort({ id: 1 }).toArray()))
+    return createHash("sha256").update(JSON.stringify(parts)).digest("hex")
+  }
+  async function setup(userId: string) {
+    const missionId = await createMissionAs(userId)
+    const add = async (label: string, extra: Record<string, unknown> = {}) =>
+      (await (await createTaskRoute(req("POST", "/", { label, ...extra }), ctx({ id: missionId }))).json()).data.id as string
+    const lease = await add("Sign lease", { dueDate: "2027-01-05" })
+    const movers = await add("Book movers", { dueDate: "2027-01-10", dependsOn: [lease] })
+    const party = await add("Farewell party", { dependsOn: [movers] })
+    return { missionId, lease, movers, party }
+  }
+  const propose = async (missionId: string, diff: Record<string, unknown>) => {
+    provider = scripted([
+      { text: "", toolCalls: [{ name: "proposeReplan", args: diff }] },
+      { text: "I've proposed a re-plan — review it.", toolCalls: [] },
+    ]).provider
+    const data = (await (await chat(missionId, { message: "my move got pushed back" })).json()).data
+    return data.replans as { id: string; summary: string }[]
+  }
+  const tasksOf = async (missionId: string) =>
+    (await (await listTasksRoute(req("GET", "/"), ctx({ id: missionId }))).json()).data as { id: string; label: string; dueDate: string; dependsOn: string[] }[]
+
+  it("proposing changes nothing; reject leaves the mission byte-identical (exit gate)", async () => {
+    const { missionId, movers, party } = await setup("user-replan-reject")
+    const before = await missionHash("user-replan-reject")
+    const [replan] = await propose(missionId, {
+      reason: "Move pushed back a month",
+      change: [{ taskId: movers, dueDate: "2027-02-10" }],
+      remove: [party],
+    })
+    expect(replan.summary).toBe("Re-plan: 1 to change, 1 to remove — Move pushed back a month")
+    expect(await missionHash("user-replan-reject")).toBe(before)
+
+    const review = (await (await getReplanRoute(req("GET", "/"), ctx({ id: missionId, replanId: replan.id }))).json()).data
+    expect(review.before.map((t: { label: string }) => t.label).sort()).toEqual(["Book movers", "Farewell party"])
+
+    const res = await rejectReplanRoute(req("POST", "/"), ctx({ id: missionId, replanId: replan.id }))
+    expect((await res.json()).data).toEqual({ status: "rejected" })
+    expect(await missionHash("user-replan-reject")).toBe(before)
+    expect((await acceptReplanRoute(req("POST", "/"), ctx({ id: missionId, replanId: replan.id }))).status).toBe(409)
+  })
+
+  it("accept applies the whole diff at once: add (with dependencies), change, remove, target date", async () => {
+    const { missionId, lease, movers, party } = await setup("user-replan-accept")
+    const [replan] = await propose(missionId, {
+      reason: "Move pushed back a month",
+      targetDate: "2027-03-01",
+      add: [{ key: "storage", label: "Book storage unit", dependsOn: [lease] }],
+      change: [{ taskId: movers, dueDate: "2027-02-10", priority: "high" }],
+      remove: [party],
+    })
+    const res = await acceptReplanRoute(req("POST", "/"), ctx({ id: missionId, replanId: replan.id }))
+    expect((await res.json()).data).toEqual({ kind: "accepted", added: 1, changed: 1, removed: 1 })
+
+    const tasks = await tasksOf(missionId)
+    expect(tasks.map((t) => t.label)).toEqual(["Sign lease", "Book movers", "Book storage unit"])
+    expect(tasks.find((t) => t.id === movers)).toMatchObject({ dueDate: "2027-02-10", priority: "high" })
+    expect(tasks.find((t) => t.label === "Book storage unit")).toMatchObject({ dependsOn: [lease], source: "agent" })
+    expect(tasks.some((t) => t.id === party)).toBe(false)
+    const mission = (await (await getMissionRoute(req("GET", "/"), ctx({ id: missionId }))).json()).data
+    expect(mission.targetDate).toBe("2027-03-01")
+
+    const events = (await (await listEventsRoute(req("GET", "/"), ctx({ id: missionId }))).json()).data
+    expect(events).toContainEqual(expect.objectContaining({ type: "replan-generated", actor: "agent" }))
+    expect(events).toContainEqual(
+      expect.objectContaining({ type: "replan-accepted", actor: "user", payload: expect.objectContaining({ removed: ["Farewell party"] }) })
+    )
+  })
+
+  it("refuses to apply over the user's later edits, applying nothing", async () => {
+    const { missionId, movers, party } = await setup("user-replan-stale")
+    const [replan] = await propose(missionId, { reason: "shift", change: [{ taskId: movers, dueDate: "2027-02-10" }], remove: [party] })
+    await patchTaskRoute(req("PATCH", "/", { label: "Book movers (2 trucks)" }), ctx({ id: missionId, taskId: movers }))
+    const before = await missionHash("user-replan-stale")
+
+    const res = await acceptReplanRoute(req("POST", "/"), ctx({ id: missionId, replanId: replan.id }))
+    expect(res.status).toBe(409)
+    expect(await res.json()).toMatchObject({ code: "stale", error: expect.stringMatching(/has changed since Velora proposed/) })
+    expect(await missionHash("user-replan-stale")).toBe(before)
+  })
+
+  it("an accept that fails part-way leaves nothing behind (exit gate)", async () => {
+    const { missionId, movers, party } = await setup("user-replan-atomic")
+    const [replan] = await propose(missionId, { reason: "shift", change: [{ taskId: movers, dueDate: "2027-02-10" }], remove: [party] })
+    const before = await missionHash("user-replan-atomic")
+    const { acceptReplan } = await import("@/domain/replan")
+    await expect(
+      acceptReplan("user-replan-atomic", missionId, replan.id, {
+        beforeCommit: async () => {
+          throw new Error("injected failure")
+        },
+      })
+    ).rejects.toThrow("injected failure")
+    expect(await missionHash("user-replan-atomic")).toBe(before)
+    expect((await acceptReplanRoute(req("POST", "/"), ctx({ id: missionId, replanId: replan.id }))).status).toBe(200)
+  })
+
+  it("an invalid diff from the model is fed back, not stored", async () => {
+    const { missionId } = await setup("user-replan-invalid")
+    const replans = await propose(missionId, { reason: "x", remove: ["no-such-task"] })
+    expect(replans).toHaveLength(0)
+  })
+
+  it("another user's re-plan is 404", async () => {
+    const { missionId, party } = await setup("user-replan-owner")
+    const [replan] = await propose(missionId, { reason: "x", remove: [party] })
+    asUser("user-replan-stranger")
+    expect((await getReplanRoute(req("GET", "/"), ctx({ id: missionId, replanId: replan.id }))).status).toBe(404)
+    expect((await acceptReplanRoute(req("POST", "/"), ctx({ id: missionId, replanId: replan.id }))).status).toBe(404)
+  })
+})
+
 describeDb("chat route — streaming (NDJSON)", () => {
   const streamChat = async (missionId: string, message: string) => {
     const res = await chatRoute(
@@ -677,7 +798,7 @@ describeDb("chat route — streaming (NDJSON)", () => {
     expect(res.headers.get("content-type")).toContain("application/x-ndjson")
     expect(lines.map((l) => l.type)).toEqual(["receipt", "text", "text", "done"])
     expect(lines[0]).toMatchObject({ tool: "createTask", text: 'Created task "Pack books"' })
-    expect(lines[3]).toMatchObject({ reply: "Added it.", promptVersion: "coordinator.v2", turnId: expect.any(String) })
+    expect(lines[3]).toMatchObject({ reply: "Added it.", promptVersion: "coordinator.v3", turnId: expect.any(String) })
 
     const messages = (await (await listMessagesRoute(req("GET", "/"), ctx({ id: missionId }))).json()).data
     expect(messages.map((m: { type: string }) => m.type)).toEqual(["user", "update", "reasoning"])

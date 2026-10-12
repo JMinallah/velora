@@ -29,6 +29,7 @@ export async function createMessage(
     ...(input.tool ? { tool: input.tool } : {}),
     ...(input.turnId ? { turnId: input.turnId } : {}),
     ...(input.action ? { action: input.action } : {}),
+    ...(input.replan ? { replan: input.replan } : {}),
   }
   await db.collection<MessageRecord>(COLLECTIONS.messages).insertOne(msg)
   return msg

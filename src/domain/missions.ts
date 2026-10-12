@@ -95,6 +95,7 @@ export async function deleteMission(
     db.collection(COLLECTIONS.reminders).deleteMany({ userId, missionId: id }),
     db.collection(COLLECTIONS.documents).deleteMany({ userId, missionId: id }),
     db.collection(COLLECTIONS.pendingActions).deleteMany({ userId, missionId: id }),
+    db.collection(COLLECTIONS.replanProposals).deleteMany({ userId, missionId: id }),
   ])
   await db.collection<MissionRecord>(COLLECTIONS.missions).deleteOne({ userId, id })
 

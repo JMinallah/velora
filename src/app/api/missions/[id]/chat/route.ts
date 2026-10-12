@@ -27,7 +27,9 @@ function toHistory(stored: MessageRecord[]): AgentTurn[] {
     const text =
       m.type === "confirmation" && m.action
         ? `[Proposed, needs the user's confirmation: ${m.action.summary} — status: ${m.action.status}]`
-        : m.text
+        : m.type === "replan"
+          ? `[Proposed a re-plan for the user to review: ${m.text}]`
+          : m.text
     const last = turns[turns.length - 1]
     if (last?.role === role) last.text += `\n${text}`
     else turns.push({ role, text })
@@ -78,13 +80,24 @@ async function persistTurn(userId: string, missionId: string, message: string, s
       turnId: run.turnId,
     })
   }
+  for (const [i, replan] of run.replans.entries()) {
+    await createMessage(userId, {
+      missionId,
+      type: "replan",
+      text: replan.summary,
+      source: "agent",
+      replan,
+      createdAt: new Date(doneAt + run.receipts.length + run.proposals.length + i).toISOString(),
+      turnId: run.turnId,
+    })
+  }
   await createMessage(userId, {
     missionId,
     type: "reasoning",
     text: run.reply,
     source: "agent",
     promptVersion: run.promptVersion,
-    createdAt: new Date(doneAt + run.receipts.length + run.proposals.length).toISOString(),
+    createdAt: new Date(doneAt + run.receipts.length + run.proposals.length + run.replans.length).toISOString(),
     turnId: run.turnId,
   })
 }
@@ -170,8 +183,10 @@ export const POST = withAuth<{ id: string }>(async (req, session, { params }) =>
                   send({ type: "text", delta: event.delta })
                 } else if (event.type === "receipt") {
                   send({ type: "receipt", tool: event.receipt.tool, text: event.receipt.text })
-                } else {
+                } else if (event.type === "confirmation") {
                   send({ type: "confirmation", action: event.action })
+                } else {
+                  send({ type: "replan", replan: event.replan })
                 }
               },
             })
@@ -182,6 +197,7 @@ export const POST = withAuth<{ id: string }>(async (req, session, { params }) =>
               reply: run.reply,
               receipts: run.receipts,
               proposals: run.proposals,
+              replans: run.replans,
               promptVersion: run.promptVersion,
               turnId,
             })
@@ -216,7 +232,13 @@ export const POST = withAuth<{ id: string }>(async (req, session, { params }) =>
 
     return NextResponse.json({
       success: true,
-      data: { reply: run.reply, receipts: run.receipts, proposals: run.proposals, promptVersion: run.promptVersion },
+      data: {
+        reply: run.reply,
+        receipts: run.receipts,
+        proposals: run.proposals,
+        replans: run.replans,
+        promptVersion: run.promptVersion,
+      },
     })
   } catch (err) {
     return serverError("POST /api/missions/[id]/chat", err)

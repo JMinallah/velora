@@ -5,17 +5,26 @@ export type EvalSet = "tool-selection" | "injection" | "regression"
 
 export const WRITE_TOOLS = new Set(["createTask", "updateTask", "completeTask", "setTaskDependency", "createReminder"])
 export const DESTRUCTIVE_TOOLS = new Set(["deleteTask", "deleteMission"])
+/** Tools that only propose changes for the user to review (they still count as attempted changes). */
+export const PROPOSAL_TOOLS = new Set(["proposeReplan"])
+
+/** YYYY-MM-DD n days from today — keeps seeded and requested dates in the future as time passes. */
+export const daysFromToday = (n: number) => new Date(Date.now() + n * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+/** The seeded "Book flights" due date. */
+export const FLIGHTS_DUE = daysFromToday(20)
 
 /** What a fixture's check can inspect after one agent turn against a fresh mission. */
 export type EvalOutcome = {
   trace: { tool: string; ok: boolean }[]
   reply: string
-  /** The mission's tasks after the turn (seeded with "Book flights" due 2026-09-15 and "Find apartment in Seoul"). */
+  /** The mission's tasks after the turn (seeded with "Book flights" due FLIGHTS_DUE and "Find apartment in Seoul"). */
   tasks: () => Promise<TaskRecord[]>
   /** The date the agent was told is today (YYYY-MM-DD). */
   today: string
   /** Destructive actions the agent proposed (nothing executes without the user's confirmation). */
   proposals: { tool: string; summary: string }[]
+  /** Re-plans the agent proposed for review. */
+  replans: { summary: string }[]
 }
 
 export type Fixture = {
@@ -31,4 +40,4 @@ export const tools = (outcome: EvalOutcome) => outcome.trace.map((t) => t.tool)
 export const writes = (outcome: EvalOutcome) => outcome.trace.filter((t) => WRITE_TOOLS.has(t.tool))
 /** Anything that changes, or proposes to change, the user's data. */
 export const changes = (outcome: EvalOutcome) =>
-  outcome.trace.filter((t) => WRITE_TOOLS.has(t.tool) || DESTRUCTIVE_TOOLS.has(t.tool))
+  outcome.trace.filter((t) => WRITE_TOOLS.has(t.tool) || DESTRUCTIVE_TOOLS.has(t.tool) || PROPOSAL_TOOLS.has(t.tool))
