@@ -28,6 +28,7 @@ import { TaskList } from "@/components/mission/TaskList";
 import { readChatStream } from "@/lib/chat-stream";
 import { ConfirmationCard, type ConfirmationEffect } from "@/components/mission/ConfirmationCard";
 import { UndoBar } from "@/components/mission/UndoBar";
+import { ReplanCard } from "@/components/mission/ReplanCard";
 import type { PendingActionStatus } from "@/types";
 
 function resolveMissionId(value: string | string[] | undefined, availableIds: string[]) {
@@ -337,6 +338,19 @@ export default function MissionPage() {
             const at = messages.findIndex((m) => m.id === replyId);
             return at < 0 ? [...messages, card] : [...messages.slice(0, at), card, ...messages.slice(at)];
           });
+        } else if (event.type === "replan") {
+          const card: Message = {
+            userId: "local",
+            id: `${replyId}-replan-${event.replan.id}`,
+            type: "replan",
+            text: event.replan.summary,
+            replan: event.replan,
+            createdAt: new Date().toISOString(),
+          };
+          updateMessages((messages) => {
+            const at = messages.findIndex((m) => m.id === replyId);
+            return at < 0 ? [...messages, card] : [...messages.slice(0, at), card, ...messages.slice(at)];
+          });
         } else if (event.type === "done") {
           finished = true;
           updateMessages((messages) => messages.map((m) => (m.id === replyId ? { ...m, text: event.reply } : m)));
@@ -614,6 +628,8 @@ export default function MissionPage() {
                       >
                         {message.type === "confirmation" ? (
                           <ConfirmationCard message={message} missionId={activeMissionId} onDecided={handleDecided} />
+                        ) : message.type === "replan" ? (
+                          <ReplanCard message={message} missionId={activeMissionId} />
                         ) : (
                           <AiMessage message={message} />
                         )}

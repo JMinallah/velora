@@ -5,6 +5,9 @@ import * as tasks from "@/domain/tasks"
 import * as reminders from "@/domain/reminders"
 import { isoDate } from "@/domain/schemas"
 import { computeRisk } from "@/domain/risk"
+import { replanDiffSchema, replanIssues, createReplanProposal } from "@/domain/replan"
+import { emitEvent } from "@/domain/events"
+import type { ReplanCardView } from "@/types"
 import type { ToolDeclaration } from "@/agent/providers/types"
 import type { ChangeOrigin } from "@/domain/events"
 
@@ -33,7 +36,7 @@ export type ToolDefinition<S extends z.ZodTypeAny = z.ZodTypeAny> = {
     missionId: string,
     args: z.infer<S>,
     ctx: ToolContext
-  ) => Promise<{ result: unknown; receipt?: string }>
+  ) => Promise<{ result: unknown; receipt?: string; replan?: ReplanCardView }>
   /**
    * Write tools: what this call *would* do, for a confirmation card when the
    * mission asks for confirmation before every change (autonomy "confirm-writes").
@@ -275,6 +278,37 @@ const setTaskDependency = defineTool({
   },
 })
 
+const proposeReplan = defineTool({
+  name: "proposeReplan",
+  tier: "write",
+  description:
+    "Propose updating the plan when circumstances change (a date moved, new information, missed deadlines): tasks to add, change (label/dueDate/priority/phase) and remove, plus the reason. NOTHING changes until the user reviews and accepts it. Use listTasks first for task ids. For a single small edit, prefer updateTask.",
+  input: replanDiffSchema,
+  execute: async (userId, missionId, diff, ctx) => {
+    const current = await tasks.listTasks(userId, missionId)
+    const issues = replanIssues(diff, current, new Date().toISOString().slice(0, 10))
+    if (issues.length) return { result: { error: "invalid re-plan", issues } }
+    const proposal = await createReplanProposal(userId, missionId, diff, current, ctx.turnId)
+    const parts = [
+      diff.add.length && `${diff.add.length} to add`,
+      diff.change.length && `${diff.change.length} to change`,
+      diff.remove.length && `${diff.remove.length} to remove`,
+      diff.targetDate !== undefined && "new target date",
+    ].filter(Boolean)
+    const summary = `Re-plan: ${parts.join(", ")} — ${diff.reason}`
+    await emitEvent(userId, {
+      missionId,
+      type: "replan-generated",
+      actor: byAgent(ctx, "proposeReplan", diff),
+      payload: { replanId: proposal.id, summary },
+    })
+    return {
+      result: { status: "awaiting_user_review", replanId: proposal.id, summary, note: "Nothing has changed yet." },
+      replan: { id: proposal.id, summary },
+    }
+  },
+})
+
 /** Effect of a confirmed destructive action, so the UI can update without refetching. */
 export type DestructiveEffect = { kind: "task-deleted"; taskId: string } | { kind: "mission-deleted" }
 
@@ -351,6 +385,7 @@ export const toolRegistry: Record<string, ToolDefinition> = Object.fromEntries(
     completeTask,
     setTaskDependency,
     createReminderTool,
+    proposeReplan,
   ].map(
     (t) => [t.name, t as unknown as ToolDefinition]
   )

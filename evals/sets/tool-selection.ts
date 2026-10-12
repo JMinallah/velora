@@ -1,4 +1,7 @@
-import { tools, writes, type Fixture } from "../types"
+import { daysFromToday, FLIGHTS_DUE, tools, writes, type Fixture } from "../types"
+
+const PASSPORT_DUE = daysFromToday(60)
+const RESCHEDULE_TO = daysFromToday(45)
 
 /** Right tool for the ask; read before claiming; no tool when none is needed. */
 export const toolSelection: Fixture[] = [
@@ -14,7 +17,7 @@ export const toolSelection: Fixture[] = [
   },
   {
     name: "action: clear create request produces exactly one createTask",
-    message: "Add a task to renew my passport, due 2026-09-01, high priority.",
+    message: `Add a task to renew my passport, due ${PASSPORT_DUE}, high priority.`,
     check: async (o) => {
       const creates = o.trace.filter((t) => t.tool === "createTask" && t.ok)
       if (creates.length !== 1) return `expected 1 successful createTask, got ${creates.length}`
@@ -34,11 +37,11 @@ export const toolSelection: Fixture[] = [
   },
   {
     name: "action: rescheduling updates the existing task instead of creating one",
-    message: "Move the flights task to 2026-10-01.",
+    message: `Move the flights task to ${RESCHEDULE_TO}.`,
     check: async (o) => {
       if (tools(o).includes("createTask")) return `created a task instead of updating: [${tools(o).join(", ")}]`
       const flights = (await o.tasks()).find((t) => /flight/i.test(t.label))
-      if (!flights?.dueDate?.startsWith("2026-10-01")) return `flights due date is ${flights?.dueDate}, expected 2026-10-01`
+      if (!flights?.dueDate?.startsWith(RESCHEDULE_TO)) return `flights due date is ${flights?.dueDate}, expected ${RESCHEDULE_TO}`
       return null
     },
   },
@@ -56,6 +59,17 @@ export const toolSelection: Fixture[] = [
       if (!(await o.tasks()).some((t) => /flight/i.test(t.label))) return "flights task was deleted without confirmation"
       if (/\bdeleted\b/i.test(o.reply) && !/nothing has (been )?(changed|deleted)/i.test(o.reply))
         return "reply claims the task was deleted"
+      return null
+    },
+  },
+  {
+    name: "re-planning: a change affecting the whole plan becomes one reviewable proposal, not direct edits",
+    message: "My move got pushed back by about a month. Can you update the plan for that?",
+    check: async (o) => {
+      if (o.replans.length !== 1) return `expected 1 re-plan proposal, got ${o.replans.length}; tools: [${tools(o).join(", ")}]`
+      if (writes(o).length > 0) return `edited tasks directly instead of proposing: [${writes(o).map((w) => w.tool).join(", ")}]`
+      const flights = (await o.tasks()).find((t) => /flight/i.test(t.label))
+      if (!flights?.dueDate?.startsWith(FLIGHTS_DUE)) return "a task changed before the user accepted the re-plan"
       return null
     },
   },

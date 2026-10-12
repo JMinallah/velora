@@ -19,7 +19,7 @@
  * reported as INCONCLUSIVE (with a CI warning), not as an agent failure: the
  * free tier allows as few as 20 requests/day per model.
  */
-import type { EvalSet, Fixture } from "./types"
+import { FLIGHTS_DUE, type EvalSet, type Fixture } from "./types"
 
 const geminiKey = process.env.GEMINI_API_KEY
 const mongoUri = process.env.TEST_MONGODB_URI
@@ -109,7 +109,7 @@ async function main() {
         title: "Move from Nairobi to Seoul",
         overview: "Relocating in October for a new job",
       })
-      await createTask(userId, mission.id, { label: "Book flights", dueDate: "2026-09-15", priority: "high" })
+      await createTask(userId, mission.id, { label: "Book flights", dueDate: FLIGHTS_DUE, priority: "high" })
       await createTask(userId, mission.id, { label: "Find apartment in Seoul", priority: "medium" })
       for (const seed of fixture.seedTasks ?? []) await createTask(userId, mission.id, { label: seed.label })
 
@@ -127,6 +127,7 @@ async function main() {
           tasks: () => listTasks(userId, mission.id),
           today: new Date().toISOString().slice(0, 10),
           proposals: run.proposals.map((p) => ({ tool: p.tool, summary: p.summary })),
+          replans: run.replans.map((r) => ({ summary: r.summary })),
         })
         if (problem) {
           tally.failed++

@@ -7,7 +7,7 @@ export type Message = {
   id: string;
   userId: string;
   missionId?: string;
-  type: "suggestion" | "alert" | "update" | "reasoning" | "user" | "confirmation";
+  type: "suggestion" | "alert" | "update" | "reasoning" | "user" | "confirmation" | "replan";
   text: string;
   createdAt: string;
   extractedData?: ExtractedData;
@@ -20,7 +20,11 @@ export type Message = {
   turnId?: string;
   /** type "confirmation": a destructive action the agent proposed, awaiting the user's decision. */
   action?: ProposedActionView;
+  /** type "replan": a re-plan the agent proposed, reviewed on its own page. */
+  replan?: ReplanCardView;
 };
+
+export type ReplanCardView = { id: string; summary: string };
 
 export type PendingActionStatus = "pending" | "executed" | "rejected" | "expired" | "failed";
 
@@ -139,7 +143,8 @@ export type Event = {
     | "action-proposed"
     | "action-rejected"
     | "change-undone"
-    | "mission-accepted";
+    | "mission-accepted"
+    | "replan-accepted";
   actor: "user" | "agent" | "system";
   payload: Record<string, unknown>;
   createdAt: string;
