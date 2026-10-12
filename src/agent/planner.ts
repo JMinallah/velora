@@ -1,6 +1,6 @@
 import { zodToJsonSchema } from "zod-to-json-schema"
 import type { LlmProvider } from "./providers/types"
-import { plannerPrompt, plannerSystemPrompt, PLANNER_PROMPT_VERSION } from "./prompts/planner.v1"
+import { plannerPrompt, plannerSystemPrompt, PLANNER_PROMPT_VERSION } from "./prompts/planner.v2"
 import { missionPlanSchema, planDateIssues, type MissionPlan } from "@/domain/plan"
 
 /**
