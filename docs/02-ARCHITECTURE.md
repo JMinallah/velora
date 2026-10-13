@@ -80,7 +80,7 @@ velora-v2/
 │   └── components/            # React components (ui/, mission/, chat/, documents/)
 ├── evals/                     # agent eval suite: fixtures + runner (CI)
 ├── tests/                     # unit + integration + e2e
-└── .github/workflows/         # ci.yml, backup.yml, reminders.yml (fallback cron)
+└── .github/workflows/         # ci.yml, backup.yml, reminders.yml (reminder scheduler)
 ```
 
 ## 4. Key flows
@@ -126,7 +126,11 @@ Streaming uses the platform's native response streaming (works within Vercel Hob
 3. Extraction is validated, stored as `unverified`, and shown for user confirmation. Confirmed fields become mission facts the agent may cite.
 
 ### 4.4 Reminders (FR-REM-*)
-Vercel Cron (primary) and a GitHub Actions scheduled workflow (fallback, staggered) hit `GET /api/cron/reminders` (Vercel Cron issues GET requests) with a bearer `CRON_SECRET`. The dispatcher selects due reminders with an atomic claim (`findOneAndUpdate` status `pending→sending`), making concurrent/duplicate cron fires idempotent, then sends via Resend and records `sent`/`failed` events.
+A GitHub Actions schedule (`.github/workflows/reminders.yml`, every 15 min; works on any host) and, where the host's plan allows, the host's own cron call `GET /api/cron/reminders` with a bearer `CRON_SECRET`. The dispatcher (`src/domain/dispatch.ts`):
+- claims each due reminder atomically (`findOneAndUpdate` `scheduled → sending`, `attempts + 1`), so concurrent or duplicate runs never pick up the same reminder; a claim older than 10 min is presumed dead and taken over;
+- skips reminders that no longer apply (mission gone; for task reminders, task completed, deleted or re-dated);
+- delivers on the channels the user's notification preferences allow — in-app (the reminder joins the bell's inbox) and email (Resend; a dev outbox in `.data/outbox` locally) — recording delivered channels so none is sent twice, and sending every email with an idempotency key so a crash between sending and recording can't cause a second email;
+- retries a retryable email failure with backoff (5 min, 30 min) and marks it `failed` after 3 attempts; logs every attempt per channel in `reminder_dispatches` and emits `reminder-sent` / `reminder-failed` events.
 
 ## 5. Data model (MongoDB Atlas)
 
@@ -138,7 +142,9 @@ Vercel Cron (primary) and a GitHub Actions scheduled workflow (fallback, stagger
 | `messages` | userId, missionId, role, content, toolCalls[] | chat history |
 | `events` | userId, missionId, actor: `user\|agent\|system`, type, payload, causeMessageId | **append-only**; the audit trail |
 | `documents` | userId, missionId, storageKey, extraction{fields, status: `unverified\|confirmed`} | file bytes in R2, never in DB |
-| `reminders` | userId, taskId, dueAt, status, dispatchLog[] | idempotent dispatch |
+| `reminders` | userId, taskId, kind, dueAt, status, attempts, delivered[] | idempotent dispatch |
+| `reminder_dispatches` | userId, reminderId, attempt, channel, outcome, at | dispatch log (FR-REM-2) |
+| `user_settings` | userId, notifications | notification preferences |
 | `pending_actions` | userId, missionId, toolCall, nonce, expiresAt | destructive-tier confirmations |
 
 Indexes are declared in code (`adapters/db.ts`) and ensured at startup; every index on user data leads with `userId`.

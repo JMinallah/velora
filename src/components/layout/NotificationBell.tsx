@@ -1,69 +1,78 @@
 "use client";
 
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import Link from "next/link";
+import { useCallback, useEffect, useState } from "react";
+import { Bell, CalendarClock } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
-import { Bell, AlertTriangle, Info } from "lucide-react";
-import { useEffect, useState } from "react";
+import { formatDisplayDate } from "@/lib/dates";
 
 type Notification = {
   id: string;
-  type: "alert" | "info";
-  text: string;
-  read: boolean;
+  missionId: string;
+  title: string;
+  details?: string;
+  kind?: "custom" | "task-due";
+  taskDueDate?: string;
+  sentAt?: string;
+  dueAt: string;
+  read?: boolean;
 };
 
-// initial empty; will be loaded from the reminders API
-const mockNotifications: Notification[] = [];
+const REFRESH_MS = 2 * 60 * 1000;
 
-const iconMap = {
-    alert: <AlertTriangle className="h-4 w-4 text-yellow-500" />,
-    info: <Info className="h-4 w-4 text-blue-500" />,
-};
-
+/**
+ * The in-app inbox (FR-REM-1): reminders the dispatcher has delivered in the
+ * app. Refreshes every couple of minutes and when the tab regains focus.
+ */
 export function NotificationBell() {
-  const [notifications, setNotifications] = useState<Notification[]>(mockNotifications)
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [items, setItems] = useState<Notification[]>([]);
+  const [unread, setUnread] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      const res = await fetch("/api/notifications");
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.success) throw new Error(data?.error || "Couldn't load notifications");
+      setItems(data.data.items ?? []);
+      setUnread(data.data.unread ?? 0);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't load notifications");
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    let cancelled = false
-    async function load() {
-      try {
-        setIsLoading(true)
-        setError(null)
-        const res = await fetch(`/api/reminders`)
-        const data = await res.json().catch(() => ({}))
-        if (!res.ok || !data?.success) throw new Error(data?.error || "Failed to load reminders")
-        if (!cancelled) {
-          const mapped: Notification[] = (data.data ?? []).map((r: { id: string, channel: string, title: string, read: boolean }) => ({ id: r.id, type: r.channel === "email" ? "alert" : "info", text: r.title, read: !!r.read }))
-          setNotifications(mapped)
-        }
-      } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load reminders")
-      } finally {
-        if (!cancelled) setIsLoading(false)
-      }
-    }
-    load()
-    return () => { cancelled = true }
-  }, [])
-
-  const unreadCount = notifications.filter((n) => !n.read).length
+    // Deferred so the first fetch's state updates don't run inside the effect body.
+    const first = setTimeout(load, 0);
+    const timer = setInterval(load, REFRESH_MS);
+    window.addEventListener("focus", load);
+    return () => {
+      clearTimeout(first);
+      clearInterval(timer);
+      window.removeEventListener("focus", load);
+    };
+  }, [load]);
 
   async function markAllRead() {
+    const ids = items.filter((n) => !n.read).map((n) => n.id);
+    if (ids.length === 0) return;
     try {
-      const ids = notifications.map((n) => n.id)
-      if (ids.length === 0) return
-      const res = await fetch(`/api/reminders`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "markRead", ids }) })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok || !data?.success) throw new Error(data?.error || "Failed to mark read")
-      setNotifications((prev) => prev.map((n) => ({ ...n, read: true })))
+      const res = await fetch("/api/notifications", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.success) throw new Error(data?.error || "Couldn't mark as read");
+      setItems((prev) => prev.map((n) => ({ ...n, read: true })));
+      setUnread((count) => Math.max(0, count - ids.length));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to mark read")
+      setError(err instanceof Error ? err.message : "Couldn't mark as read");
     }
   }
 
@@ -74,35 +83,51 @@ export function NotificationBell() {
           variant="ghost"
           size="icon"
           className="relative h-9 w-9 rounded-full"
-          aria-label="Open notifications"
+          aria-label={unread > 0 ? `Notifications, ${unread} unread` : "Notifications"}
         >
           <Bell className="h-4 w-4" />
-          {unreadCount > 0 && (
+          {unread > 0 && (
             <span className="absolute top-0 right-0 flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
             </span>
           )}
-          <span className="sr-only">Toggle notifications</span>
         </Button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-80">
-        <div className="flex items-center justify-between mb-4">
-            <h4 className="font-medium text-sm">Notifications</h4>
-            <Button variant="link" size="sm" className="text-xs" onClick={markAllRead}>Mark all as read</Button>
+        <div className="mb-3 flex items-center justify-between">
+          <h4 className="text-sm font-medium">Notifications</h4>
+          {unread > 0 && (
+            <Button variant="link" size="sm" className="text-xs" onClick={markAllRead}>
+              Mark all as read
+            </Button>
+          )}
         </div>
-        <div className="flex flex-col gap-3">
-          {isLoading ? <div className="text-sm text-muted-foreground">Loading...</div> : null}
-          {error ? <div className="text-sm text-red-600">{error}</div> : null}
-          {notifications.map((notif) => (
-            <div key={notif.id} className={`flex items-start gap-3 p-3 rounded-md ${!notif.read ? 'bg-secondary/50' : ''}`}>
-              <div className="mt-1">{iconMap[notif.type]}</div>
-              <p className="text-sm text-muted-foreground">{notif.text}</p>
-            </div>
+        <div className="flex max-h-96 flex-col gap-2 overflow-y-auto">
+          {isLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
+          {error && <p className="text-sm text-destructive">{error}</p>}
+          {items.map((n) => (
+            <Link
+              key={n.id}
+              href={`/mission/${n.missionId}`}
+              className={`flex items-start gap-3 rounded-md p-2 text-sm hover:bg-secondary ${n.read ? "" : "bg-secondary/50"}`}
+            >
+              <CalendarClock className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden />
+              <span className="min-w-0">
+                <span className="block font-medium">{n.title}</span>
+                <span className="block text-xs text-muted-foreground">
+                  {n.kind === "task-due" && n.taskDueDate
+                    ? `Due ${formatDisplayDate(n.taskDueDate)}`
+                    : (n.details ?? formatDisplayDate(n.sentAt ?? n.dueAt))}
+                </span>
+              </span>
+            </Link>
           ))}
-          {notifications.length === 0 && !isLoading ? <div className="text-sm text-muted-foreground">No notifications</div> : null}
+          {!isLoading && !error && items.length === 0 && (
+            <p className="text-sm text-muted-foreground">No notifications yet. Reminders show up here when they&apos;re due.</p>
+          )}
         </div>
       </PopoverContent>
     </Popover>
-  )
+  );
 }

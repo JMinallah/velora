@@ -10,7 +10,8 @@ type Actor = ChangeOrigin
 /**
  * Returns null when the mission (or the linked task) doesn't exist or isn't
  * the caller's (renders as 404). dueAt is stored as a UTC ISO string because
- * the dispatcher compares it to "now" as a string.
+ * the dispatcher compares it to "now" as a string. Delivery channels are
+ * decided at send time by the user's notification preferences.
  */
 export async function createReminder(
   userId: string,
@@ -32,12 +33,14 @@ export async function createReminder(
     userId,
     missionId: input.missionId,
     taskId: input.taskId,
+    kind: "custom",
     title: input.title,
     details: input.details,
     dueAt: dueAt.toISOString(),
-    channel: input.channel ?? "in-app",
-    status: input.status ?? "scheduled",
-    read: input.read ?? false,
+    status: "scheduled",
+    attempts: 0,
+    delivered: [],
+    read: false,
     createdAt: now,
     updatedAt: now,
   }
@@ -47,7 +50,7 @@ export async function createReminder(
     missionId: reminder.missionId,
     type: "reminder-created",
     actor,
-    payload: { reminderId: reminder.id, title: reminder.title, channel: reminder.channel },
+    payload: { reminderId: reminder.id, title: reminder.title, dueAt: reminder.dueAt },
     undo: { kind: "delete-reminder", reminderId: reminder.id, label: reminder.title, afterUpdatedAt: now },
   })
   return reminder
@@ -71,4 +74,22 @@ export async function markRemindersRead(userId: string, ids: string[]): Promise<
     .collection<ReminderRecord>(COLLECTIONS.reminders)
     .updateMany({ userId, id: { $in: ids } }, { $set: { read: true, updatedAt: new Date().toISOString() } })
   return res.modifiedCount
+}
+
+/**
+ * The in-app inbox: reminders the dispatcher has delivered in the app,
+ * newest first. Scheduled reminders aren't notifications yet.
+ */
+export async function listNotifications(
+  userId: string,
+  limit = 30
+): Promise<{ items: ReminderRecord[]; unread: number }> {
+  const db = await getDb()
+  const reminders = db.collection<ReminderRecord>(COLLECTIONS.reminders)
+  const query = { userId, delivered: "in-app" as const }
+  const [items, unread] = await Promise.all([
+    reminders.find(query, { projection: { _id: 0 } }).sort({ sentAt: -1, dueAt: -1 }).limit(limit).toArray(),
+    reminders.countDocuments({ ...query, read: { $ne: true } }),
+  ])
+  return { items, unread }
 }

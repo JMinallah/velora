@@ -1,4 +1,4 @@
-import type { Message, Mission, Task, Document, Reminder, Event } from "@/types"
+import type { Message, Mission, Task, Document, Reminder, ReminderDispatch, Event } from "@/types"
 
 export const COLLECTIONS = {
   missions: "missions",
@@ -12,6 +12,9 @@ export const COLLECTIONS = {
   planProposals: "plan_proposals",
   replanProposals: "replan_proposals",
   uploads: "uploads",
+  reminderDispatches: "reminder_dispatches",
+  userSettings: "user_settings",
+  users: "users",
 } as const
 
 export type MissionRecord = Mission
@@ -19,6 +22,7 @@ export type TaskRecord = Task
 export type MessageRecord = Message
 export type DocumentRecord = Document
 export type ReminderRecord = Reminder
+export type ReminderDispatchRecord = ReminderDispatch
 export type EventRecord = Event
 
 const PROTECTED_FIELDS = ["_id", "id", "userId", "missionId", "createdAt"]
