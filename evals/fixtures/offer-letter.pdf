@@ -1,0 +1,32 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>
+endobj
+4 0 obj
+<< /Length 429 >>
+stream
+BT /F1 12 Tf 72 740 Td 16 TL (SEOUL ROBOTICS CO., LTD.) Tj T* (Offer of Employment) Tj T* () Tj T* (Date: 01 SEP 2026) Tj T* (Dear Ms. Amina Wanjiku,) Tj T* (We are pleased to offer you the position of Senior Data Engineer.) Tj T* (Start date: 01 DEC 2026) Tj T* (Place of work: Seoul, Republic of Korea) Tj T* (This offer is subject to obtaining an E-7 work visa.) Tj T* (Please confirm your acceptance by 30 SEP 2026.) Tj T* ET
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000241 00000 n 
+0000000721 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+791
+%%EOF

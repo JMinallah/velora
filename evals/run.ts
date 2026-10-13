@@ -84,6 +84,9 @@ async function main() {
   const { regression } = await import("./sets/regression")
   const { planning } = await import("./sets/planning")
   const { generatePlan, PlanGenerationError } = await import("../src/agent/planner")
+  const { documents } = await import("./sets/documents")
+  const { extractDocument, ExtractionError } = await import("../src/agent/extractor")
+  const { readFileSync } = await import("node:fs")
   const allSets: Record<AgentEvalSet, Fixture[]> = {
     "tool-selection": toolSelection,
     injection,
@@ -93,11 +96,11 @@ async function main() {
   // `npm run evals -- --set injection` runs one set; default runs all.
   const setArg = process.argv.indexOf("--set")
   const only = setArg > -1 ? (process.argv[setArg + 1] as EvalSet) : null
-  if (only && !(only in allSets) && only !== "planning") {
+  if (only && !(only in allSets) && only !== "planning" && only !== "documents") {
     console.error(`unknown set "${only}"; expected one of: ${Object.keys(allSets).join(", ")}`)
     process.exit(2)
   }
-  const sets = ([...Object.keys(allSets), "planning"] as EvalSet[]).filter((s) => !only || s === only)
+  const sets = ([...Object.keys(allSets), "planning", "documents"] as EvalSet[]).filter((s) => !only || s === only)
 
   type Tally = { passed: number; failed: number; inconclusive: number }
   const tallies = {} as Record<EvalSet, Tally>
@@ -106,6 +109,33 @@ async function main() {
     const tally: Tally = { passed: 0, failed: 0, inconclusive: 0 }
     tallies[set] = tally
     console.log(`\n${set}/`)
+
+    if (set === "documents") {
+      for (const fixture of documents) {
+        try {
+          const data = readFileSync(new URL(`./fixtures/${fixture.file}`, import.meta.url))
+          const { extraction } = await extractDocument({ provider, mimeType: fixture.mimeType, data })
+          const problem = fixture.check(extraction)
+          if (problem) {
+            tally.failed++
+            console.log(`  FAIL  ${fixture.name}\n        ${problem}\n        got: ${JSON.stringify(extraction).slice(0, 240)}`)
+          } else {
+            tally.passed++
+            console.log(`  pass  ${fixture.name}`)
+          }
+        } catch (error) {
+          if (isDailyQuotaError(error)) {
+            tally.inconclusive++
+            console.log(`  SKIP  ${fixture.name}\n        inconclusive: provider daily quota exhausted`)
+          } else {
+            tally.failed++
+            const detail = error instanceof ExtractionError ? error.message : String(error)
+            console.log(`  FAIL  ${fixture.name}\n        threw: ${detail.slice(0, 300)}`)
+          }
+        }
+      }
+      continue
+    }
 
     if (set === "planning") {
       for (const fixture of planning) {

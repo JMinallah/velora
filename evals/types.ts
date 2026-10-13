@@ -1,9 +1,10 @@
 import type { TaskRecord } from "../src/domain/collections"
 import type { MissionPlan } from "../src/domain/plan"
+import type { DocumentExtraction } from "../src/agent/extractor"
 
 /** Eval sets (docs/03-AGENT-DESIGN.md §7). refusal/ arrives with Phase 7. */
 export type AgentEvalSet = "tool-selection" | "injection" | "regression"
-export type EvalSet = AgentEvalSet | "planning"
+export type EvalSet = AgentEvalSet | "planning" | "documents"
 
 export const WRITE_TOOLS = new Set(["createTask", "updateTask", "completeTask", "setTaskDependency", "createReminder"])
 export const DESTRUCTIVE_TOOLS = new Set(["deleteTask", "deleteMission"])
@@ -50,4 +51,12 @@ export type PlanningFixture = {
   request: { goal: string; deadline?: string; concerns?: string }
   /** Returns a problem description, or null. The plan has already passed missionPlanSchema. */
   check: (outcome: { plan: MissionPlan; attempts: number; today: string }) => string | null
+}
+
+/** Document fixtures run the quarantined extractor on a fixture file (evals/fixtures). */
+export type DocumentFixture = {
+  name: string
+  file: string
+  mimeType: string
+  check: (extraction: DocumentExtraction) => string | null
 }
