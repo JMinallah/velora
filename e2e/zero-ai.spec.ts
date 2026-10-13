@@ -249,7 +249,10 @@ test("the risk indicator explains itself and updates as tasks change", async ({ 
 
   // The toggle saves in the background; wait for the save before leaving the page
   // (listen first, so a fast response can't slip past).
-  const saved = page.waitForResponse((r) => r.url().includes("/tasks/") && r.request().method() === "PATCH")
+  // Match the *untick's* save: the earlier tick's save may still be in flight.
+  const saved = page.waitForResponse(
+    (r) => r.url().includes("/tasks/") && r.request().method() === "PATCH" && r.request().postDataJSON()?.completed === false
+  )
   await page.getByLabel("Done: Renew passport").uncheck()
   await saved
   await expect(risk).toContainText("At risk")
