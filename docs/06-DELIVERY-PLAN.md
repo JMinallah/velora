@@ -137,18 +137,27 @@ The roadmap says *what* each phase is. This document says *how* each phase gets 
 - **4-7 (S)** Remove v1 planning code: `/api/plan`, `src/lib/ai/gemini.ts`, `src/lib/coordination/*`, localStorage plan session.
 - **4-8 (M)** `evals/planning/` including the SRS fixture; corridor templates for the launch wedge (D3, FR-MSN-6).
 
-### Exit gate
-- [ ] SRS fixture ("Nairobi → Seoul in October for a new job") yields a valid plan with ≥ 8 tasks across ≥ 3 phases — *eval*
-- [ ] No mission reaches `active` without a `mission-accepted` event — *test*
-- [ ] Rejecting a proposal or re-plan leaves state byte-identical — *test comparing document hashes*
-- [ ] Accepting applies all changes or none (failure injected mid-apply) — *test*
-- [ ] Dependency cycles rejected — *test*
+### Exit gate — reviewed 2026-10-13 (PRs #20–#24)
+- [x] SRS fixture ("Nairobi → Seoul in October for a new job") yields a valid plan with ≥ 8 tasks across ≥ 3 phases — *`evals/sets/planning.ts` › "SRS fixture…": 4/4 planning fixtures in CI on PR #24 (run 38303554091); with planner.v2 the fixture measured 15, 11, 13 and 14 tasks across 4 phases*
+- [x] No mission reaches `active` without a `mission-accepted` event — *`tests/routes-agent-docs.test.ts` › plan proposals: "drafting creates a proposal only — no mission exists until it is accepted", "accepting creates the mission, its tasks… and the acceptance event — once". Generated plans become missions only through `acceptProposal`, which writes `mission-accepted` in the same transaction. (Missions the user creates by hand — "Plan it myself" — are user-authored, not proposals.)*
+- [x] Rejecting a proposal or re-plan leaves state byte-identical — *SHA-256 of the user's documents before/after: `tests/routes-agent-docs.test.ts` › "rejecting leaves all mission state byte-identical (exit gate)" (missions, tasks, events) and "proposing changes nothing; reject leaves the mission byte-identical (exit gate)"*
+- [x] Accepting applies all changes or none (failure injected mid-apply) — *`beforeCommit` failure injection after all writes: `tests/routes-agent-docs.test.ts` › "an accept that fails part-way leaves nothing behind (exit gate)" for both plan proposals and re-plans; plus refusal of a re-plan over the user's later edits ("refuses to apply over the user's later edits, applying nothing")*
+- [x] Dependency cycles rejected — *`tests/plan-and-dependencies.test.ts` (findCycle, dependencyProblem, missionPlanSchema, replanIssues); `tests/routes.test.ts` › task dependencies (REST 400 with "That would create a loop: …"); `tests/routes-agent-docs.test.ts` › agent tool setTaskDependency (looping request refused)*
+
+**Deferred by owner decision (2026-10-12):** mission templates (4-8, FR-MSN-6 "Could") — to be discussed later together with the launch wedge (D3), including the idea of curated, expert-checked route templates as a premium feature.
+
+**Gate review findings (2026-10-13):**
+- Gemini's structured output rejects the JSON Schema keyword `maxItems` (400, found by bisecting the schema); it is stripped from the schema sent to the model while `missionPlanSchema` still enforces limits.
+- planner.v1's "2–8 tasks per phase" was read as "2 each" (8-task plans for an international move, 3/3 runs); planner.v2 sizes plans to the transition (11–15 tasks).
+- Multi-document transactions required running test MongoDB as a single-node replica set, locally and in CI (Atlas already is one).
+- The free tier's 500 requests/day per model was exhausted once (2026-10-11) by a day of agent PRs plus stability runs; evals reported "inconclusive" rather than failing, and `main` was re-verified (14/14) after the reset. Space out eval-heavy work.
+- Eval seed and requested dates are now relative to today, after a fixed seed date drifted into the past.
 
 ---
 
 ## Phase 5 — Documents
 
-**Entry gate:** Phase 4 exit gate fully ticked; D4 decided.
+**Entry gate:** Phase 4 exit gate fully ticked (met 2026-10-13); D4 decided — **still open**: document storage needs the owner's decision (recommendation: Cloudflare R2, which needs an account).
 
 ### Work items
 - **5-1 (M)** R2 storage adapter: presigned PUT for upload, presigned GET (≤ 15 min) for viewing; private bucket; object keys namespaced by `userId`. Delete `src/lib/storage/gcs.ts`, the `public/uploads` fallback, and `@google-cloud/storage`.
