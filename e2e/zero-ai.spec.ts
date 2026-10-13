@@ -256,3 +256,32 @@ test("the risk indicator explains itself and updates as tasks change", async ({ 
   await open(page, "/")
   await expect(page.getByRole("list", { name: "Missions" }).getByRole("link", { name: /Move to Accra/ })).toContainText("At risk")
 })
+
+test("a document uploads privately and opens through a short-lived link", async ({ page }) => {
+  const mission = (await (await page.request.post("/api/missions", { data: { title: "Move to Kigali" } })).json()).data
+  await open(page, "/documents")
+  await page.getByRole("combobox").selectOption(mission.id)
+
+  // A tiny valid PNG (1×1).
+  const png = Buffer.from(
+    "89504e470d0a1a0a0000000d4948445200000001000000010806000000" +
+      "1f15c4890000000d49444154789c6360000002000154a24f5d0000000049454e44ae426082",
+    "hex"
+  )
+  await page.getByLabel("Upload documents").setInputFiles({ name: "passport.png", mimeType: "image/png", buffer: png })
+  await expect(page.getByRole("list", { name: "Upload status" })).toContainText("passport.png: uploaded ✓")
+  const documents = page.getByRole("list", { name: "Documents" })
+  await expect(documents.getByText("passport.png")).toBeVisible()
+
+  const [viewer] = await Promise.all([
+    page.waitForEvent("popup"),
+    documents.getByRole("button", { name: 'View "passport.png"' }).click(),
+  ])
+  const response = await viewer.waitForLoadState().then(() => viewer.evaluate(() => fetch(location.href).then((r) => [r.status, r.headers.get("content-type")])))
+  expect(response).toEqual([200, "image/png"])
+  await viewer.close()
+
+  await documents.getByRole("button", { name: 'Delete "passport.png"' }).click()
+  await documents.getByRole("button", { name: "Delete", exact: true }).click()
+  await expect(documents.getByText("passport.png")).toHaveCount(0)
+})

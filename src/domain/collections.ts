@@ -11,6 +11,7 @@ export const COLLECTIONS = {
   pendingActions: "pending_actions",
   planProposals: "plan_proposals",
   replanProposals: "replan_proposals",
+  uploads: "uploads",
 } as const
 
 export type MissionRecord = Mission

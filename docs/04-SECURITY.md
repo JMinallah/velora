@@ -28,6 +28,11 @@ Context that shapes this document: v1 shipped with tool-API auth bypassed, CORS 
 - Session strategy: encrypted cookies, `HttpOnly`, `Secure`, `SameSite=Lax`.
 - **Deny-by-default routing:** authentication is enforced in a single shared wrapper (`withAuth(handler)`) applied by convention to every route under `/api`, with an explicit, reviewed allowlist of public routes (auth callbacks, health). A new route is authenticated unless someone deliberately unlists it in one visible file.
 
+**Reviewed public routes (not behind `withAuth`):**
+- `/api/auth/*` — Auth.js sign-in callbacks.
+- `GET /api/cron/reminders` — machine-to-machine; requires the `CRON_SECRET` bearer token (constant-time compared).
+- `GET|PUT /api/files/[token]` — the local document store's equivalent of presigned URLs (development; R2 serves its own presigned URLs in production). The token is HMAC-signed with a key derived from `AUTH_SECRET`, names exactly one object and one operation, binds content type and maximum size for uploads, and expires (upload ≤ 10 min, view ≤ 5 min). Only the server mints tokens, and only for the object's owner.
+
 ### 2.2 Authorization
 - Single-tenant-per-user model: every domain function's first parameter is `userId` (from the session, never from the request body); every Mongo query includes it. There is no code path from route/tool to database that skips the domain layer (02-ARCHITECTURE §3.1).
 - Foreign or missing resources both return **404** — existence is not disclosed.

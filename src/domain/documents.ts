@@ -3,6 +3,7 @@ import { getDb } from "@/adapters/db"
 import { COLLECTIONS, type DocumentRecord } from "./collections"
 import { emitEvent, type ChangeOrigin } from "./events"
 import { getMission } from "./missions"
+import { storeFor } from "@/adapters/storage"
 
 type Actor = ChangeOrigin
 
@@ -67,4 +68,30 @@ export async function updateDocument(
     })
   }
   return updated
+}
+
+export async function getDocument(userId: string, missionId: string, id: string): Promise<DocumentRecord | null> {
+  const db = await getDb()
+  return db.collection<DocumentRecord>(COLLECTIONS.documents).findOne({ userId, missionId, id }, { projection: { _id: 0 } })
+}
+
+/** Deletes the record and its stored file (the bytes are personal data: they must not outlive the record). */
+export async function deleteDocument(userId: string, missionId: string, id: string, actor: Actor = "user"): Promise<boolean> {
+  const db = await getDb()
+  const doc = await db.collection<DocumentRecord>(COLLECTIONS.documents).findOneAndDelete({ userId, missionId, id })
+  if (!doc) return false
+  await removeStoredFile(doc.storageUrl)
+  await emitEvent(userId, { missionId, type: "document-deleted", actor, payload: { documentId: id, name: doc.name } })
+  return true
+}
+
+/** Best-effort removal of a document's bytes; logs rather than failing the caller. */
+export async function removeStoredFile(storageUrl: string | undefined): Promise<void> {
+  if (!storageUrl || !/^(local|r2):/.test(storageUrl)) return
+  try {
+    const { store, key } = storeFor(storageUrl)
+    await store.delete(key)
+  } catch (error) {
+    console.error("failed to delete stored document", error)
+  }
 }

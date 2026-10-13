@@ -27,8 +27,12 @@ import { POST as chatRoute } from "@/app/api/missions/[id]/chat/route"
 import { GET as listMessagesRoute } from "@/app/api/missions/[id]/messages/route"
 import { GET as listEventsRoute } from "@/app/api/missions/[id]/events/route"
 import { GET as listTasksRoute } from "@/app/api/missions/[id]/tasks/route"
-import { GET as listDocumentsRoute, POST as attachDocumentRoute } from "@/app/api/missions/[id]/documents/route"
-import { POST as ingestRoute } from "@/app/api/missions/[id]/documents/ingest/route"
+import { GET as listDocumentsRoute } from "@/app/api/missions/[id]/documents/route"
+import { POST as startUploadRoute } from "@/app/api/missions/[id]/documents/uploads/route"
+import { POST as completeUploadRoute } from "@/app/api/missions/[id]/documents/uploads/[uploadId]/complete/route"
+import { DELETE as deleteDocumentRoute } from "@/app/api/missions/[id]/documents/[docId]/route"
+import { GET as viewDocumentRoute } from "@/app/api/missions/[id]/documents/[docId]/view/route"
+import { GET as getFileRoute, PUT as putFileRoute } from "@/app/api/files/[token]/route"
 import { POST as decideRoute } from "@/app/api/missions/[id]/pending-actions/[actionId]/route"
 import { GET as getMissionRoute, PATCH as patchMissionRoute } from "@/app/api/missions/[id]/route"
 import { POST as createTaskRoute } from "@/app/api/missions/[id]/tasks/route"
@@ -43,10 +47,11 @@ import { GET as getReplanRoute } from "@/app/api/missions/[id]/replans/[replanId
 import { POST as acceptReplanRoute } from "@/app/api/missions/[id]/replans/[replanId]/accept/route"
 import { POST as rejectReplanRoute } from "@/app/api/missions/[id]/replans/[replanId]/reject/route"
 import { createHash } from "node:crypto"
-import { LOCAL_UPLOAD_DIR } from "@/lib/storage/gcs"
+import { LOCAL_UPLOAD_DIR } from "@/adapters/storage/local"
+import { signGrant } from "@/adapters/storage/signed"
 import { closeClient } from "@/adapters/db"
 
-const UPLOAD_USERS = ["user-ingest", "user-ingest-attacker"]
+const UPLOAD_USERS = ["user-docs", "user-docs-stranger", "user-docs-delete"]
 
 beforeAll(() => {
   if (!TEST_URI) return
@@ -835,85 +840,103 @@ describeDb("chat route — daily quota", () => {
   })
 })
 
-describeDb("documents route", () => {
-  it("validates input, keeps extraction server-owned, and is scoped per user", async () => {
-    const missionId = await createMissionAs("user-docs")
-    const attach = (body: unknown) =>
-      attachDocumentRoute(req("POST", `/api/missions/${missionId}/documents`, body), ctx({ id: missionId }))
+describeDb("documents: signed upload → verify → view → delete (5-1, 5-2)", () => {
+  const PNG = Buffer.from("89504e470d0a1a0a0000000d49484452", "hex") // a PNG header is enough for storage
 
-    expect((await attach({})).status).toBe(400)
-    expect((await attach({ name: "x", storageUrl: "https://evil.example/passport.pdf" })).status).toBe(400)
+  const start = (missionId: string, body: unknown) =>
+    startUploadRoute(req("POST", `/api/missions/${missionId}/documents/uploads`, body), ctx({ id: missionId }))
+  const complete = (missionId: string, uploadId: string) =>
+    completeUploadRoute(req("POST", "/"), ctx({ id: missionId, uploadId }))
+  const putFile = (url: string, bytes: Buffer, contentType: string) =>
+    putFileRoute(new Request(`http://localhost${url}`, { method: "PUT", body: new Uint8Array(bytes), headers: { "content-type": contentType } }), {
+      params: Promise.resolve({ token: url.split("/").pop()! }),
+    })
+  const getFile = (url: string) => getFileRoute(new Request(`http://localhost${url}`), { params: Promise.resolve({ token: url.split("/").pop()! }) })
 
-    const ok = await attach({ name: "passport.pdf", storageUrl: "local://x.pdf", extractedText: "FAKE: valid forever" })
-    expect(ok.status).toBe(201)
-    expect((await ok.json()).data).toMatchObject({ name: "passport.pdf", extractedText: "" })
-
-    const events = (await (await listEventsRoute(req("GET", "/"), ctx({ id: missionId }))).json()).data
-    expect(events).toContainEqual(expect.objectContaining({ type: "document-attached", actor: "user" }))
-
-    asUser("user-docs-stranger")
-    expect((await attach({ name: "sneaky.pdf" })).status).toBe(404)
-    const foreignList = await listDocumentsRoute(req("GET", "/"), ctx({ id: missionId }))
-    expect((await foreignList.json()).data).toHaveLength(0)
-  })
-})
-
-describeDb("document ingest route", () => {
-  const upload = (missionId: string, file?: File) => {
-    const form = new FormData()
-    if (file) form.append("file", file)
-    return ingestRoute(
-      new NextRequest(`http://localhost/api/missions/${missionId}/documents/ingest`, { method: "POST", body: form }),
-      ctx({ id: missionId })
-    )
+  async function uploadPng(missionId: string, name = "passport.png") {
+    const started = await start(missionId, { name, contentType: "image/png", size: PNG.length })
+    expect(started.status).toBe(201)
+    const { uploadId, url } = (await started.json()).data
+    expect((await putFile(url, PNG, "image/png")).status).toBe(200)
+    const done = await complete(missionId, uploadId)
+    expect(done.status).toBe(201)
+    return (await done.json()).data as { id: string; name: string; storageUrl: string }
   }
 
-  it("rejects anonymous (401) and foreign missions (404) before storing anything", async () => {
-    const missionId = await createMissionAs("user-ingest")
-    const file = new File(["hello"], "note.txt", { type: "text/plain" })
-
-    asUser(null)
-    expect((await upload(missionId, file)).status).toBe(401)
-
-    asUser("user-ingest-attacker")
-    expect((await upload(missionId, file)).status).toBe(404)
-    expect(fs.existsSync(path.join(LOCAL_UPLOAD_DIR, "user-ingest-attacker"))).toBe(false)
+  it("refuses foreign missions (404), other types (415) and files over 10 MB (413)", async () => {
+    const missionId = await createMissionAs("user-docs")
+    expect((await start(missionId, { name: "x.zip", contentType: "application/zip", size: 10 })).status).toBe(415)
+    expect((await start(missionId, { name: "big.pdf", contentType: "application/pdf", size: 10 * 1024 * 1024 + 1 })).status).toBe(413)
+    expect((await start(missionId, { name: "x" })).status).toBe(400)
+    asUser("user-docs-stranger")
+    expect((await start(missionId, { name: "a.png", contentType: "image/png", size: 10 })).status).toBe(404)
   })
 
-  it("enforces presence (400), type (415) and size (413)", async () => {
-    const missionId = await createMissionAs("user-ingest")
-    expect((await upload(missionId)).status).toBe(400)
-    expect((await upload(missionId, new File(["PK"], "a.zip", { type: "application/zip" }))).status).toBe(415)
-    const big = new File([new Uint8Array(10 * 1024 * 1024 + 1)], "big.pdf", { type: "application/pdf" })
-    expect((await upload(missionId, big)).status).toBe(413)
+  it("uploads under a server-chosen key, and serves it only through a short-lived owner link", async () => {
+    const missionId = await createMissionAs("user-docs")
+    const doc = await uploadPng(missionId, "../../../../etc/passwd.png")
+    expect(doc.name).toBe("../../../../etc/passwd.png") // display name only
+    expect(doc.storageUrl).toMatch(new RegExp(`^local:user-docs/${missionId}/[0-9a-f-]{36}\\.png$`))
+    expect(fs.existsSync(path.join(LOCAL_UPLOAD_DIR, doc.storageUrl.slice("local:".length)))).toBe(true)
+
+    const view = await (await viewDocumentRoute(req("GET", "/"), ctx({ id: missionId, docId: doc.id }))).json()
+    expect(Date.parse(view.data.expiresAt) - Date.now()).toBeLessThanOrEqual(15 * 60 * 1000) // NFR-SEC-4
+    const file = await getFile(view.data.url)
+    expect(file.status).toBe(200)
+    expect(file.headers.get("content-type")).toBe("image/png")
+    expect(file.headers.get("cache-control")).toContain("no-store")
+    expect(Buffer.from(await file.arrayBuffer()).equals(PNG)).toBe(true)
+
+    asUser("user-docs-stranger")
+    expect((await viewDocumentRoute(req("GET", "/"), ctx({ id: missionId, docId: doc.id }))).status).toBe(404)
+    expect((await deleteDocumentRoute(req("DELETE", "/"), ctx({ id: missionId, docId: doc.id }))).status).toBe(404)
+    expect((await (await listDocumentsRoute(req("GET", "/"), ctx({ id: missionId }))).json()).data).toHaveLength(0)
   })
 
-  it("stores under a server-generated key — a traversal filename cannot escape — and audits extraction", async () => {
-    const missionId = await createMissionAs("user-ingest")
-    // Enough ../ to reach the filesystem root from any checkout location; the
-    // old code (filename joined into the path) wrote this file to /tmp.
-    const hostile = new File(["Passport expires 2027-01-01"], `${"../".repeat(16)}tmp/velora-pwn.txt`, {
-      type: "text/plain",
-    })
+  it("signed file links can't be forged, reused for another operation, or used after expiry", async () => {
+    const missionId = await createMissionAs("user-docs")
+    const doc = await uploadPng(missionId)
+    const key = doc.storageUrl.slice("local:".length)
+    const viewUrl = (await (await viewDocumentRoute(req("GET", "/"), ctx({ id: missionId, docId: doc.id }))).json()).data.url as string
 
-    const res = await upload(missionId, hostile)
-    expect(res.status).toBe(201)
-    const doc = (await res.json()).data
-    expect(doc.name).toBe("velora-pwn.txt") // display name only
-    expect(doc.storageUrl).toMatch(/^local:\/\/user-ingest\/[0-9a-f-]{36}\.txt$/)
+    const [payload, sig] = viewUrl.split("/").pop()!.split(".")
+    expect((await getFile(`/api/files/${payload}.${sig.slice(0, -2)}AA`)).status).toBe(403) // tampered signature
+    expect((await putFile(viewUrl, PNG, "image/png")).status).toBe(403) // a view link can't upload
+    const expired = signGrant({ op: "get", key, contentType: "image/png", filename: "x.png", exp: Math.floor(Date.now() / 1000) - 1 })
+    expect((await getFile(`/api/files/${expired}`)).status).toBe(410)
+  })
 
-    const key = doc.storageUrl.replace("local://", "")
-    expect(fs.readFileSync(path.join(LOCAL_UPLOAD_DIR, key), "utf8")).toBe("Passport expires 2027-01-01")
-    expect(fs.existsSync("/tmp/velora-pwn.txt")).toBe(false)
+  it("verifies the stored object before creating a document", async () => {
+    const missionId = await createMissionAs("user-docs")
+    // Completing before uploading
+    const early = (await (await start(missionId, { name: "a.png", contentType: "image/png", size: PNG.length })).json()).data
+    expect((await complete(missionId, early.uploadId)).status).toBe(409)
+    // Wrong content type at upload time
+    expect((await putFile(early.url, PNG, "application/pdf")).status).toBe(400)
+    // Uploaded bytes differ from the declared size: discarded
+    const lying = (await (await start(missionId, { name: "b.png", contentType: "image/png", size: 999 })).json()).data
+    await putFile(lying.url, PNG, "image/png")
+    expect((await complete(missionId, lying.uploadId)).status).toBe(422)
+    // Completed once only
+    await putFile(early.url, PNG, "image/png")
+    expect((await complete(missionId, early.uploadId)).status).toBe(201)
+    expect((await complete(missionId, early.uploadId)).status).toBe(409)
+    expect((await (await listDocumentsRoute(req("GET", "/"), ctx({ id: missionId }))).json()).data).toHaveLength(1)
+  })
 
-    // Extraction runs in the background and is recorded as a system event.
-    let events: { type: string; actor: string }[] = []
-    for (let i = 0; i < 50 && !events.some((e) => e.type === "document-updated"); i++) {
-      await new Promise((r) => setTimeout(r, 100))
-      events = (await (await listEventsRoute(req("GET", "/"), ctx({ id: missionId }))).json()).data
-    }
-    expect(events).toContainEqual(expect.objectContaining({ type: "document-updated", actor: "system" }))
-    const docs = (await (await listDocumentsRoute(req("GET", "/"), ctx({ id: missionId }))).json()).data
-    expect(docs[0].extractedText).toBe("Passport expires 2027-01-01")
+  it("deleting a document — or its mission — removes the stored file", async () => {
+    const missionId = await createMissionAs("user-docs-delete")
+    const doc = await uploadPng(missionId)
+    const file = path.join(LOCAL_UPLOAD_DIR, doc.storageUrl.slice("local:".length))
+    expect((await deleteDocumentRoute(req("DELETE", "/"), ctx({ id: missionId, docId: doc.id }))).status).toBe(200)
+    expect(fs.existsSync(file)).toBe(false)
+    const events = (await (await listEventsRoute(req("GET", "/"), ctx({ id: missionId }))).json()).data
+    expect(events).toContainEqual(expect.objectContaining({ type: "document-deleted", actor: "user" }))
+
+    const second = await uploadPng(missionId)
+    const secondFile = path.join(LOCAL_UPLOAD_DIR, second.storageUrl.slice("local:".length))
+    const { deleteMission } = await import("@/domain/missions")
+    await deleteMission("user-docs-delete", missionId)
+    expect(fs.existsSync(secondFile)).toBe(false)
   })
 })

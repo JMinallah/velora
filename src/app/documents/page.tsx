@@ -111,7 +111,11 @@ export default function DocumentsPage() {
           />
         </div>
         <div className="flex flex-col gap-8">
-          <DocumentList documents={documents} />
+          <DocumentList
+            missionId={activeMissionId}
+            documents={documents}
+            onDeleted={(id) => setDocuments((current) => current.filter((d) => d.id !== id))}
+          />
         </div>
       </div>
     </div>
