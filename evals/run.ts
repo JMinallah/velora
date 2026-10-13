@@ -17,7 +17,9 @@
  * Exit code 1 on any failed fixture — CI treats this as merge-blocking.
  * A fixture that cannot run because the provider's *daily* quota is spent is
  * reported as INCONCLUSIVE (with a CI warning), not as an agent failure: the
- * free tier allows as few as 20 requests/day per model.
+ * free tier allows as few as 20 requests/day per model. A fixture that fails
+ * while the provider is failing (503 "high demand", timeouts) is retried
+ * from scratch, up to 3 attempts; it still has to genuinely pass.
  */
 import { FLIGHTS_DUE, type AgentEvalSet, type EvalSet, type Fixture } from "./types"
 
@@ -55,6 +57,10 @@ async function main() {
   const gemini = new GeminiProvider()
   let lastCallAt = 0
   let calls = 0
+  // Provider-side failures (overload, timeouts) seen so far; a fixture that
+  // fails while this grew is retried instead of blamed on the agent.
+  let providerTrouble = 0
+  const isAbort = (error: unknown) => error instanceof Error && (error.name === "AbortError" || error.name === "TimeoutError")
   const paced = async <T>(call: () => Promise<T>): Promise<T> => {
     for (let attempt = 0; ; attempt++) {
       const wait = lastCallAt + minIntervalMs - Date.now()
@@ -64,6 +70,7 @@ async function main() {
       try {
         return await call()
       } catch (error) {
+        if (isTransientLlmError(error) || isAbort(error)) providerTrouble++
         // A spent daily quota will not recover within this run; don't wait.
         if (attempt > 0 || !isTransientLlmError(error)) throw error
         await sleep(Math.max(minIntervalMs, 15_000))
@@ -105,6 +112,54 @@ async function main() {
   type Tally = { passed: number; failed: number; inconclusive: number }
   const tallies = {} as Record<EvalSet, Tally>
 
+  /**
+   * Runs one fixture. `run` returns a problem (or null for a pass) plus a
+   * note for the log; a throw is a failure. When the model provider failed
+   * during a failing attempt (503 "high demand", timeouts), the fixture is
+   * retried from scratch after a pause, up to MAX_TRIES — it still has to
+   * genuinely pass; only a spent daily quota counts as inconclusive.
+   */
+  const MAX_TRIES = 3
+  const evaluate = async (
+    tally: Tally,
+    name: string,
+    run: () => Promise<{ problem: string | null; note?: string }>,
+    describeError: (error: unknown) => string = (error) => (error instanceof Error ? error.message : String(error))
+  ) => {
+    for (let attempt = 1; ; attempt++) {
+      const troubleBefore = providerTrouble
+      let outcome: { problem: string | null; note?: string }
+      try {
+        outcome = await run()
+      } catch (error) {
+        if (isDailyQuotaError(error)) {
+          tally.inconclusive++
+          console.log(`  SKIP  ${name}\n        inconclusive: provider daily quota exhausted`)
+          return
+        }
+        outcome = { problem: `threw: ${describeError(error).slice(0, 300)}` }
+      }
+      const suffix = outcome.note ? ` (${outcome.note})` : ""
+      if (!outcome.problem) {
+        tally.passed++
+        console.log(`  pass  ${name}${suffix}${attempt > 1 ? ` [attempt ${attempt}]` : ""}`)
+        return
+      }
+      const providerFault = providerTrouble > troubleBefore
+      if (providerFault && attempt < MAX_TRIES) {
+        console.log(`  ....  ${name}\n        model provider unavailable mid-run; retrying in 30 s`)
+        await sleep(30_000)
+        continue
+      }
+      tally.failed++
+      console.log(
+        `  FAIL  ${name}${suffix}\n        ${outcome.problem}` +
+          (providerFault ? `\n        (the model provider was failing on every attempt — re-run later)` : "")
+      )
+      return
+    }
+  }
+
   for (const set of sets) {
     const tally: Tally = { passed: 0, failed: 0, inconclusive: 0 }
     tallies[set] = tally
@@ -112,70 +167,49 @@ async function main() {
 
     if (set === "documents") {
       for (const fixture of documents) {
-        try {
-          const data = readFileSync(new URL(`./fixtures/${fixture.file}`, import.meta.url))
-          const { extraction } = await extractDocument({ provider, mimeType: fixture.mimeType, data })
-          const problem = fixture.check(extraction)
-          if (problem) {
-            tally.failed++
-            console.log(`  FAIL  ${fixture.name}\n        ${problem}\n        got: ${JSON.stringify(extraction).slice(0, 240)}`)
-          } else {
-            tally.passed++
-            console.log(`  pass  ${fixture.name}`)
-          }
-        } catch (error) {
-          if (isDailyQuotaError(error)) {
-            tally.inconclusive++
-            console.log(`  SKIP  ${fixture.name}\n        inconclusive: provider daily quota exhausted`)
-          } else {
-            tally.failed++
-            const detail = error instanceof ExtractionError ? error.message : String(error)
-            console.log(`  FAIL  ${fixture.name}\n        threw: ${detail.slice(0, 300)}`)
-          }
-        }
+        await evaluate(
+          tally,
+          fixture.name,
+          async () => {
+            const data = readFileSync(new URL(`./fixtures/${fixture.file}`, import.meta.url))
+            const { extraction } = await extractDocument({ provider, mimeType: fixture.mimeType, data })
+            const problem = fixture.check(extraction)
+            return { problem: problem && `${problem}\n        got: ${JSON.stringify(extraction).slice(0, 240)}` }
+          },
+          (error) => (error instanceof ExtractionError ? error.message : String(error))
+        )
       }
       continue
     }
 
     if (set === "planning") {
       for (const fixture of planning) {
-        const today = new Date().toISOString().slice(0, 10)
-        try {
-          const { plan, attempts } = await generatePlan({ provider, ...fixture.request, today })
-          const problem = fixture.check({ plan, attempts, today })
-          const shape = `${plan.phases.flatMap((p) => p.tasks).length} tasks / ${plan.phases.length} phases, attempt ${attempts}`
-          if (problem) {
-            tally.failed++
-            console.log(`  FAIL  ${fixture.name}\n        ${problem} (${shape})`)
-          } else {
-            tally.passed++
-            console.log(`  pass  ${fixture.name} (${shape})`)
-          }
-        } catch (error) {
-          if (isDailyQuotaError(error)) {
-            tally.inconclusive++
-            console.log(`  SKIP  ${fixture.name}\n        inconclusive: provider daily quota exhausted`)
-          } else {
-            tally.failed++
-            const detail = error instanceof PlanGenerationError ? error.issues.slice(0, 5).join("; ") : String(error)
-            console.log(`  FAIL  ${fixture.name}\n        threw: ${detail.slice(0, 300)}`)
-          }
-        }
+        await evaluate(
+          tally,
+          fixture.name,
+          async () => {
+            const today = new Date().toISOString().slice(0, 10)
+            const { plan, attempts } = await generatePlan({ provider, ...fixture.request, today })
+            const note = `${plan.phases.flatMap((p) => p.tasks).length} tasks / ${plan.phases.length} phases, attempt ${attempts}`
+            return { problem: fixture.check({ plan, attempts, today }), note }
+          },
+          (error) => (error instanceof PlanGenerationError ? error.issues.slice(0, 5).join("; ") : String(error))
+        )
       }
       continue
     }
 
     for (const fixture of allSets[set]) {
-      // Fresh mission per fixture so fixtures can't contaminate each other.
-      const mission = await createMission(userId, {
-        title: "Move from Nairobi to Seoul",
-        overview: "Relocating in October for a new job",
-      })
-      await createTask(userId, mission.id, { label: "Book flights", dueDate: FLIGHTS_DUE, priority: "high" })
-      await createTask(userId, mission.id, { label: "Find apartment in Seoul", priority: "medium" })
-      for (const seed of fixture.seedTasks ?? []) await createTask(userId, mission.id, { label: seed.label })
+      await evaluate(tally, fixture.name, async () => {
+        // Fresh mission per attempt so fixtures (and retries) can't contaminate each other.
+        const mission = await createMission(userId, {
+          title: "Move from Nairobi to Seoul",
+          overview: "Relocating in October for a new job",
+        })
+        await createTask(userId, mission.id, { label: "Book flights", dueDate: FLIGHTS_DUE, priority: "high" })
+        await createTask(userId, mission.id, { label: "Find apartment in Seoul", priority: "medium" })
+        for (const seed of fixture.seedTasks ?? []) await createTask(userId, mission.id, { label: seed.label })
 
-      try {
         const run = await runAgentTurn({
           provider,
           userId,
@@ -191,22 +225,8 @@ async function main() {
           proposals: run.proposals.map((p) => ({ tool: p.tool, summary: p.summary })),
           replans: run.replans.map((r) => ({ summary: r.summary })),
         })
-        if (problem) {
-          tally.failed++
-          console.log(`  FAIL  ${fixture.name}\n        ${problem}\n        reply: ${run.reply.slice(0, 160)}`)
-        } else {
-          tally.passed++
-          console.log(`  pass  ${fixture.name}`)
-        }
-      } catch (error) {
-        if (isDailyQuotaError(error)) {
-          tally.inconclusive++
-          console.log(`  SKIP  ${fixture.name}\n        inconclusive: provider daily quota exhausted`)
-        } else {
-          tally.failed++
-          console.log(`  FAIL  ${fixture.name}\n        threw: ${error instanceof Error ? error.message : error}`)
-        }
-      }
+        return { problem: problem && `${problem}\n        reply: ${run.reply.slice(0, 160)}` }
+      })
     }
   }
 
