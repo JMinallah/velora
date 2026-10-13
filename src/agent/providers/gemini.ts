@@ -130,12 +130,14 @@ export class GeminiProvider implements LlmProvider {
     system: string
     prompt: string
     jsonSchema: Record<string, unknown>
+    attachments?: { mimeType: string; data: Buffer }[]
     signal?: AbortSignal
   }): Promise<string> {
     const model = env().GEMINI_MODEL
+    const files = (input.attachments ?? []).map((a) => ({ inlineData: { mimeType: a.mimeType, data: a.data.toString("base64") } }))
     const response = await geminiClient().models.generateContent({
       model,
-      contents: input.prompt,
+      contents: files.length ? [{ role: "user", parts: [...files, { text: input.prompt }] }] : input.prompt,
       config: {
         systemInstruction: input.system,
         ...generationSettings(model),

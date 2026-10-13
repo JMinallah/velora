@@ -50,7 +50,7 @@ export async function updateDocument(
   userId: string,
   id: string,
   patch: Partial<
-    Pick<DocumentRecord, "name" | "mimeType" | "storageUrl" | "extractedText" | "summary" | "extractedFields">
+    Pick<DocumentRecord, "name" | "mimeType" | "storageUrl" | "extractedText" | "summary" | "extractedFields" | "extraction">
   >,
   actor: Actor = "user"
 ): Promise<DocumentRecord | null> {

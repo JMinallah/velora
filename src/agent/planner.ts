@@ -1,4 +1,4 @@
-import { zodToJsonSchema } from "zod-to-json-schema"
+import { structuredOutputSchema } from "./json-schema"
 import type { LlmProvider } from "./providers/types"
 import { plannerPrompt, plannerSystemPrompt, PLANNER_PROMPT_VERSION } from "./prompts/planner.v2"
 import { missionPlanSchema, planDateIssues, type MissionPlan } from "@/domain/plan"
@@ -17,33 +17,10 @@ export class PlanGenerationError extends Error {
   }
 }
 
-/** Removes a JSON Schema keyword everywhere in a schema (not from property *names*). */
-function withoutKeyword(node: unknown, keyword: string): unknown {
-  if (Array.isArray(node)) return node.map((n) => withoutKeyword(n, keyword))
-  if (!node || typeof node !== "object") return node
-  return Object.fromEntries(
-    Object.entries(node)
-      .filter(([k]) => k !== keyword)
-      .map(([k, v]) =>
-        k === "properties"
-          ? [k, Object.fromEntries(Object.entries(v as object).map(([name, s]) => [name, withoutKeyword(s, keyword)]))]
-          : [k, withoutKeyword(v, keyword)]
-      )
-  )
-}
-
 let cachedSchema: Record<string, unknown> | null = null
-/**
- * JSON Schema for structured output. Gemini rejects `maxItems` (400, measured
- * 2026-10-11), so it is stripped here; missionPlanSchema still enforces the
- * limits on parsing, as it does all cross-field rules (unique keys, no loops).
- */
+/** JSON Schema for structured output; cross-field rules (unique keys, no loops) are checked after parsing. */
 export function planJsonSchema(): Record<string, unknown> {
-  if (!cachedSchema) {
-    const schema = zodToJsonSchema(missionPlanSchema, { $refStrategy: "none" }) as Record<string, unknown>
-    delete schema.$schema
-    cachedSchema = withoutKeyword(schema, "maxItems") as Record<string, unknown>
-  }
+  cachedSchema ??= structuredOutputSchema(missionPlanSchema)
   return cachedSchema
 }
 

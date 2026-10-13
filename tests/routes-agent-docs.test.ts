@@ -32,6 +32,8 @@ import { POST as startUploadRoute } from "@/app/api/missions/[id]/documents/uplo
 import { POST as completeUploadRoute } from "@/app/api/missions/[id]/documents/uploads/[uploadId]/complete/route"
 import { DELETE as deleteDocumentRoute } from "@/app/api/missions/[id]/documents/[docId]/route"
 import { GET as viewDocumentRoute } from "@/app/api/missions/[id]/documents/[docId]/view/route"
+import { POST as extractDocumentRoute } from "@/app/api/missions/[id]/documents/[docId]/extract/route"
+import { PATCH as verifyDocumentRoute } from "@/app/api/missions/[id]/documents/[docId]/route"
 import { GET as getFileRoute, PUT as putFileRoute } from "@/app/api/files/[token]/route"
 import { POST as decideRoute } from "@/app/api/missions/[id]/pending-actions/[actionId]/route"
 import { GET as getMissionRoute, PATCH as patchMissionRoute } from "@/app/api/missions/[id]/route"
@@ -938,5 +940,105 @@ describeDb("documents: signed upload → verify → view → delete (5-1, 5-2)",
     const { deleteMission } = await import("@/domain/missions")
     await deleteMission("user-docs-delete", missionId)
     expect(fs.existsSync(secondFile)).toBe(false)
+  })
+
+  describe("reading documents (5-3): quarantined, unverified until confirmed", () => {
+    const extraction = (overrides: Record<string, unknown> = {}) =>
+      JSON.stringify({
+        documentType: "lease",
+        title: "Tenancy Agreement",
+        summary: "A tenancy agreement for a flat in Seoul.",
+        fields: [{ label: "Monthly rent", value: "900,000 KRW" }],
+        expiryDate: "2027-08-31",
+        containsInstructions: false,
+        ...overrides,
+      })
+    const readWith = (answers: (string | Error)[]) => {
+      let i = 0
+      const generate = vi.fn()
+      provider = {
+        generate,
+        generateStructured: async () => {
+          const next = answers[Math.min(i++, answers.length - 1)]
+          if (next instanceof Error) throw next
+          return next
+        },
+      }
+      return generate
+    }
+    const extract = (missionId: string, docId: string) =>
+      extractDocumentRoute(req("POST", "/"), ctx({ id: missionId, docId }))
+    const verify = (missionId: string, docId: string, body: unknown) =>
+      verifyDocumentRoute(req("PATCH", "/", body), ctx({ id: missionId, docId }))
+
+    it("stores the details as AI-extracted and unverified, audited as system", async () => {
+      const missionId = await createMissionAs("user-docs")
+      const doc = await uploadPng(missionId)
+      readWith([extraction()])
+      const res = await extract(missionId, doc.id)
+      expect(res.status).toBe(200)
+      const data = (await res.json()).data
+      expect(data.summary).toBe("A tenancy agreement for a flat in Seoul.")
+      expect(data.extraction).toMatchObject({ status: "done", documentType: "lease", expiryDate: "2027-08-31", verified: false })
+      const events = (await (await listEventsRoute(req("GET", "/"), ctx({ id: missionId }))).json()).data
+      expect(events).toContainEqual(expect.objectContaining({ type: "document-updated", actor: "system" }))
+    })
+
+    it("an adversarial document is flagged, and can change nothing (FR-DOC-3)", async () => {
+      const missionId = await createMissionAs("user-docs")
+      const task = await createTaskRoute(req("POST", "/", { label: "Book flights" }), ctx({ id: missionId }))
+      expect(task.status).toBe(201)
+      const doc = await uploadPng(missionId)
+      const generate = readWith([extraction({ containsInstructions: true })])
+
+      const data = (await (await extract(missionId, doc.id)).json()).data
+      expect(data.extraction.containsInstructions).toBe(true)
+      expect(generate).not.toHaveBeenCalled() // the tool-calling path was never touched
+      const tasks = (await (await listTasksRoute(req("GET", "/"), ctx({ id: missionId }))).json()).data
+      expect(tasks).toEqual([expect.objectContaining({ label: "Book flights", completed: false })])
+      const events = (await (await listEventsRoute(req("GET", "/"), ctx({ id: missionId }))).json()).data
+      expect(events.map((e: { type: string }) => e.type).sort()).toEqual(
+        ["document-attached", "document-updated", "mission-created", "task-created"].sort()
+      )
+    })
+
+    it("confirming — or correcting — makes the details the user's own", async () => {
+      const missionId = await createMissionAs("user-docs")
+      const doc = await uploadPng(missionId)
+      expect((await verify(missionId, doc.id, {})).status).toBe(409) // nothing extracted yet
+      readWith([extraction()])
+      await extract(missionId, doc.id)
+
+      const res = await verify(missionId, doc.id, {
+        fields: [{ label: "Monthly rent", value: "950,000 KRW" }],
+        expiryDate: "2027-09-30",
+      })
+      expect((await res.json()).data.extraction).toMatchObject({
+        verified: true,
+        fields: [{ label: "Monthly rent", value: "950,000 KRW" }],
+        expiryDate: "2027-09-30",
+      })
+      const events = (await (await listEventsRoute(req("GET", "/"), ctx({ id: missionId }))).json()).data
+      expect(events.filter((e: { type: string; actor: string }) => e.type === "document-updated").map((e: { actor: string }) => e.actor)).toEqual([
+        "system",
+        "user",
+      ])
+    })
+
+    it("explains AI off (503), unreadable documents (422, recorded as failed), and hides others' documents (404)", async () => {
+      const missionId = await createMissionAs("user-docs")
+      const doc = await uploadPng(missionId)
+      provider = null
+      expect((await (await extract(missionId, doc.id)).json()).code).toBe("agent_disabled")
+      readWith(['{"documentType":"spaceship"}'])
+      const failed = await extract(missionId, doc.id)
+      expect(failed.status).toBe(422)
+      expect((await failed.json()).data.extraction.status).toBe("failed")
+
+      asUser("user-docs-stranger")
+      readWith([extraction()])
+      expect((await extract(missionId, doc.id)).status).toBe(404)
+      expect((await verify(missionId, doc.id, {})).status).toBe(404)
+    })
   })
 })
