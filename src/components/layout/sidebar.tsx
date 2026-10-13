@@ -1,6 +1,6 @@
 "use client";
 
-import { Home, LineChart, Package2, Users } from "lucide-react";
+import { Home, LineChart, Package2, Users, Settings } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type MouseEvent } from "react";
@@ -61,6 +61,7 @@ export function Sidebar() {
   const isDashboardActive = pathname === "/";
   const isTimelineActive = pathname?.startsWith("/mission") ?? false;
   const isDocumentsActive = pathname?.startsWith("/documents") ?? false;
+  const isSettingsActive = pathname?.startsWith("/settings") ?? false;
 
   return (
     <div className="sticky top-0 z-30 hidden h-screen bg-sidebar shadow-sm md:block">
@@ -120,6 +121,22 @@ export function Sidebar() {
                 }`}
               />
               Documents
+            </Link>
+            <Link
+              href="/settings"
+              onClick={(event) => handleNavClick(event, "/settings")}
+              className={`flex items-center gap-3 rounded-lg px-3 py-2 transition-all hover:text-primary ${
+                isSettingsActive
+                  ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                  : "text-sidebar-foreground"
+              }`}
+            >
+              <Settings
+                className={`h-4 w-4 ${
+                  isSettingsActive ? "text-primary" : "text-sidebar-foreground"
+                }`}
+              />
+              Settings
             </Link>
           </nav>
         </div>

@@ -20,6 +20,7 @@ const EVENT_TYPES = [
   "reminder-due",
   "reminder-sent",
   "reminder-failed",
+  "reminder-cancelled",
   "risk-updated",
   "replan-generated",
   "action-proposed",

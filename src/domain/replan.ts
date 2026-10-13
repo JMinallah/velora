@@ -3,6 +3,7 @@ import { z } from "zod"
 import { getDb, withTransaction } from "@/adapters/db"
 import { COLLECTIONS, type MissionRecord, type TaskRecord } from "./collections"
 import { emitEvent } from "./events"
+import { syncTaskRemindersSafely } from "./task-reminders"
 import { findCycle } from "./dependencies"
 import { isoDate } from "./schemas"
 
@@ -260,7 +261,10 @@ export async function acceptReplan(
       await options.beforeCommit?.()
       return { kind: "accepted", added: diff.add.length, changed: diff.change.length, removed: diff.remove.length }
     })
-    if (outcome) return outcome
+    if (outcome) {
+      await syncTaskRemindersSafely(userId, missionId)
+      return outcome
+    }
   } catch (error) {
     if (error instanceof StaleReplan) return { kind: "stale", message: error.message }
     throw error

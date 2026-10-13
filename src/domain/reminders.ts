@@ -67,6 +67,30 @@ export async function listReminders(
   return db.collection<ReminderRecord>(COLLECTIONS.reminders).find(query).sort({ dueAt: 1 }).toArray()
 }
 
+/**
+ * Calls off a reminder that hasn't gone out yet. Task reminders follow their
+ * task (complete it, or change its date), so only custom ones are cancelled
+ * here. False when there is no such scheduled reminder.
+ */
+export async function cancelReminder(userId: string, id: string, actor: Actor = "user"): Promise<boolean> {
+  const db = await getDb()
+  const cancelled = await db
+    .collection<ReminderRecord>(COLLECTIONS.reminders)
+    .findOneAndUpdate(
+      { userId, id, status: "scheduled", kind: { $ne: "task-due" } },
+      { $set: { status: "cancelled", updatedAt: new Date().toISOString() } },
+      { projection: { _id: 0 } }
+    )
+  if (!cancelled) return false
+  await emitEvent(userId, {
+    missionId: cancelled.missionId,
+    type: "reminder-cancelled",
+    actor,
+    payload: { reminderId: id, title: cancelled.title },
+  })
+  return true
+}
+
 export async function markRemindersRead(userId: string, ids: string[]): Promise<number> {
   if (ids.length === 0) return 0
   const db = await getDb()

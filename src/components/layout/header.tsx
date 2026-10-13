@@ -9,7 +9,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { NotificationBell } from "./NotificationBell";
-import { Home, LineChart, Menu, Package2, Users } from "lucide-react";
+import { Home, LineChart, Menu, Package2, Settings, Users } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type MouseEvent } from "react";
@@ -72,6 +72,7 @@ export function Header() {
   const isDashboardActive = pathname === "/";
   const isTimelineActive = pathname?.startsWith("/mission") ?? false;
   const isDocumentsActive = pathname?.startsWith("/documents") ?? false;
+  const isSettingsActive = pathname?.startsWith("/settings") ?? false;
 
   const mobileNavItems = [
     {
@@ -91,6 +92,12 @@ export function Header() {
       label: "Documents",
       icon: Users,
       active: isDocumentsActive,
+    },
+    {
+      href: "/settings",
+      label: "Settings",
+      icon: Settings,
+      active: isSettingsActive,
     },
   ];
 
@@ -114,7 +121,7 @@ export function Header() {
             <SheetHeader>
               <SheetTitle className="sr-only">Navigation menu</SheetTitle>
               <SheetDescription className="sr-only">
-                Navigate between dashboard, timeline, and documents.
+                Navigate between dashboard, timeline, documents, and settings.
               </SheetDescription>
             </SheetHeader>
             <nav className="grid gap-2 text-lg font-medium">

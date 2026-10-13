@@ -184,7 +184,7 @@ The roadmap says *what* each phase is. This document says *how* each phase gets 
 
 ## Phase 6 — Reminders & notifications
 
-**Entry gate:** Phase 5 exit gate fully ticked.
+**Entry gate:** Phase 5 exit gate fully ticked — met 2026-10-13 (with the recorded R2 live-check open item).
 
 ### Work items
 - **6-1 (M)** Reminder lifecycle `scheduled → sending → sent | failed` with attempt count and backoff; dispatch log collection.
@@ -192,12 +192,25 @@ The roadmap says *what* each phase is. This document says *how* each phase gets 
 - **6-3 (M)** Email via Resend for `email` channel; in-app via the existing bell; per-user preferences (channels, lead time) honored.
 - **6-4 (S)** Scheduler: GitHub Actions schedule (every 15 min) as the trigger (works on any host), Vercel Cron as secondary where the plan allows; both call the bearer-protected dispatcher.
 - **6-5 (S)** Template-bounded LLM copy (FR-REM-3) — optional; falls back to the plain template.
+  *Deferred (2026-10-13): the plain template already meets FR-REM-3's bound (every field comes from stored data), and an LLM call per reminder would spend the shared free-tier quota (500 requests/day, 2.5 gate findings) on copy rather than on chat. Revisit with the quota work in 7-1/7-2.*
 
-### Exit gate
-- [ ] Double-fired dispatcher sends exactly one email — *idempotency test*
-- [ ] A failed send is retried and finally marked `failed`, visible in the dispatch log — *test*
-- [ ] Preferences honored (channel off → nothing sent) — *test*
-- [ ] Changing a task's due date reschedules its reminder — *test*
+### Exit gate — reviewed 2026-10-13 (PRs #29–#30)
+- [x] Double-fired dispatcher sends exactly one email — *`tests/reminders.test.ts` › "double-fired dispatcher sends exactly one email per reminder (exit gate)": two concurrent cron calls, two reminders → two emails, a third run sends none. Also "takes over a claim whose run died, with the same idempotency key" (a crash between send and record can't double-send: Resend honours the key)*
+- [x] A failed send is retried and finally marked `failed`, visible in the dispatch log — *"retries a failed email with backoff, then marks it failed — visible in the dispatch log (exit gate)": attempts 1–3 at +0, +5, +35 min, not before; log lists in-app sent once and three email failures; `reminder-failed` event. Permanent rejections (4xx) aren't retried: "does not retry an email the provider rejects for good"*
+- [x] Preferences honored (channel off → nothing sent) — *"are honored: email off sends no email; everything off sends nothing (exit gate)" and "in-app off: emailed but not in the inbox"; settings UI covered by `e2e/zero-ai.spec.ts` › "notification settings persist; a dispatched reminder arrives under the bell…"*
+- [x] Changing a task's due date reschedules its reminder — *"changing a task's due date reschedules its reminder (exit gate)" (via the task PATCH route: same reminder, new date); plus completed/reopened/undated/deleted, re-dating after a reminder was sent, preference changes, plan acceptance, and the dispatcher refusing a reminder that no longer matches its task*
+
+**Open items (recorded, not blocking — both pair with the hosting decision, 2.5-2):**
+- **Real email has never been sent.** The Resend adapter is tested against a mocked API (request shape, idempotency header, retryable vs final errors); locally, emails go to `.data/outbox/`. Needs the owner's Resend account, `AUTH_RESEND_KEY`, and a verified sending domain for `EMAIL_FROM` (Resend's test sender only delivers to the account's own address). One live send before Phase 8.
+- **The schedule isn't running.** `.github/workflows/reminders.yml` is skipped until the repository variable `APP_URL` and secret `CRON_SECRET` exist, i.e. until there is a deployed URL. Vercel Cron as a secondary trigger (6-4) waits for the host choice (D1).
+
+**Gate review findings (2026-10-13):**
+- Delivery channels now follow the user's preferences at send time, not a per-reminder `channel` field. The old dispatcher only ever handled in-app reminders: email reminders sat in `scheduled` forever.
+- The bell listed *every* reminder, including future ones, as notifications. It now shows only reminders delivered in the app. The mission page's "dismiss" marked an upcoming reminder read but would still have sent it; it is now a real cancel (`reminder-cancelled` event).
+- Task reminders are derived state: one reconciler (`syncTaskReminders`) runs after every task write path (manual, agent, plan/re-plan acceptance, undo) instead of patching each site. The dispatcher re-checks the task before sending, so a missed sync can't send a stale reminder.
+- Both channels default **on**. Several tasks due the same day send one email each; a daily digest is a candidate if beta users find that noisy.
+- If the repository goes private, a 15-minute GitHub schedule bills about 2,900 Actions minutes a month (each run rounds up to a minute), close to Pro's 3,000. Move the trigger to the host's cron or a free external pinger at that point; the endpoint doesn't change.
+- PR #29's CI evals failed twice on Gemini `503 high demand` errors and timeouts (tool-selection 1/7, then 5/7; every failure a provider error or a turn that ran out of time waiting for one), not on the change. The loop turns a provider failure into "I ran out of time", which the runner counted as an agent failure. The runner now counts provider errors as they happen and re-runs a fixture that failed during one (up to 3 attempts, 30 s apart); it must still genuinely pass.
 
 ---
 
