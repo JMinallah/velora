@@ -105,7 +105,25 @@ export type Document = {
   extractedText?: string;
   summary?: string;
   extractedFields?: Record<string, string>;
+  /** AI-extracted description (FR-DOC-2): unverified until the user confirms it. */
+  extraction?: DocumentExtractionView;
   createdAt: string;
+};
+
+export type DocumentExtractionView = {
+  status: "done" | "failed";
+  documentType?: string;
+  title?: string;
+  fields: { label: string; value: string }[];
+  issueDate?: string | null;
+  expiryDate?: string | null;
+  containsInstructions?: boolean;
+  /** False until the user confirms (or corrects) the extracted details. */
+  verified: boolean;
+  promptVersion?: string;
+  model?: string;
+  extractedAt: string;
+  verifiedAt?: string;
 };
 
 export type Reminder = {

@@ -285,3 +285,46 @@ test("a document uploads privately and opens through a short-lived link", async 
   await documents.getByRole("button", { name: "Delete", exact: true }).click()
   await expect(documents.getByText("passport.png")).toHaveCount(0)
 })
+
+test("AI-extracted details stay marked unverified until confirmed; then a renewal reminder is offered", async ({ page }) => {
+  const mission = (await (await page.request.post("/api/missions", { data: { title: "Move to Seoul" } })).json()).data
+  const { userId } = JSON.parse(readFileSync("e2e/.auth/user.json", "utf8"))
+  const client = await new MongoClient(process.env.TEST_MONGODB_URI ?? "mongodb://127.0.0.1:27017").connect()
+  await client.db(E2E_DB).collection("documents").insertOne({
+    id: randomUUID(),
+    userId,
+    missionId: mission.id,
+    name: "passport.pdf",
+    mimeType: "application/pdf",
+    storageUrl: `local:${userId}/${mission.id}/seeded.pdf`,
+    summary: "A Kenyan passport.",
+    createdAt: new Date().toISOString(),
+    extraction: {
+      status: "done",
+      documentType: "passport",
+      title: "Republic of Kenya Passport",
+      fields: [{ label: "Passport No", value: "AK1234567" }],
+      expiryDate: "2032-03-02",
+      containsInstructions: true,
+      verified: false,
+      extractedAt: new Date().toISOString(),
+    },
+  })
+  await client.close()
+
+  await open(page, "/documents")
+  await page.getByRole("combobox").selectOption(mission.id)
+  const details = page.getByLabel("Details of passport.pdf")
+  await expect(details).toContainText("AI-extracted · unverified")
+  await expect(details).toContainText("contained text addressed to an AI")
+  await expect(details.getByRole("button", { name: "Add reminder" })).toHaveCount(0) // not until confirmed
+
+  await details.getByRole("button", { name: "These are correct" }).click()
+  await expect(details).toContainText("Confirmed by you")
+  await expect(details).toContainText("add a renewal reminder for Sep 2, 2031?")
+  await details.getByRole("button", { name: "Add reminder" }).click()
+  await expect(details).toContainText("Reminder set for Sep 2, 2031.")
+
+  const reminders = (await (await page.request.get(`/api/reminders?missionId=${mission.id}`)).json()).data
+  expect(reminders).toEqual([expect.objectContaining({ title: "Renew: Republic of Kenya Passport", dueAt: "2031-09-02T09:00:00.000Z" })])
+})

@@ -51,6 +51,8 @@ export interface LlmProvider {
     system: string
     prompt: string
     jsonSchema: Record<string, unknown>
+    /** Files the model reads alongside the prompt (e.g. an uploaded PDF or photo). */
+    attachments?: { mimeType: string; data: Buffer }[]
     signal?: AbortSignal
   }): Promise<string>
 }

@@ -81,8 +81,8 @@ export default function DocumentsPage() {
           Document Intelligence
         </h1>
         <p className="text-muted-foreground">
-          Upload your documents here. Velora will automatically extract key
-          information.
+          Upload passports, offer letters, leases and more. Velora reads them and
+          pulls out the key details for you to confirm — files are stored privately.
         </p>
         {error ? <p className="mt-2 text-sm text-red-500">{error}</p> : null}
       </div>
@@ -107,7 +107,9 @@ export default function DocumentsPage() {
         <div className="flex flex-col gap-8">
           <FileUpload
             missionId={activeMissionId}
-            onUploaded={(document) => setDocuments((current) => [document, ...current])}
+            onUploaded={(document) =>
+              setDocuments((current) => [document, ...current.filter((d) => d.id !== document.id)])
+            }
           />
         </div>
         <div className="flex flex-col gap-8">
@@ -115,6 +117,7 @@ export default function DocumentsPage() {
             missionId={activeMissionId}
             documents={documents}
             onDeleted={(id) => setDocuments((current) => current.filter((d) => d.id !== id))}
+            onUpdated={(doc) => setDocuments((current) => current.map((d) => (d.id === doc.id ? doc : d)))}
           />
         </div>
       </div>

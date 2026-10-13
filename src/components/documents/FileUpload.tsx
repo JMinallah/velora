@@ -8,7 +8,7 @@ import type { DocumentRecord } from "@/domain/collections";
 const ACCEPT = { "application/pdf": [".pdf"], "image/png": [".png"], "image/jpeg": [".jpg", ".jpeg"] };
 const MAX_BYTES = 10 * 1024 * 1024;
 
-type Status = { name: string; state: "uploading" | "done" | "error"; message?: string };
+type Status = { name: string; state: "uploading" | "reading" | "done" | "error"; message?: string };
 
 /** Uploads one file: signed upload URL → PUT bytes straight to storage → server verifies and creates the document. */
 async function uploadFile(missionId: string, file: File): Promise<DocumentRecord> {
@@ -60,8 +60,21 @@ export function FileUpload({
         setStatus({ name: file.name, state: "uploading" });
         try {
           const document = await uploadFile(missionId, file);
-          setStatus({ name: file.name, state: "done" });
           onUploaded?.(document);
+          // Velora reads it (quarantined: no tools) — the details arrive unverified.
+          setStatus({ name: file.name, state: "reading" });
+          const read = await fetch(`/api/missions/${missionId}/documents/${document.id}/extract`, { method: "POST" });
+          const data = await read.json().catch(() => null);
+          if (read.ok && data?.success) {
+            onUploaded?.(data.data);
+            setStatus({ name: file.name, state: "done" });
+          } else {
+            setStatus({
+              name: file.name,
+              state: "done",
+              message: typeof data?.error === "string" ? `uploaded ✓ — ${data.error}` : "uploaded ✓ — couldn't read it",
+            });
+          }
         } catch (err) {
           setStatus({ name: file.name, state: "error", message: err instanceof Error ? err.message : "Upload failed." });
         }
@@ -87,7 +100,12 @@ export function FileUpload({
         <ul className="space-y-1 text-sm" aria-label="Upload status">
           {statuses.map((s) => (
             <li key={s.name} className={s.state === "error" ? "text-destructive" : "text-muted-foreground"}>
-              {s.name}: {s.state === "uploading" ? "uploading…" : s.state === "done" ? "uploaded ✓" : s.message}
+              {s.name}:{" "}
+              {s.state === "uploading"
+                ? "uploading…"
+                : s.state === "reading"
+                  ? "uploaded ✓ — Velora is reading it…"
+                  : s.message ?? "uploaded ✓"}
             </li>
           ))}
         </ul>

@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { FileText, ImageIcon, File as FileIcon, Eye, Trash2 } from "lucide-react";
 import type { DocumentRecord } from "@/domain/collections";
+import { DocumentExtraction } from "./DocumentExtraction";
 
 function getDocumentIcon(mimeType: string) {
   if (mimeType.startsWith("image/")) return <ImageIcon className="h-6 w-6 text-blue-500" />;
@@ -27,10 +28,12 @@ export function DocumentList({
   missionId,
   documents,
   onDeleted,
+  onUpdated,
 }: {
   missionId: string;
   documents: DocumentRecord[];
   onDeleted?: (id: string) => void;
+  onUpdated?: (doc: DocumentRecord) => void;
 }) {
   const [confirming, setConfirming] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -63,12 +66,13 @@ export function DocumentList({
             <li className="text-sm text-muted-foreground">No documents attached yet.</li>
           ) : (
             documents.map((doc) => (
-              <li key={doc.id} className="flex items-center gap-4 rounded-lg bg-secondary/50 p-3">
+              <li key={doc.id} className="flex items-start gap-4 rounded-lg bg-secondary/50 p-3">
                 <div className="flex-shrink-0">{getDocumentIcon(doc.mimeType)}</div>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium">{doc.name}</p>
                   <p className="text-xs text-muted-foreground">{getDocumentKind(doc.mimeType)}</p>
                   {doc.summary ? <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{doc.summary}</p> : null}
+                  <DocumentExtraction missionId={missionId} doc={doc} onUpdated={(d) => onUpdated?.(d)} />
                 </div>
                 {confirming === doc.id ? (
                   <div className="flex shrink-0 items-center gap-1 text-sm">
