@@ -37,6 +37,9 @@ export async function ensureIndexes(db: Db) {
   await db.collection(COLLECTIONS.planProposals).createIndex({ userId: 1, status: 1, createdAt: -1 })
 
   await db.collection(COLLECTIONS.replanProposals).createIndex({ userId: 1, id: 1 }, { unique: true })
+  // Pending uploads: removed a day after their upload URL expired.
+  await db.collection(COLLECTIONS.uploads).createIndex({ userId: 1, id: 1 }, { unique: true })
+  await db.collection(COLLECTIONS.uploads).createIndex({ expiresAt: 1 }, { expireAfterSeconds: 24 * 60 * 60 })
 
   // Rate-limit counters expire with their window (expiresAt is a real Date).
   await db.collection(COLLECTIONS.rateLimits).createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 })

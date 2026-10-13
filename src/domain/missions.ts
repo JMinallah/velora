@@ -2,6 +2,7 @@ import { v4 as uuidv4 } from "uuid"
 import { getDb } from "@/adapters/db"
 import { COLLECTIONS, type MissionRecord, withoutProtectedFields } from "./collections"
 import { emitEvent, type ChangeOrigin } from "./events"
+import { removeStoredFile } from "./documents"
 
 type Actor = ChangeOrigin
 
@@ -89,6 +90,20 @@ export async function deleteMission(
   const mission = await getMission(userId, id)
   if (!mission) return false
 
+  // Stored files go with their mission (personal data must not be orphaned).
+  const docs = await db
+    .collection<{ storageUrl?: string }>(COLLECTIONS.documents)
+    .find({ userId, missionId: id }, { projection: { storageUrl: 1 } })
+    .toArray()
+  const pending = await db
+    .collection<{ store: string; key: string }>(COLLECTIONS.uploads)
+    .find({ userId, missionId: id, status: "pending" }, { projection: { store: 1, key: 1 } })
+    .toArray()
+  await Promise.all([
+    ...docs.map((d) => removeStoredFile(d.storageUrl)),
+    ...pending.map((u) => removeStoredFile(`${u.store}:${u.key}`)),
+  ])
+
   await Promise.all([
     db.collection(COLLECTIONS.tasks).deleteMany({ userId, missionId: id }),
     db.collection(COLLECTIONS.messages).deleteMany({ userId, missionId: id }),
@@ -96,6 +111,7 @@ export async function deleteMission(
     db.collection(COLLECTIONS.documents).deleteMany({ userId, missionId: id }),
     db.collection(COLLECTIONS.pendingActions).deleteMany({ userId, missionId: id }),
     db.collection(COLLECTIONS.replanProposals).deleteMany({ userId, missionId: id }),
+    db.collection(COLLECTIONS.uploads).deleteMany({ userId, missionId: id }),
   ])
   await db.collection<MissionRecord>(COLLECTIONS.missions).deleteOne({ userId, id })
 

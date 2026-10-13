@@ -22,7 +22,14 @@ const serverEnvSchema = z.object({
   EMAIL_FROM: z.string().optional(),
   GEMINI_API_KEY: z.string().optional(), // absent → agent features run in manual mode
   GEMINI_MODEL: z.string().default("gemini-3.5-flash-lite"),
-  GCS_BUCKET: z.string().optional(), // legacy document storage; replaced by R2 in Phase 5
+  // Document storage (docs/06-DELIVERY-PLAN.md Phase 5, D4: Cloudflare R2).
+  // "r2" needs the four R2_* vars; "local" (files under .data/uploads) is the
+  // default outside production. Production without R2 refuses uploads.
+  DOCUMENT_STORE: z.enum(["local", "r2"]).optional(),
+  R2_ACCOUNT_ID: z.string().optional(),
+  R2_ACCESS_KEY_ID: z.string().optional(),
+  R2_SECRET_ACCESS_KEY: z.string().optional(),
+  R2_BUCKET: z.string().optional(),
   CRON_SECRET: z.string().optional(), // required in production for reminder dispatch
 })
 

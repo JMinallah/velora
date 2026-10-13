@@ -15,6 +15,7 @@ const EVENT_TYPES = [
   "task-deleted",
   "document-attached",
   "document-updated",
+  "document-deleted",
   "reminder-created",
   "reminder-due",
   "risk-updated",

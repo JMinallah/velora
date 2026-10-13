@@ -136,6 +136,7 @@ export type Event = {
     | "task-deleted"
     | "document-attached"
     | "document-updated"
+    | "document-deleted"
     | "reminder-created"
     | "reminder-due"
     | "risk-updated"

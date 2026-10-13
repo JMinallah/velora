@@ -51,6 +51,7 @@ export default defineConfig({
       AUTH_GOOGLE_SECRET: "e2e-client-secret",
       AUTH_TRUST_HOST: "true",
       GEMINI_API_KEY: "", // manual mode: every flow must work with no AI
+      DOCUMENT_STORE: "local", // production build, but files go to .data/uploads (no R2 in tests)
       CRON_SECRET: "e2e-cron-secret",
     },
   },

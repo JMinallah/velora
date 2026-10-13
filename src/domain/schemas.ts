@@ -83,18 +83,3 @@ export const reminderCreateSchema = z.object({
 export const messageCreateSchema = z.object({
   text: z.string().trim().min(1).max(4000),
 })
-
-export const documentCreateSchema = z.object({
-  name: z.string().trim().min(1).max(255),
-  mimeType: z.string().max(100).optional(),
-  // Only storage references the server itself understands — never an
-  // arbitrary link that would later be shown to the user as their document.
-  storageUrl: z
-    .string()
-    .max(1024)
-    .regex(/^(local|gs):\/\//, "must be a local:// or gs:// storage reference")
-    .optional(),
-  summary: z.string().max(2000).optional(),
-  // extractedText / extractedFields are server-owned (extraction output),
-  // so clients cannot supply "AI-extracted" values.
-})
