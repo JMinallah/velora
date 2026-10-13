@@ -19,7 +19,7 @@
  * reported as INCONCLUSIVE (with a CI warning), not as an agent failure: the
  * free tier allows as few as 20 requests/day per model.
  */
-import { FLIGHTS_DUE, type EvalSet, type Fixture } from "./types"
+import { FLIGHTS_DUE, type AgentEvalSet, type EvalSet, type Fixture } from "./types"
 
 const geminiKey = process.env.GEMINI_API_KEY
 const mongoUri = process.env.TEST_MONGODB_URI
@@ -55,22 +55,24 @@ async function main() {
   const gemini = new GeminiProvider()
   let lastCallAt = 0
   let calls = 0
-  const provider: Provider = {
-    async generate(input) {
-      for (let attempt = 0; ; attempt++) {
-        const wait = lastCallAt + minIntervalMs - Date.now()
-        if (wait > 0) await sleep(wait)
-        lastCallAt = Date.now()
-        calls++
-        try {
-          return await gemini.generate(input)
-        } catch (error) {
-          // A spent daily quota will not recover within this run; don't wait.
-          if (attempt > 0 || !isTransientLlmError(error)) throw error
-          await sleep(Math.max(minIntervalMs, 15_000))
-        }
+  const paced = async <T>(call: () => Promise<T>): Promise<T> => {
+    for (let attempt = 0; ; attempt++) {
+      const wait = lastCallAt + minIntervalMs - Date.now()
+      if (wait > 0) await sleep(wait)
+      lastCallAt = Date.now()
+      calls++
+      try {
+        return await call()
+      } catch (error) {
+        // A spent daily quota will not recover within this run; don't wait.
+        if (attempt > 0 || !isTransientLlmError(error)) throw error
+        await sleep(Math.max(minIntervalMs, 15_000))
       }
-    },
+    }
+  }
+  const provider: Provider = {
+    generate: (input) => paced(() => gemini.generate(input)),
+    generateStructured: (input) => paced(() => gemini.generateStructured(input)),
   }
   // Pacing happens inside the turn, so the turn needs a larger budget than
   // the 30 s users get. Latency is measured separately (NFR-PERF-1).
@@ -80,7 +82,9 @@ async function main() {
   const { toolSelection } = await import("./sets/tool-selection")
   const { injection } = await import("./sets/injection")
   const { regression } = await import("./sets/regression")
-  const allSets: Record<EvalSet, Fixture[]> = {
+  const { planning } = await import("./sets/planning")
+  const { generatePlan, PlanGenerationError } = await import("../src/agent/planner")
+  const allSets: Record<AgentEvalSet, Fixture[]> = {
     "tool-selection": toolSelection,
     injection,
     regression,
@@ -89,11 +93,11 @@ async function main() {
   // `npm run evals -- --set injection` runs one set; default runs all.
   const setArg = process.argv.indexOf("--set")
   const only = setArg > -1 ? (process.argv[setArg + 1] as EvalSet) : null
-  if (only && !(only in allSets)) {
+  if (only && !(only in allSets) && only !== "planning") {
     console.error(`unknown set "${only}"; expected one of: ${Object.keys(allSets).join(", ")}`)
     process.exit(2)
   }
-  const sets = (Object.keys(allSets) as EvalSet[]).filter((s) => !only || s === only)
+  const sets = ([...Object.keys(allSets), "planning"] as EvalSet[]).filter((s) => !only || s === only)
 
   type Tally = { passed: number; failed: number; inconclusive: number }
   const tallies = {} as Record<EvalSet, Tally>
@@ -102,6 +106,34 @@ async function main() {
     const tally: Tally = { passed: 0, failed: 0, inconclusive: 0 }
     tallies[set] = tally
     console.log(`\n${set}/`)
+
+    if (set === "planning") {
+      for (const fixture of planning) {
+        const today = new Date().toISOString().slice(0, 10)
+        try {
+          const { plan, attempts } = await generatePlan({ provider, ...fixture.request, today })
+          const problem = fixture.check({ plan, attempts, today })
+          const shape = `${plan.phases.flatMap((p) => p.tasks).length} tasks / ${plan.phases.length} phases, attempt ${attempts}`
+          if (problem) {
+            tally.failed++
+            console.log(`  FAIL  ${fixture.name}\n        ${problem} (${shape})`)
+          } else {
+            tally.passed++
+            console.log(`  pass  ${fixture.name} (${shape})`)
+          }
+        } catch (error) {
+          if (isDailyQuotaError(error)) {
+            tally.inconclusive++
+            console.log(`  SKIP  ${fixture.name}\n        inconclusive: provider daily quota exhausted`)
+          } else {
+            tally.failed++
+            const detail = error instanceof PlanGenerationError ? error.issues.slice(0, 5).join("; ") : String(error)
+            console.log(`  FAIL  ${fixture.name}\n        threw: ${detail.slice(0, 300)}`)
+          }
+        }
+      }
+      continue
+    }
 
     for (const fixture of allSets[set]) {
       // Fresh mission per fixture so fixtures can't contaminate each other.

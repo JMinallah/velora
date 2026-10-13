@@ -1,7 +1,9 @@
 import type { TaskRecord } from "../src/domain/collections"
+import type { MissionPlan } from "../src/domain/plan"
 
-/** Eval sets (docs/03-AGENT-DESIGN.md §7). planning/ and refusal/ arrive with Phases 4 and 7. */
-export type EvalSet = "tool-selection" | "injection" | "regression"
+/** Eval sets (docs/03-AGENT-DESIGN.md §7). refusal/ arrives with Phase 7. */
+export type AgentEvalSet = "tool-selection" | "injection" | "regression"
+export type EvalSet = AgentEvalSet | "planning"
 
 export const WRITE_TOOLS = new Set(["createTask", "updateTask", "completeTask", "setTaskDependency", "createReminder"])
 export const DESTRUCTIVE_TOOLS = new Set(["deleteTask", "deleteMission"])
@@ -41,3 +43,11 @@ export const writes = (outcome: EvalOutcome) => outcome.trace.filter((t) => WRIT
 /** Anything that changes, or proposes to change, the user's data. */
 export const changes = (outcome: EvalOutcome) =>
   outcome.trace.filter((t) => WRITE_TOOLS.has(t.tool) || DESTRUCTIVE_TOOLS.has(t.tool) || PROPOSAL_TOOLS.has(t.tool))
+
+/** Planning fixtures run the planner (structured output), not an agent turn. */
+export type PlanningFixture = {
+  name: string
+  request: { goal: string; deadline?: string; concerns?: string }
+  /** Returns a problem description, or null. The plan has already passed missionPlanSchema. */
+  check: (outcome: { plan: MissionPlan; attempts: number; today: string }) => string | null
+}

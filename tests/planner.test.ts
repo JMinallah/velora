@@ -42,7 +42,7 @@ describe("generatePlan", () => {
     expect(result.attempts).toBe(1)
     expect(result.plan.phases).toHaveLength(2)
     expect(result.plan.phases[0].tasks[0].dependsOn).toEqual([])
-    expect(result.promptVersion).toBe("planner.v1")
+    expect(result.promptVersion).toBe("planner.v2")
   })
 
   it("repairs invalid answers by feeding back the exact problems", async () => {
