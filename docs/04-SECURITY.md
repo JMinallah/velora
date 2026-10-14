@@ -30,7 +30,7 @@ Context that shapes this document: v1 shipped with tool-API auth bypassed, CORS 
 
 **Reviewed public routes (not behind `withAuth`):**
 - `/api/auth/*` — Auth.js sign-in callbacks.
-- `GET /api/cron/reminders` — machine-to-machine; requires the `CRON_SECRET` bearer token (constant-time compared).
+- `GET /api/cron/reminders`, `GET /api/cron/maintenance` — machine-to-machine; require the `CRON_SECRET` bearer token (constant-time compared, `src/lib/cron-auth.ts`); refuse to run when it isn't configured.
 - `GET|PUT /api/files/[token]` — the local document store's equivalent of presigned URLs (development; R2 serves its own presigned URLs in production). The token is HMAC-signed with a key derived from `AUTH_SECRET`, names exactly one object and one operation, binds content type and maximum size for uploads, and expires (upload ≤ 10 min, view ≤ 5 min). Only the server mints tokens, and only for the object's owner.
 
 ### 2.2 Authorization
@@ -66,9 +66,9 @@ Layered — no single layer is trusted alone:
 
 ## 7. Data protection & user rights
 - **At rest:** Atlas and R2 encrypt by default. **In transit:** TLS everywhere including DB connections.
-- **Retention:** chat messages and events pruned after 12 months (configurable `EVENT_RETENTION_DAYS`); documents kept until mission deletion or user removal.
-- **Deletion (FR-AUTH-3):** account deletion hard-deletes all user rows across collections and all R2 objects under the user's prefix, then the Auth.js identity; verified by an integration test that asserts zero residual records.
-- **Export (FR-AUTH-4):** authenticated JSON archive of all user data.
+- **Retention:** chat messages, events and the reminder dispatch log pruned after 12 months (configurable `EVENT_RETENTION_DAYS`, minimum 30) by the daily maintenance job; documents kept until mission deletion or user removal.
+- **Deletion (FR-AUTH-3):** immediate, from Settings, after typing a confirmation phrase (checked server-side too). Order: stored files under the user's prefix in every store they used (if storage refuses, nothing else is deleted and the user is told to retry), then sessions (access ends), then all user rows across collections (`src/domain/account.ts` lists them once, for deletion and export alike) and rate-limit counters, then the Auth.js identity. Verified by an integration test that scans *every* collection for the user's id or email afterwards and asserts zero residual records — so a new collection left out of the list fails it.
+- **Export (FR-AUTH-4):** authenticated JSON download of all user data (`GET /api/account/export`); Auth.js tokens are never included; document files are listed, not embedded.
 - **Backups:** nightly `mongodump` via GitHub Actions to an encrypted private artifact (14-day retention); restore procedure documented and rehearsed once before launch.
 
 ## 8. Security testing in CI (merge-blocking)

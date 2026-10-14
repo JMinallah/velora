@@ -19,6 +19,9 @@ export async function ensureIndexes(db: Db) {
   await db.collection(COLLECTIONS.events).createIndex({ userId: 1, missionId: 1, createdAt: 1 })
 
   await db.collection(COLLECTIONS.messages).createIndex({ userId: 1, missionId: 1, createdAt: 1 })
+  // Retention pruning runs across users by age.
+  await db.collection(COLLECTIONS.messages).createIndex({ createdAt: 1 })
+  await db.collection(COLLECTIONS.events).createIndex({ createdAt: 1 })
 
   await db.collection(COLLECTIONS.documents).createIndex({ userId: 1, missionId: 1 })
   await db.collection(COLLECTIONS.documents).createIndex({ userId: 1, id: 1 }, { unique: true })

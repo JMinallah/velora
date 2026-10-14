@@ -1,7 +1,7 @@
 import fs from "node:fs"
 import path from "node:path"
 import { signGrant } from "./signed"
-import { UPLOAD_URL_TTL_SECONDS, VIEW_URL_TTL_SECONDS, type DocumentStore } from "./types"
+import { assertSafePrefix, UPLOAD_URL_TTL_SECONDS, VIEW_URL_TTL_SECONDS, type DocumentStore } from "./types"
 
 /** Files under .data/uploads (gitignored, outside public/). URLs go through /api/files/[token]. */
 export const LOCAL_UPLOAD_DIR = path.resolve(process.cwd(), ".data", "uploads")
@@ -50,6 +50,10 @@ export const localStore: DocumentStore = {
     const file = localPath(key)
     await fs.promises.rm(file, { force: true })
     await fs.promises.rm(meta(file), { force: true })
+  },
+  async deletePrefix(prefix) {
+    assertSafePrefix(prefix)
+    await fs.promises.rm(localPath(prefix), { recursive: true, force: true })
   },
 }
 

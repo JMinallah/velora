@@ -1,7 +1,15 @@
-import { DeleteObjectCommand, GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3"
+import {
+  DeleteObjectCommand,
+  DeleteObjectsCommand,
+  GetObjectCommand,
+  HeadObjectCommand,
+  ListObjectsV2Command,
+  PutObjectCommand,
+  S3Client,
+} from "@aws-sdk/client-s3"
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner"
 import { env } from "@/lib/env"
-import { UPLOAD_URL_TTL_SECONDS, VIEW_URL_TTL_SECONDS, type DocumentStore } from "./types"
+import { assertSafePrefix, UPLOAD_URL_TTL_SECONDS, VIEW_URL_TTL_SECONDS, type DocumentStore } from "./types"
 
 /**
  * Cloudflare R2 through its S3-compatible API. The bucket stays private;
@@ -66,5 +74,20 @@ export const r2Store: DocumentStore = {
   async delete(key) {
     const { s3, bucket } = r2()
     await s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }))
+  },
+  async deletePrefix(prefix) {
+    assertSafePrefix(prefix)
+    const { s3, bucket } = r2()
+    // Listing pages hold up to 1,000 keys, the batch-delete limit.
+    let token: string | undefined
+    do {
+      const page = await s3.send(new ListObjectsV2Command({ Bucket: bucket, Prefix: `${prefix}/`, ContinuationToken: token }))
+      const keys = (page.Contents ?? []).flatMap((o) => (o.Key ? [{ Key: o.Key }] : []))
+      if (keys.length) {
+        const res = await s3.send(new DeleteObjectsCommand({ Bucket: bucket, Delete: { Objects: keys, Quiet: true } }))
+        if (res.Errors?.length) throw new Error(`R2 refused to delete ${res.Errors.length} object(s)`)
+      }
+      token = page.IsTruncated ? page.NextContinuationToken : undefined
+    } while (token)
   },
 }

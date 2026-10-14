@@ -224,6 +224,7 @@ The roadmap says *what* each phase is. This document says *how* each phase gets 
 - **7-3 (M)** Observability: structured JSON logs with request IDs, agent-step logs (model, latency, tokens, tools) without message bodies (NFR-SEC-5); Sentry with scrubbing; a small ops page (quota, error rate, dispatch status).
 - **7-4 (M)** Data safety: nightly `mongodump` GitHub Action to a private artifact; **one rehearsed restore**, written up.
 - **7-5 (M)** Account deletion (FR-AUTH-3, Must) incl. stored files; JSON export (FR-AUTH-4); retention pruning job for events.
+  *Done (PR #31): Settings → "Your data"; `DELETE /api/account`, `GET /api/account/export`, daily `GET /api/cron/maintenance` (scheduled in `.github/workflows/reminders.yml`). R2's `deletePrefix` (list + batch delete) joins the R2 live check before deployment.*
 - **7-6 (M)** Playwright E2E for the three core flows (manual mission, agent chat with receipts, document upload + confirm).
 - **7-7 (S)** `refusal/` eval set; Lighthouse ≥ 80; real-device pass.
 - **7-8 (S)** Privacy policy and terms (the product stores identity documents); AI-limitations disclosure at point of use (FR-TRS-3).

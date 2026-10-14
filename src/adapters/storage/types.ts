@@ -19,6 +19,13 @@ export interface DocumentStore {
   createViewUrl(key: string, opts: { filename: string; contentType: string }): Promise<SignedUrl>
   read(key: string): Promise<Buffer>
   delete(key: string): Promise<void>
+  /** Deletes every object under `${prefix}/` (one user's files, on account deletion). */
+  deletePrefix(prefix: string): Promise<void>
+}
+
+/** Account prefixes are user ids: never empty, never a path. */
+export function assertSafePrefix(prefix: string): void {
+  if (!/^[A-Za-z0-9_-]+$/.test(prefix)) throw new Error("invalid storage prefix")
 }
 
 export class StorageUnavailableError extends Error {}
