@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import type { NotificationPreferences } from "@/types";
+import { DELETE_ACCOUNT_PHRASE } from "@/domain/account-phrase";
 
 type Prefs = NotificationPreferences & { emailAddress: string | null };
 
@@ -164,6 +166,108 @@ export default function SettingsPage() {
           )}
         </div>
       </section>
+
+      <AccountSection />
     </div>
+  );
+}
+
+/** FR-AUTH-3/4: take your data with you, or delete everything. */
+function AccountSection() {
+  const router = useRouter();
+  const [confirming, setConfirming] = useState(false);
+  const [phrase, setPhrase] = useState("");
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function deleteAccount() {
+    setIsDeleting(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/account", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm: phrase }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.success) throw new Error(typeof data?.error === "string" ? data.error : "Couldn't delete your account.");
+      // The session is gone; refresh so nothing cached from the account lingers.
+      router.replace("/signin");
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't delete your account.");
+      setIsDeleting(false);
+    }
+  }
+
+  return (
+    <section aria-labelledby="your-data" className="space-y-3">
+      <h2 id="your-data" className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+        Your data
+      </h2>
+      <div className="rounded-lg border p-3">
+        <p className="text-sm font-medium">Download your data</p>
+        <p className="mb-2 text-xs text-muted-foreground">
+          Everything Velora stores about you, as one JSON file: missions, tasks, chats, reminders, document details and the
+          activity log.
+        </p>
+        <a href="/api/account/export" download className="text-sm font-medium text-primary underline">
+          Download my data
+        </a>
+      </div>
+
+      <div className="rounded-lg border border-destructive/40 p-3">
+        <p className="text-sm font-medium">Delete your account</p>
+        <p className="mb-2 text-xs text-muted-foreground">
+          Permanently deletes your missions, tasks, chats, reminders, documents and their files, and signs you out
+          everywhere. This can&apos;t be undone.
+        </p>
+        {!confirming ? (
+          <button type="button" className="text-sm font-medium text-destructive underline" onClick={() => setConfirming(true)}>
+            Delete my account…
+          </button>
+        ) : (
+          <form
+            className="space-y-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (phrase === DELETE_ACCOUNT_PHRASE) deleteAccount();
+            }}
+          >
+            <label htmlFor="delete-confirm" className="block text-xs">
+              Type <strong>{DELETE_ACCOUNT_PHRASE}</strong> to confirm.
+            </label>
+            <input
+              id="delete-confirm"
+              className="h-9 w-full rounded-md border bg-background px-2 text-sm"
+              value={phrase}
+              autoComplete="off"
+              onChange={(e) => setPhrase(e.target.value)}
+            />
+            {error && <p role="alert" className="text-xs text-destructive">{error}</p>}
+            <div className="flex gap-2">
+              <button
+                type="submit"
+                disabled={phrase !== DELETE_ACCOUNT_PHRASE || isDeleting}
+                className="rounded-md bg-destructive px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+              >
+                {isDeleting ? "Deleting…" : "Delete everything"}
+              </button>
+              <button
+                type="button"
+                className="rounded-md border px-3 py-1.5 text-sm"
+                onClick={() => {
+                  setConfirming(false);
+                  setPhrase("");
+                  setError(null);
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
+    </section>
   );
 }

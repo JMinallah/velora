@@ -1,7 +1,8 @@
-name: Reminders
+name: Scheduled jobs
 
 # The reminder scheduler (delivery plan 6-4): calls the bearer-protected
-# dispatcher every 15 minutes. It works on any host; a host's own cron can
+# dispatcher every 15 minutes; and daily housekeeping (retention pruning,
+# 7-5) once a day. It works on any host; a host's own cron can
 # call the same endpoint too — double calls are harmless (src/domain/dispatch.ts).
 #
 # Inactive until the app is deployed: set the repository *variable* APP_URL
@@ -15,17 +16,18 @@ name: Reminders
 on:
   schedule:
     - cron: "*/15 * * * *"
+    - cron: "23 3 * * *" # daily maintenance (an off-minute: on-the-hour starts are the most delayed)
   workflow_dispatch:
 
 permissions: {}
 
 concurrency:
-  group: reminders
+  group: scheduled-${{ github.event.schedule || 'manual' }}
   cancel-in-progress: false
 
 jobs:
   dispatch:
-    if: vars.APP_URL != ''
+    if: vars.APP_URL != '' && github.event.schedule != '23 3 * * *'
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
@@ -42,4 +44,24 @@ jobs:
             --retry 2 --retry-delay 10 --retry-all-errors \
             -H "Authorization: Bearer $CRON_SECRET" \
             "${APP_URL%/}/api/cron/reminders"
+          echo
+
+  maintenance:
+    if: vars.APP_URL != '' && github.event.schedule != '*/15 * * * *'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Run daily maintenance
+        env:
+          APP_URL: ${{ vars.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "::error::CRON_SECRET secret is not set"
+            exit 1
+          fi
+          curl --fail-with-body --silent --show-error --max-time 60 \
+            --retry 2 --retry-delay 10 --retry-all-errors \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            "${APP_URL%/}/api/cron/maintenance"
           echo

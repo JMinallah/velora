@@ -33,6 +33,8 @@ const serverEnvSchema = z.object({
   R2_SECRET_ACCESS_KEY: z.string().optional(),
   R2_BUCKET: z.string().optional(),
   CRON_SECRET: z.string().optional(), // required in production for reminder dispatch
+  // Chat messages, audit events and the dispatch log are pruned after this many days.
+  EVENT_RETENTION_DAYS: z.preprocess((v) => (v === "" ? undefined : v), z.coerce.number().int().min(30).default(365)),
 })
 
 export type ServerEnv = z.infer<typeof serverEnvSchema>

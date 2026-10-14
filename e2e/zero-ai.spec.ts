@@ -362,3 +362,19 @@ test("notification settings persist; a dispatched reminder arrives under the bel
   await page.getByRole("button", { name: "Mark all as read" }).click()
   await expect(page.getByRole("button", { name: "Notifications", exact: true })).toBeVisible()
 })
+
+test("downloads all of the user's data from Settings", async ({ page }) => {
+  await page.request.post("/api/missions", { data: { title: "Exported mission" } })
+  await open(page, "/settings")
+  const [download] = await Promise.all([page.waitForEvent("download"), page.getByRole("link", { name: "Download my data" }).click()])
+  expect(download.suggestedFilename()).toMatch(/^velora-export-\d{4}-\d{2}-\d{2}\.json$/)
+  const data = JSON.parse(readFileSync(await download.path(), "utf8"))
+  expect(data).toMatchObject({ format: "velora-export", account: { email: "e2e@velora.test" } })
+  expect(data.missions.map((m: { title: string }) => m.title)).toContain("Exported mission")
+  // Deleting the account is offered behind a typed confirmation.
+  await page.getByRole("button", { name: "Delete my account…" }).click()
+  await expect(page.getByRole("button", { name: "Delete everything" })).toBeDisabled()
+  await page.getByLabel(/Type delete my account to confirm/).fill("delete my account")
+  await expect(page.getByRole("button", { name: "Delete everything" })).toBeEnabled()
+  await page.getByRole("button", { name: "Cancel" }).click()
+})
