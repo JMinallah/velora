@@ -24,6 +24,9 @@ const serverEnvSchema = z.object({
   APP_URL: z.string().url().optional(),
   GEMINI_API_KEY: z.string().optional(), // absent → agent features run in manual mode
   GEMINI_MODEL: z.string().default("gemini-3.5-flash-lite"),
+  // App-wide model calls per day (Pacific), kept below the provider's free
+  // quota (Flash-Lite: 500/day) so AI pauses cleanly instead of failing mid-chat.
+  LLM_DAILY_CAP: z.preprocess((v) => (v === "" ? undefined : v), z.coerce.number().int().min(0).default(450)),
   // Document storage (docs/06-DELIVERY-PLAN.md Phase 5, D4: Cloudflare R2).
   // "r2" needs the four R2_* vars; "local" (files under .data/uploads) is the
   // default outside production. Production without R2 refuses uploads.

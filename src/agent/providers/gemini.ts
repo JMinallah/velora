@@ -168,6 +168,8 @@ export class GeminiProvider implements LlmProvider {
  * resets at midnight Pacific.
  */
 export function isDailyQuotaError(error: unknown): boolean {
+  // The app's own budget (src/domain/llm-budget.ts) marks its error the same way.
+  if ((error as { dailyQuota?: unknown } | null)?.dailyQuota === true) return true
   const message = error instanceof Error ? error.message : String(error)
   return /PerDay/i.test(message)
 }

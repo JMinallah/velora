@@ -8,7 +8,7 @@ import type { AgentTurn } from "@/agent/providers/types"
 import { getMission } from "@/domain/missions"
 import { listMessages, createMessage } from "@/domain/messages"
 import type { MessageRecord } from "@/domain/collections"
-import { describeLlmFailure, llmUnavailable, readJson, serverError } from "@/lib/http"
+import { aiPausedResponse, describeLlmFailure, llmUnavailable, readJson, serverError } from "@/lib/http"
 
 const HISTORY_LIMIT = 20
 
@@ -128,6 +128,8 @@ export const POST = withAuth<{ id: string }>(async (req, session, { params }) =>
         { status: 503 }
       )
     }
+    const paused = await aiPausedResponse()
+    if (paused) return paused
 
     // Rebuild conversation history from stored messages (the DB is the
     // source of truth, not the client).

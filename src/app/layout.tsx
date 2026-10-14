@@ -4,6 +4,7 @@ import "./globals.css";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
 import { HydrationMarker } from "@/components/HydrationMarker";
+import { AiStatusBanner } from "@/components/AiStatusBanner";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
 
@@ -26,6 +27,7 @@ export default function RootLayout({
           <div className="flex flex-col bg-background">
             <Header />
             <main className="flex min-h-0 flex-1 flex-col gap-4 bg-muted/35 p-4 lg:gap-6 lg:p-6">
+              <AiStatusBanner />
               {children}
             </main>
           </div>

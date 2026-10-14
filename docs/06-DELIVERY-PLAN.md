@@ -221,6 +221,7 @@ The roadmap says *what* each phase is. This document says *how* each phase gets 
 ### Work items
 - **7-1 (M)** Groq fallback provider; active model disclosed in the UI (NFR-REL-2).
 - **7-2 (M)** Per-user daily LLM quota with a visible meter; global daily cap that switches to manual mode with an honest banner (NFR-PERF-4).
+  *Done (PR #32): every model call reserves one unit of an app-wide daily budget (`LLM_DAILY_CAP`, default 450 < Flash-Lite's 500; quota day = Pacific, like Gemini's reset) — atomic, so concurrent calls can't overshoot; a provider "daily quota" error closes the day early. AI routes check it before touching the model. `GET /api/ai/status` drives a site-wide banner (AI off / paused until <local time>, manual work continues) and the chat's "AI today: n of 50" meter (the existing per-user daily rule). CI evals call Gemini directly and don't count against the app's budget — but they share the key's real quota, so a production deployment should use its own key/project.*
 - **7-3 (M)** Observability: structured JSON logs with request IDs, agent-step logs (model, latency, tokens, tools) without message bodies (NFR-SEC-5); Sentry with scrubbing; a small ops page (quota, error rate, dispatch status).
 - **7-4 (M)** Data safety: nightly `mongodump` GitHub Action to a private artifact; **one rehearsed restore**, written up.
 - **7-5 (M)** Account deletion (FR-AUTH-3, Must) incl. stored files; JSON export (FR-AUTH-4); retention pruning job for events.

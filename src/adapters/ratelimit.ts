@@ -57,3 +57,12 @@ export async function consume(rule: RateRule, subject: string, now = Date.now())
     retryAfterSeconds: Math.max(1, Math.ceil((windowEnd - now) / 1000)),
   }
 }
+
+/** How much of a rule's current window a subject has used, without counting a request. */
+export async function peek(rule: RateRule, subject: string, now = Date.now()): Promise<{ used: number; resetsAt: string }> {
+  const windowStart = Math.floor(now / rule.windowMs) * rule.windowMs
+  const counter = await (await getDb())
+    .collection<Counter>(COLLECTIONS.rateLimits)
+    .findOne({ _id: `${rule.name}:${subject}:${windowStart}` })
+  return { used: Math.min(counter?.count ?? 0, rule.limit), resetsAt: new Date(windowStart + rule.windowMs).toISOString() }
+}

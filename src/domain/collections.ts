@@ -15,6 +15,7 @@ export const COLLECTIONS = {
   reminderDispatches: "reminder_dispatches",
   userSettings: "user_settings",
   users: "users",
+  llmUsage: "llm_usage",
 } as const
 
 export type MissionRecord = Mission
