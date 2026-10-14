@@ -18,8 +18,10 @@ const serverEnvSchema = z.object({
   AUTH_GOOGLE_SECRET: z.string().min(1, "AUTH_GOOGLE_SECRET is required"),
 
   // Optional feature gates
-  AUTH_RESEND_KEY: z.string().optional(), // enables email magic-link sign-in
+  AUTH_RESEND_KEY: z.string().optional(), // enables email magic-link sign-in and reminder emails
   EMAIL_FROM: z.string().optional(),
+  // Public base URL, for links in emails. Absent → emails carry no links.
+  APP_URL: z.string().url().optional(),
   GEMINI_API_KEY: z.string().optional(), // absent → agent features run in manual mode
   GEMINI_MODEL: z.string().default("gemini-3.5-flash-lite"),
   // Document storage (docs/06-DELIVERY-PLAN.md Phase 5, D4: Cloudflare R2).

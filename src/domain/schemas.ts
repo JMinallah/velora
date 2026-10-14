@@ -77,7 +77,6 @@ export const reminderCreateSchema = z.object({
   details: z.string().max(1000).optional(),
   dueAt: isoDate,
   taskId: z.string().min(1).optional(),
-  channel: z.enum(["in-app", "email", "push"]).optional(),
 })
 
 export const messageCreateSchema = z.object({

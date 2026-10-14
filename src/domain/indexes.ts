@@ -26,6 +26,10 @@ export async function ensureIndexes(db: Db) {
   await db.collection(COLLECTIONS.reminders).createIndex({ userId: 1, dueAt: 1 })
   // The cron dispatcher queries across users by status + due time.
   await db.collection(COLLECTIONS.reminders).createIndex({ status: 1, dueAt: 1 })
+  // Dispatch log: per reminder for its history, by time for the ops view.
+  await db.collection(COLLECTIONS.reminderDispatches).createIndex({ userId: 1, reminderId: 1, at: 1 })
+  await db.collection(COLLECTIONS.reminderDispatches).createIndex({ at: -1 })
+  await db.collection(COLLECTIONS.userSettings).createIndex({ userId: 1 }, { unique: true })
 
   // Proposed destructive actions: looked up by owner + id; kept a day past
   // expiry so a late confirm gets "expired" (410), not "not found".

@@ -502,32 +502,32 @@ describeDb("cron dispatch route", () => {
     expect(res.status).toBe(200)
   })
 
-  it("claims due in-app reminders only, recording reminder-due", async () => {
+  it("dispatches due reminders through the user's channels, recording reminder-sent", async () => {
     const missionId = await createMissionAs("user-cron")
-    for (const channel of ["in-app", "email"]) {
-      const res = await createReminderRoute(
-        req("POST", "/api/reminders", { missionId, title: `due ${channel}`, dueAt: "2020-01-01T00:00:00Z", channel }),
-        ctx({})
-      )
-      expect(res.status).toBe(201)
-    }
+    const res = await createReminderRoute(
+      req("POST", "/api/reminders", { missionId, title: "due now", dueAt: "2020-01-01T00:00:00Z", channel: "push" }),
+      ctx({})
+    )
+    expect(res.status).toBe(201)
 
-    const res = await cronRemindersRoute(
+    const run = await cronRemindersRoute(
       new Request("http://localhost/api/cron/reminders", {
         headers: { authorization: "Bearer test-cron-secret" },
       })
     )
-    expect(res.status).toBe(200)
+    expect(run.status).toBe(200)
+    expect((await run.json()).data.sent).toBeGreaterThanOrEqual(1)
 
     const reminders = (
       await (await listRemindersRoute(req("GET", `/api/reminders?missionId=${missionId}`), ctx({}))).json()
-    ).data as { channel: string; status: string }[]
-    expect(reminders.find((r) => r.channel === "in-app")?.status).toBe("sent")
-    expect(reminders.find((r) => r.channel === "email")?.status).toBe("scheduled")
+    ).data as { status: string; delivered: string[]; channel?: string }[]
+    // In the app; no email for a test account without an address. The legacy channel field is ignored.
+    expect(reminders).toEqual([expect.objectContaining({ status: "sent", delivered: ["in-app"] })])
+    expect(reminders[0].channel).toBeUndefined()
 
     const events = await (
       await listEventsRoute(req("GET", `/api/missions/${missionId}/events`), ctx({ id: missionId }))
     ).json()
-    expect(events.data.filter((e: { type: string }) => e.type === "reminder-due")).toHaveLength(1)
+    expect(events.data.filter((e: { type: string }) => e.type === "reminder-sent")).toHaveLength(1)
   })
 })

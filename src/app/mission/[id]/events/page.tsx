@@ -18,6 +18,8 @@ const EVENT_TYPES = [
   "document-deleted",
   "reminder-created",
   "reminder-due",
+  "reminder-sent",
+  "reminder-failed",
   "risk-updated",
   "replan-generated",
   "action-proposed",

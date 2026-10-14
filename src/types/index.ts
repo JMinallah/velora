@@ -126,19 +126,72 @@ export type DocumentExtractionView = {
   verifiedAt?: string;
 };
 
+export type ReminderChannel = "in-app" | "email";
+
+/**
+ * A reminder and its delivery state (delivery plan 6-1). Lifecycle:
+ * scheduled → sending → sent | failed; a failed send goes back to scheduled
+ * with a later nextAttemptAt until attempts run out. "skipped" means every
+ * channel was off at send time; "cancelled" means the reminder no longer
+ * applied (e.g. its task was completed or re-dated).
+ */
 export type Reminder = {
   id: string;
   userId: string;
   missionId: string;
   taskId?: string;
+  /** "task-due" reminders are derived from a task's due date (6-2); absent means made by the user or agent. */
+  kind?: "custom" | "task-due";
+  /** task-due only: the due date this reminder was scheduled for. */
+  taskDueDate?: string;
   title: string;
   details?: string;
   dueAt: string;
+  /** Legacy: delivery now follows the user's notification preferences. */
   channel?: "in-app" | "email" | "push";
-  status?: "scheduled" | "sent" | "dismissed";
+  status?: "scheduled" | "sending" | "sent" | "failed" | "skipped" | "cancelled";
+  /** Delivery attempts so far (each claim by the dispatcher is one). */
+  attempts?: number;
+  /** Retry backoff: not claimed again before this time. */
+  nextAttemptAt?: string;
+  /** When the current "sending" claim was taken; a stale claim is re-claimable. */
+  claimedAt?: string;
+  /** Channels that have received this reminder (never sent twice). */
+  delivered?: ReminderChannel[];
+  sentAt?: string;
+  lastError?: string;
   read?: boolean;
   createdAt: string;
   updatedAt?: string;
+};
+
+/** One delivery attempt on one channel — the dispatch log (FR-REM-2). */
+export type ReminderDispatch = {
+  id: string;
+  userId: string;
+  missionId: string;
+  reminderId: string;
+  /** The dispatcher run that made the attempt. */
+  runId: string;
+  attempt: number;
+  channel: ReminderChannel | "none";
+  outcome: "sent" | "failed" | "skipped" | "cancelled";
+  /** Why a send failed or was skipped. Never contains message content or addresses. */
+  reason?: string;
+  /** The email provider's message id. */
+  providerId?: string;
+  at: string;
+};
+
+export type NotificationPreferences = {
+  inApp: boolean;
+  email: boolean;
+  /** Remind about tasks' due dates automatically. */
+  taskReminders: boolean;
+  /** How many days before a task's due date its reminder fires (0 = the day itself). */
+  leadDays: number;
+  /** IANA zone; task reminders fire at 09:00 local time. */
+  timeZone: string;
 };
 
 export type Event = {
@@ -157,6 +210,8 @@ export type Event = {
     | "document-deleted"
     | "reminder-created"
     | "reminder-due"
+    | "reminder-sent"
+    | "reminder-failed"
     | "risk-updated"
     | "replan-generated"
     | "action-proposed"

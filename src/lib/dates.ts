@@ -36,3 +36,44 @@ export function renewalReminderDate(expiry: string, now = Date.now()): string | 
   const when = options.find((t) => t > now && t < expiresAt)
   return when === undefined ? null : new Date(when).toISOString()
 }
+
+/** True when the runtime knows the IANA time zone (e.g. "Africa/Nairobi"). */
+export function isValidTimeZone(timeZone: string): boolean {
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone })
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** How far the zone's wall clock is ahead of UTC at `instant`, in ms. */
+function zoneOffsetMs(instant: number, timeZone: string): number {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hourCycle: "h23",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).formatToParts(new Date(instant))
+  const get = (type: string) => Number(parts.find((p) => p.type === type)?.value)
+  const wall = Date.UTC(get("year"), get("month") - 1, get("day"), get("hour"), get("minute"), get("second"))
+  return wall - Math.floor(instant / 1000) * 1000
+}
+
+/**
+ * The UTC instant at which it is `hour`:00 on `date` (YYYY-MM-DD) in
+ * `timeZone`, `daysBefore` days earlier. Daylight-saving safe: the offset is
+ * re-read at the result, so 09:00 stays 09:00 across a clock change.
+ */
+export function localTimeToUtc(date: string, hour: number, timeZone: string, daysBefore = 0): Date | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(date)
+  if (!match) return null
+  const wall = Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]) - daysBefore, hour)
+  if (Number.isNaN(wall)) return null
+  const first = wall - zoneOffsetMs(wall, timeZone)
+  return new Date(wall - zoneOffsetMs(first, timeZone))
+}

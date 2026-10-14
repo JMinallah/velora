@@ -1,8 +1,7 @@
 import { timingSafeEqual } from "node:crypto"
 import { NextResponse } from "next/server"
-import { getDb } from "@/adapters/db"
-import { COLLECTIONS, type ReminderRecord } from "@/domain/collections"
-import { emitEvent } from "@/domain/events"
+import { getMailer } from "@/adapters/email"
+import { dispatchDueReminders } from "@/domain/dispatch"
 import { env } from "@/lib/env"
 
 function bearerMatches(header: string | null, secret: string): boolean {
@@ -13,7 +12,9 @@ function bearerMatches(header: string | null, secret: string): boolean {
 
 // Machine-to-machine endpoint: authenticated by CRON_SECRET bearer token,
 // not a user session (docs/04-SECURITY.md T7). Refuses to run if the secret
-// is not configured — there is no unauthenticated mode.
+// is not configured — there is no unauthenticated mode. Called by the
+// GitHub Actions schedule (.github/workflows/reminders.yml) and, where the
+// host allows, its own cron; double calls are harmless (src/domain/dispatch.ts).
 export async function GET(request: Request) {
   const secret = env().CRON_SECRET
   if (!secret) {
@@ -27,42 +28,9 @@ export async function GET(request: Request) {
   }
 
   try {
-    const db = await getDb()
-    const now = new Date().toISOString()
-
-    // Atomically claim one due reminder at a time so concurrent or duplicate
-    // cron fires never double-process (FR-REM-2 idempotency).
-    // Only in-app reminders are claimed: for them, "sent" means "now surfaced
-    // in the app". Email/push stay scheduled until Phase 6 adds a sender —
-    // marking them sent would record a delivery that never happened.
-    let processed = 0
-    for (;;) {
-      const reminder = await db.collection<ReminderRecord>(COLLECTIONS.reminders).findOneAndUpdate(
-        {
-          status: "scheduled",
-          dueAt: { $lte: now },
-          $or: [{ channel: "in-app" }, { channel: { $exists: false } }],
-        },
-        { $set: { status: "sent", updatedAt: now } },
-        { returnDocument: "after" }
-      )
-      if (!reminder) break
-
-      await emitEvent(reminder.userId, {
-        missionId: reminder.missionId,
-        type: "reminder-due",
-        actor: "system",
-        payload: {
-          reminderId: reminder.id,
-          title: reminder.title,
-          details: reminder.details,
-        },
-      }).catch(() => undefined)
-
-      processed++
-    }
-
-    return NextResponse.json({ success: true, processed })
+    const summary = await dispatchDueReminders({ mailer: getMailer(), appUrl: env().APP_URL })
+    console.info("reminder dispatch", summary)
+    return NextResponse.json({ success: true, data: summary })
   } catch (error) {
     console.error("Cron error:", error)
     return NextResponse.json({ success: false, error: "Internal server error" }, { status: 500 })
