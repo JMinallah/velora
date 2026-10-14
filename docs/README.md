@@ -12,6 +12,7 @@ This is the production rebuild of the v1 hackathon project. Read in order:
 | [04-SECURITY.md](04-SECURITY.md) | Threat model, auth, prompt-injection defense, data protection, CI security gates |
 | [05-ROADMAP.md](05-ROADMAP.md) | Build phases with definitions of done |
 | [06-DELIVERY-PLAN.md](06-DELIVERY-PLAN.md) | Per-phase work items, phase gates with evidence, and where the build actually stands |
+| [07-BACKUP-RESTORE.md](07-BACKUP-RESTORE.md) | Nightly encrypted, restore-verified backups; how to restore; the rehearsal write-up |
 
 ## The three ideas that define v2
 
