@@ -5,6 +5,7 @@ import { localTimeToUtc } from "@/lib/dates"
 import type { NotificationPreferences } from "@/types"
 import { COLLECTIONS, type ReminderRecord, type TaskRecord } from "./collections"
 import { getNotificationPreferences } from "./preferences"
+import { errorFields, log } from "@/lib/log"
 
 /**
  * Task-driven reminders (FR-REM-1, delivery plan 6-2): every open task with
@@ -123,7 +124,7 @@ export async function syncTaskRemindersSafely(userId: string, missionId: string)
   try {
     await syncTaskReminders(userId, missionId)
   } catch (err) {
-    console.error("task reminder sync failed", { missionId, error: err instanceof Error ? err.message : err })
+    log.error("task_reminder_sync_failed", { missionId, ...errorFields(err) })
   }
 }
 

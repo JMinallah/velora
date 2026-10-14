@@ -7,6 +7,7 @@ import { storeFor } from "@/adapters/storage"
 import { getLlmProvider } from "@/agent/providers"
 import { isDailyQuotaError, isTransientLlmError } from "@/agent/providers/gemini"
 import { extractDocument, ExtractionError } from "@/agent/extractor"
+import { log } from "@/lib/log"
 
 /**
  * Reads a document with the quarantined extractor (FR-DOC-2/3): no tools, no
@@ -77,7 +78,7 @@ export const POST = withAuth<{ id: string; docId: string }>(
       )
       if (extraction.containsInstructions) {
         // Metadata only — never the document's content (NFR-SEC-5).
-        console.warn(JSON.stringify({ event: "document_contains_instructions", documentId: docId }))
+        log.warn("document_contains_instructions", { documentId: docId })
       }
       return NextResponse.json({ success: true, data: updated })
     } catch (err) {

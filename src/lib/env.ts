@@ -36,6 +36,8 @@ const serverEnvSchema = z.object({
   R2_SECRET_ACCESS_KEY: z.string().optional(),
   R2_BUCKET: z.string().optional(),
   CRON_SECRET: z.string().optional(), // required in production for reminder dispatch
+  // Comma-separated emails allowed to see the ops page (/ops). Empty → nobody.
+  ADMIN_EMAILS: z.string().optional(),
   // Chat messages, audit events and the dispatch log are pruned after this many days.
   EVENT_RETENTION_DAYS: z.preprocess((v) => (v === "" ? undefined : v), z.coerce.number().int().min(30).default(365)),
 })
@@ -63,4 +65,11 @@ export function env(): ServerEnv {
 /** True when the LLM-backed agent features can run. */
 export function agentEnabled(): boolean {
   return Boolean(env().GEMINI_API_KEY)
+}
+
+/** Whether this signed-in email may see the ops page. */
+export function isAdmin(email: string | null | undefined): boolean {
+  if (!email) return false
+  const admins = (env().ADMIN_EMAILS ?? "").split(",").map((e) => e.trim().toLowerCase()).filter(Boolean)
+  return admins.includes(email.toLowerCase())
 }

@@ -93,8 +93,16 @@ export function mergeStreamParts(parts: Part[]): Part[] {
   return merged
 }
 
-function toProviderResponse(parts: Part[]): ProviderResponse {
+type UsageMetadata = { promptTokenCount?: number; candidatesTokenCount?: number; thoughtsTokenCount?: number }
+
+function toUsage(meta: UsageMetadata | undefined): ProviderResponse["usage"] {
+  if (!meta) return undefined
+  return { inputTokens: meta.promptTokenCount, outputTokens: (meta.candidatesTokenCount ?? 0) + (meta.thoughtsTokenCount ?? 0) }
+}
+
+function toProviderResponse(parts: Part[], usage?: ProviderResponse["usage"]): ProviderResponse {
   return {
+    ...(usage ? { usage } : {}),
     text: parts
       .filter((p) => typeof p.text === "string" && !p.thought)
       .map((p) => p.text)
@@ -107,6 +115,10 @@ function toProviderResponse(parts: Part[]): ProviderResponse {
 }
 
 export class GeminiProvider implements LlmProvider {
+  get model() {
+    return env().GEMINI_MODEL
+  }
+
   private request(input: GenerateInput) {
     const model = env().GEMINI_MODEL
     return {
@@ -123,7 +135,7 @@ export class GeminiProvider implements LlmProvider {
 
   async generate(input: GenerateInput): Promise<ProviderResponse> {
     const response = await geminiClient().models.generateContent(this.request(input))
-    return toProviderResponse(response.candidates?.[0]?.content?.parts ?? [])
+    return toProviderResponse(response.candidates?.[0]?.content?.parts ?? [], toUsage(response.usageMetadata))
   }
 
   async generateStructured(input: {
@@ -152,13 +164,15 @@ export class GeminiProvider implements LlmProvider {
   async generateStream(input: GenerateInput & { onText: (delta: string) => void }): Promise<ProviderResponse> {
     const stream = await geminiClient().models.generateContentStream(this.request(input))
     const parts: Part[] = []
+    let usage: UsageMetadata | undefined
     for await (const chunk of stream) {
+      usage = chunk.usageMetadata ?? usage
       for (const part of chunk.candidates?.[0]?.content?.parts ?? []) {
         parts.push(part)
         if (typeof part.text === "string" && part.text && !part.thought) input.onText(part.text)
       }
     }
-    return toProviderResponse(mergeStreamParts(parts))
+    return toProviderResponse(mergeStreamParts(parts), toUsage(usage))
   }
 }
 

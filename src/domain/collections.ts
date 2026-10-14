@@ -16,6 +16,7 @@ export const COLLECTIONS = {
   userSettings: "user_settings",
   users: "users",
   llmUsage: "llm_usage",
+  opsMetrics: "ops_metrics",
 } as const
 
 export type MissionRecord = Mission

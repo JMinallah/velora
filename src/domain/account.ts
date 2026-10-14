@@ -4,6 +4,7 @@ import { documentStore, StorageUnavailableError, type DocumentStore } from "@/ad
 import { localStore } from "@/adapters/storage/local"
 import { r2Store } from "@/adapters/storage/r2"
 import { COLLECTIONS } from "./collections"
+import { errorFields, log } from "@/lib/log"
 
 /**
  * Account deletion and export (FR-AUTH-3, FR-AUTH-4; 04-SECURITY §6).
@@ -66,7 +67,7 @@ export async function deleteAccount(userId: string): Promise<void> {
   try {
     for (const kind of kinds) await (kind === "r2" ? r2Store : localStore).deletePrefix(userId)
   } catch (err) {
-    console.error("account deletion: file removal failed", { error: err instanceof Error ? err.message : err })
+    log.error("account_deletion_files_failed", errorFields(err))
     throw new AccountFilesError("Couldn't delete your stored files")
   }
 
@@ -84,7 +85,7 @@ export async function deleteAccount(userId: string): Promise<void> {
     if (user?.email) await db.collection(AUTH.verificationTokens).deleteMany({ identifier: user.email })
     await db.collection(AUTH.users).deleteOne({ _id: id })
   }
-  console.info("account deleted", { userId })
+  log.info("account_deleted", { userId })
 }
 
 export type AccountExport = {

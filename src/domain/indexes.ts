@@ -53,6 +53,8 @@ export async function ensureIndexes(db: Db) {
   await db.collection(COLLECTIONS.uploads).createIndex({ userId: 1, id: 1 }, { unique: true })
   await db.collection(COLLECTIONS.uploads).createIndex({ expiresAt: 1 }, { expireAfterSeconds: 24 * 60 * 60 })
 
+  // Hourly ops counters (expiresAt is a real Date).
+  await db.collection(COLLECTIONS.opsMetrics).createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 })
   // Daily model-call budget records: kept a day past their quota day.
   await db.collection(COLLECTIONS.llmUsage).createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 })
 

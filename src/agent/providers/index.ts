@@ -1,7 +1,9 @@
 import { agentEnabled } from "@/lib/env"
 import { markProviderQuotaSpent, reserveModelCall } from "@/domain/llm-budget"
+import { countHourly } from "@/domain/ops-metrics"
+import { errorFields, log } from "@/lib/log"
 import { GeminiProvider, isDailyQuotaError } from "./gemini"
-import type { LlmProvider } from "./types"
+import type { LlmProvider, ProviderResponse } from "./types"
 
 /**
  * The configured model provider, or null when AI is disabled (manual mode).
@@ -19,18 +21,37 @@ export function getLlmProvider(): LlmProvider | null {
  * on the provider.
  */
 export function withDailyBudget(provider: LlmProvider): LlmProvider {
-  const guard = async <T>(call: () => Promise<T>): Promise<T> => {
+  // Each call is also logged (model, latency, tokens, tool calls, outcome —
+  // never content; NFR-OBS-1) and counted for the ops page.
+  const guard = async <T>(kind: string, call: () => Promise<T>): Promise<T> => {
     await reserveModelCall()
+    const startedAt = Date.now()
     try {
-      return await call()
+      const result = await call()
+      const ms = Date.now() - startedAt
+      const response = typeof result === "object" && result !== null ? (result as unknown as ProviderResponse) : null
+      log.info("model_call", {
+        model: provider.model,
+        kind,
+        ms,
+        ok: true,
+        ...(response?.usage ?? {}),
+        ...(response?.toolCalls ? { toolCalls: response.toolCalls.map((c) => c.name) } : {}),
+      })
+      countHourly({ llmCalls: 1, llmMsTotal: ms })
+      return result
     } catch (error) {
+      const ms = Date.now() - startedAt
+      log.warn("model_call", { model: provider.model, kind, ms, ok: false, ...errorFields(error) })
+      countHourly({ llmCalls: 1, llmFailures: 1, llmMsTotal: ms })
       if (isDailyQuotaError(error)) await markProviderQuotaSpent().catch(() => undefined)
       throw error
     }
   }
   return {
-    generate: (input) => guard(() => provider.generate(input)),
-    ...(provider.generateStream && { generateStream: (input) => guard(() => provider.generateStream!(input)) }),
-    ...(provider.generateStructured && { generateStructured: (input) => guard(() => provider.generateStructured!(input)) }),
+    model: provider.model,
+    generate: (input) => guard("generate", () => provider.generate(input)),
+    ...(provider.generateStream && { generateStream: (input) => guard("stream", () => provider.generateStream!(input)) }),
+    ...(provider.generateStructured && { generateStructured: (input) => guard("structured", () => provider.generateStructured!(input)) }),
   }
 }

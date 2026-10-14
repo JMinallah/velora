@@ -4,6 +4,7 @@ import { COLLECTIONS, type DocumentRecord } from "./collections"
 import { emitEvent, type ChangeOrigin } from "./events"
 import { getMission } from "./missions"
 import { storeFor } from "@/adapters/storage"
+import { errorFields, log } from "@/lib/log"
 
 type Actor = ChangeOrigin
 
@@ -92,6 +93,6 @@ export async function removeStoredFile(storageUrl: string | undefined): Promise<
     const { store, key } = storeFor(storageUrl)
     await store.delete(key)
   } catch (error) {
-    console.error("failed to delete stored document", error)
+    log.error("stored_file_delete_failed", errorFields(error))
   }
 }
