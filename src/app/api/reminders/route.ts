@@ -1,14 +1,14 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { withAuth } from "@/lib/with-auth"
-import { createReminder, listReminders, markRemindersRead } from "@/domain/reminders"
+import { cancelReminder, createReminder, listReminders, markRemindersRead } from "@/domain/reminders"
 import { reminderCreateSchema } from "@/domain/schemas"
 import { readJson, serverError, validationError } from "@/lib/http"
 
-const markReadSchema = z.object({
-  action: z.literal("markRead"),
-  ids: z.array(z.string()).max(500).default([]),
-})
+const patchSchema = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("markRead"), ids: z.array(z.string()).max(500).default([]) }),
+  z.object({ action: z.literal("cancel"), id: z.string().min(1) }),
+])
 
 export const GET = withAuth(async (req, session) => {
   try {
@@ -38,9 +38,14 @@ export const POST = withAuth(async (req, session) => {
 
 export const PATCH = withAuth(async (req, session) => {
   try {
-    const parsed = markReadSchema.safeParse(await readJson(req))
+    const parsed = patchSchema.safeParse(await readJson(req))
     if (!parsed.success) return validationError(parsed.error)
 
+    if (parsed.data.action === "cancel") {
+      const ok = await cancelReminder(session.userId, parsed.data.id)
+      if (!ok) return NextResponse.json({ success: false, error: "not found" }, { status: 404 })
+      return NextResponse.json({ success: true, data: { cancelled: parsed.data.id } })
+    }
     const count = await markRemindersRead(session.userId, parsed.data.ids)
     return NextResponse.json({ success: true, data: { modified: count } })
   } catch (err) {

@@ -775,50 +775,59 @@ export default function MissionPage() {
       </div>
 
       <aside className="hidden h-fit xl:sticky xl:top-24 xl:flex xl:flex-col rounded-2xl bg-muted/20 p-4">
-        {activeMission && activeMission.reminders && activeMission.reminders.length > 0 && (
+        {activeMission && (
           <div className="mb-6">
             <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-2">
               <Bell className="h-4 w-4" />
               Reminders
             </h2>
             <div className="space-y-2">
-              {activeMission.reminders.filter(r => !r.read).map((reminder) => (
-                <div key={reminder.id} className="group relative rounded-lg bg-background p-3 shadow-sm border border-border/50">
-                  <button
-                    onClick={async () => {
-                      try {
-                        const res = await fetch(`/api/reminders`, {
-                          method: "PATCH",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ action: "markRead", ids: [reminder.id] }),
-                        })
-                        if (res.ok) {
-                          setMissions((cur) => ({
-                            ...cur,
-                            [activeMissionId]: {
-                              ...(cur[activeMissionId] ?? {}),
-                              reminders: (cur[activeMissionId]?.reminders ?? []).map((r) =>
-                                r.id === reminder.id ? { ...r, read: true } : r
-                              ),
-                            },
-                          }))
+              {(activeMission.reminders ?? [])
+                .filter((r) => r.kind !== "task-due" && r.status === "scheduled")
+                .map((reminder) => (
+                  <div key={reminder.id} className="relative rounded-lg bg-background p-3 shadow-sm border border-border/50">
+                    <button
+                      onClick={async () => {
+                        try {
+                          const res = await fetch(`/api/reminders`, {
+                            method: "PATCH",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ action: "cancel", id: reminder.id }),
+                          })
+                          if (res.ok) {
+                            setMissions((cur) => ({
+                              ...cur,
+                              [activeMissionId]: {
+                                ...(cur[activeMissionId] ?? {}),
+                                reminders: (cur[activeMissionId]?.reminders ?? []).map((r) =>
+                                  r.id === reminder.id ? { ...r, status: "cancelled" as const } : r
+                                ),
+                              },
+                            }))
+                          }
+                        } catch (err) {
+                          console.error("Failed to cancel reminder", err)
                         }
-                      } catch (err) {
-                        console.error("Failed to mark reminder as read", err)
-                      }
-                    }}
-                    className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground"
-                    title="Dismiss"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                  <p className="text-sm font-medium pr-4">{reminder.title}</p>
-                  {reminder.details && <p className="text-xs text-muted-foreground mt-1">{reminder.details}</p>}
-                  <p className="text-[10px] text-primary mt-2 font-medium">
-                    Due: {new Date(reminder.dueAt).toLocaleDateString()}
-                  </p>
-                </div>
-              ))}
+                      }}
+                      className="absolute top-2 right-2 text-muted-foreground hover:text-foreground"
+                      aria-label={`Cancel reminder "${reminder.title}"`}
+                      title="Cancel reminder"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                    <p className="text-sm font-medium pr-4">{reminder.title}</p>
+                    {reminder.details && <p className="text-xs text-muted-foreground mt-1">{reminder.details}</p>}
+                    <p className="text-[10px] text-primary mt-2 font-medium">
+                      {new Date(reminder.dueAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}
+                    </p>
+                  </div>
+                ))}
+              <p className="text-xs text-muted-foreground">
+                Tasks with a due date remind you automatically.{" "}
+                <Link href="/settings" className="underline">
+                  Reminder settings
+                </Link>
+              </p>
             </div>
           </div>
         )}

@@ -224,7 +224,7 @@ const createReminderTool = defineTool({
   name: "createReminder",
   tier: "write",
   description:
-    "Schedule a reminder for this mission at a specific time. It is delivered in the app and by email, as the user's notification settings allow.",
+    "Schedule a reminder for this mission at a specific time. It is delivered in the app and by email, as the user's notification settings allow. Task due dates already get automatic reminders; use this for anything else.",
   input: z.object({
     title: z.string().min(1).max(200),
     dueAt: isoDate.describe("ISO datetime for when the reminder should fire, e.g. 2026-09-12T09:00:00Z"),

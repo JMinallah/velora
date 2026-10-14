@@ -1,6 +1,7 @@
 import { getDb } from "@/adapters/db"
 import { COLLECTIONS, type EventRecord, type ReminderRecord, type TaskRecord } from "./collections"
 import { emitEvent } from "./events"
+import { syncTaskRemindersSafely } from "./task-reminders"
 
 /**
  * Undo for the agent's writes (FR-AGT-6, delivery plan 3-4).
@@ -95,5 +96,6 @@ export async function undoChange(userId: string, missionId: string, eventId: str
     actor: "user",
     payload: { eventId, undid: description },
   })
+  if (taskId) await syncTaskRemindersSafely(userId, missionId)
   return { kind: "undone", description, taskId }
 }

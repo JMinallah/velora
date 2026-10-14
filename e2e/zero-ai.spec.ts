@@ -331,3 +331,34 @@ test("AI-extracted details stay marked unverified until confirmed; then a renewa
   const reminders = (await (await page.request.get(`/api/reminders?missionId=${mission.id}`)).json()).data
   expect(reminders).toEqual([expect.objectContaining({ title: "Renew: Republic of Kenya Passport", dueAt: "2031-09-02T09:00:00.000Z" })])
 })
+
+test("notification settings persist; a dispatched reminder arrives under the bell and can be marked read", async ({ page }) => {
+  await open(page, "/settings")
+  const email = page.getByLabel("By email")
+  await expect(email).toBeChecked()
+  const saved = () =>
+    page.waitForResponse((r) => r.url().endsWith("/api/settings/notifications") && r.request().method() === "PATCH" && r.ok())
+  await Promise.all([saved(), email.uncheck()])
+  await Promise.all([saved(), page.getByLabel("When").selectOption({ label: "On the day" })])
+  await expect(page.getByRole("status")).toHaveText("Saved")
+
+  await open(page, "/settings")
+  await expect(page.getByLabel("By email")).not.toBeChecked()
+  await expect(page.getByLabel("When")).toHaveValue("0")
+
+  // A reminder whose time has come, and one dispatcher run (as the scheduler would).
+  const mission = (await (await page.request.post("/api/missions", { data: { title: "Move to Lisbon" } })).json()).data
+  const created = await page.request.post("/api/reminders", {
+    data: { missionId: mission.id, title: "Call the moving company", dueAt: "2020-01-01T09:00:00Z" },
+  })
+  expect(created.status()).toBe(201)
+  const run = await page.request.get("/api/cron/reminders", { headers: { authorization: "Bearer e2e-cron-secret" } })
+  expect(run.status()).toBe(200)
+
+  await open(page, "/")
+  const bell = page.getByRole("button", { name: /^Notifications, \d+ unread$/ })
+  await bell.click()
+  await expect(page.getByRole("link", { name: /Call the moving company/ })).toBeVisible()
+  await page.getByRole("button", { name: "Mark all as read" }).click()
+  await expect(page.getByRole("button", { name: "Notifications", exact: true })).toBeVisible()
+})

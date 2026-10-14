@@ -4,6 +4,7 @@ import { COLLECTIONS, type TaskRecord, withoutProtectedFields } from "./collecti
 import { emitEvent, type ChangeOrigin } from "./events"
 import { getMission } from "./missions"
 import { dependencyProblem } from "./dependencies"
+import { syncTaskRemindersSafely } from "./task-reminders"
 
 type Actor = ChangeOrigin
 
@@ -62,6 +63,7 @@ export async function createTask(
     payload: { taskId: task.id, label: task.label, dueDate: task.dueDate },
     undo: { kind: "delete-task", taskId: task.id, label: task.label, afterUpdatedAt: now },
   })
+  if (task.dueDate) await syncTaskRemindersSafely(userId, missionId)
   return task
 }
 
@@ -94,6 +96,9 @@ export async function updateTask(
     payload: { taskId, label: updated.label, fields: Object.keys(safePatch) },
     undo: { kind: "restore-task", taskId, label: before.label, before, afterUpdatedAt: now },
   })
+  if ("dueDate" in safePatch || "completed" in safePatch || "label" in safePatch) {
+    await syncTaskRemindersSafely(userId, missionId)
+  }
   return updated
 }
 
@@ -120,6 +125,7 @@ export async function deleteTask(
     actor,
     payload: { taskId, label: task.label },
   })
+  if (task.dueDate) await syncTaskRemindersSafely(userId, missionId)
   return true
 }
 
@@ -164,6 +170,7 @@ export async function shiftTaskDates(
       actor,
       payload: { action: "shift-dates", days, modified },
     })
+    await syncTaskRemindersSafely(userId, missionId)
   }
   return modified
 }

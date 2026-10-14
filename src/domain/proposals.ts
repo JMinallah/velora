@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto"
 import { getDb, withTransaction } from "@/adapters/db"
 import { COLLECTIONS, type MissionRecord, type TaskRecord } from "./collections"
 import { emitEvent } from "./events"
+import { syncTaskRemindersSafely } from "./task-reminders"
 import type { MissionPlan } from "./plan"
 
 /**
@@ -150,7 +151,10 @@ export async function acceptProposal(
     await options.beforeCommit?.()
     return { kind: "accepted", missionId }
   })
-  if (outcome) return outcome
+  if (outcome) {
+    if (outcome.kind === "accepted") await syncTaskRemindersSafely(userId, outcome.missionId)
+    return outcome
+  }
 
   const existing = await getProposal(userId, id)
   return existing ? { kind: "already_decided", status: existing.status, missionId: existing.missionId } : { kind: "not_found" }

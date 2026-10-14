@@ -212,6 +212,7 @@ export type Event = {
     | "reminder-due"
     | "reminder-sent"
     | "reminder-failed"
+    | "reminder-cancelled"
     | "risk-updated"
     | "replan-generated"
     | "action-proposed"

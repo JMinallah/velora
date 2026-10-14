@@ -29,10 +29,17 @@ import { GET as cronRoute } from "@/app/api/cron/reminders/route"
 import { GET as notificationsRoute, PATCH as markNotificationsRoute } from "@/app/api/notifications/route"
 import { GET as getPrefsRoute, PATCH as patchPrefsRoute } from "@/app/api/settings/notifications/route"
 import { GET as listEventsRoute } from "@/app/api/missions/[id]/events/route"
+import { PATCH as patchTaskRoute } from "@/app/api/missions/[id]/tasks/[taskId]/route"
+import { PATCH as patchRemindersRoute } from "@/app/api/reminders/route"
 import { closeClient, getDb } from "@/adapters/db"
 import { COLLECTIONS, type ReminderRecord } from "@/domain/collections"
 import { createMission } from "@/domain/missions"
 import { createReminder } from "@/domain/reminders"
+import { createTask, deleteTask, updateTask } from "@/domain/tasks"
+import { taskReminderTime, syncTaskReminders } from "@/domain/task-reminders"
+import { createProposal, acceptProposal } from "@/domain/proposals"
+import { missionPlanSchema } from "@/domain/plan"
+import { DEFAULT_NOTIFICATION_PREFERENCES } from "@/domain/preferences"
 import { dispatchDueReminders, listDispatches, CLAIM_LEASE_MS } from "@/domain/dispatch"
 import { renderReminderEmail } from "@/domain/reminder-copy"
 import { localTimeToUtc } from "@/lib/dates"
@@ -462,5 +469,216 @@ describe("localTimeToUtc", () => {
     expect(localTimeToUtc("2026-03-09", 9, "America/New_York", 1)?.toISOString()).toBe("2026-03-08T13:00:00.000Z")
     expect(localTimeToUtc("2026-03-01", 9, "Asia/Kolkata", 1)?.toISOString()).toBe("2026-02-28T03:30:00.000Z")
     expect(localTimeToUtc("not a date", 9, "UTC")).toBeNull()
+  })
+})
+
+/** YYYY-MM-DD, n days from today (UTC). */
+const day = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString().slice(0, 10)
+
+async function taskReminders(userId: string, missionId: string) {
+  return (await getDb())
+    .collection<ReminderRecord>(COLLECTIONS.reminders)
+    .find({ userId, missionId, kind: "task-due" }, { projection: { _id: 0 } })
+    .toArray()
+}
+
+describe("taskReminderTime", () => {
+  const prefs = DEFAULT_NOTIFICATION_PREFERENCES
+  const now = new Date("2026-10-13T12:00:00Z")
+  const task = (dueDate: string | null, completed = false) => ({ id: "t", label: "x", dueDate, completed })
+
+  it("fires at 09:00 local, leadDays before; on the day itself when that has passed; never in the past", () => {
+    expect(taskReminderTime(task("2026-10-20"), prefs, now)?.toISOString()).toBe("2026-10-19T09:00:00.000Z")
+    expect(taskReminderTime(task("2026-10-20"), { ...prefs, leadDays: 7 }, now)?.toISOString()).toBe("2026-10-20T09:00:00.000Z")
+    expect(taskReminderTime(task("2026-10-14"), prefs, now)?.toISOString()).toBe("2026-10-14T09:00:00.000Z")
+    expect(taskReminderTime(task("2026-10-13"), prefs, now)).toBeNull()
+    expect(taskReminderTime(task("2026-10-20"), { ...prefs, timeZone: "Africa/Nairobi" }, now)?.toISOString()).toBe("2026-10-19T06:00:00.000Z")
+  })
+
+  it("none for completed or undated tasks, or with task reminders off", () => {
+    expect(taskReminderTime(task("2026-10-20", true), prefs, now)).toBeNull()
+    expect(taskReminderTime(task(null), prefs, now)).toBeNull()
+    expect(taskReminderTime(task("2026-10-20"), { ...prefs, taskReminders: false }, now)).toBeNull()
+  })
+})
+
+describeDb("task-driven reminders", () => {
+  it("changing a task's due date reschedules its reminder (exit gate)", async () => {
+    const userId = await newUser()
+    const mission = await createMission(userId, { title: "Move to Berlin" })
+    const task = await createTask(userId, mission.id, { label: "Apply for the visa", dueDate: day(10) })
+
+    let reminders = await taskReminders(userId, mission.id)
+    expect(reminders).toEqual([
+      expect.objectContaining({ taskId: task!.id, status: "scheduled", taskDueDate: day(10), dueAt: `${day(9)}T09:00:00.000Z`, title: "Apply for the visa" }),
+    ])
+    const reminderId = reminders[0].id
+
+    currentUserId = userId
+    const res = await patchTaskRoute(
+      req("PATCH", `/api/missions/${mission.id}/tasks/${task!.id}`, { dueDate: day(20) }),
+      ctx({ id: mission.id, taskId: task!.id })
+    )
+    expect(res.status).toBe(200)
+
+    reminders = await taskReminders(userId, mission.id)
+    expect(reminders).toEqual([
+      expect.objectContaining({ id: reminderId, status: "scheduled", taskDueDate: day(20), dueAt: `${day(19)}T09:00:00.000Z` }),
+    ])
+  })
+
+  it("follows the task: renamed, completed, reopened, undated, deleted", async () => {
+    const userId = await newUser()
+    const mission = await createMission(userId, { title: "Move" })
+    const task = (await createTask(userId, mission.id, { label: "Old name", dueDate: day(10) }))!
+    const status = async () => (await taskReminders(userId, mission.id)).map((r) => [r.status, r.title])
+
+    await updateTask(userId, mission.id, task.id, { label: "New name" })
+    expect(await status()).toEqual([["scheduled", "New name"]])
+    await updateTask(userId, mission.id, task.id, { completed: true })
+    expect(await status()).toEqual([["cancelled", "New name"]])
+    await updateTask(userId, mission.id, task.id, { completed: false })
+    expect(await status()).toEqual([["scheduled", "New name"]])
+    await updateTask(userId, mission.id, task.id, { dueDate: null })
+    expect(await status()).toEqual([["cancelled", "New name"]])
+    await updateTask(userId, mission.id, task.id, { dueDate: day(12) })
+    expect(await status()).toEqual([["scheduled", "New name"]])
+    await deleteTask(userId, mission.id, task.id)
+    expect(await status()).toEqual([["cancelled", "New name"]])
+
+    // Overdue and undated tasks get none.
+    await createTask(userId, mission.id, { label: "Overdue", dueDate: day(-3) })
+    await createTask(userId, mission.id, { label: "Someday" })
+    expect(await taskReminders(userId, mission.id)).toHaveLength(1)
+  })
+
+  it("a reminder already sent is renewed when the task gets a new due date", async () => {
+    const userId = await newUser()
+    const mission = await createMission(userId, { title: "Move" })
+    const task = (await createTask(userId, mission.id, { label: "Sign the lease", dueDate: day(10) }))!
+    const [first] = await taskReminders(userId, mission.id)
+    await onlyDue(userId)
+    await dispatchDueReminders({ mailer: recordingMailer().mailer, now: new Date(Date.parse(first.dueAt) + 60_000) })
+    expect(await reminderById(first.id)).toMatchObject({ status: "sent", delivered: ["in-app", "email"] })
+
+    // Same due date again (e.g. an unrelated edit): not re-sent.
+    await updateTask(userId, mission.id, task.id, { label: "Sign the lease!" })
+    expect(await reminderById(first.id)).toMatchObject({ status: "sent" })
+
+    await updateTask(userId, mission.id, task.id, { dueDate: day(30) })
+    expect(await reminderById(first.id)).toMatchObject({
+      status: "scheduled",
+      attempts: 0,
+      delivered: [],
+      read: false,
+      taskDueDate: day(30),
+      dueAt: `${day(29)}T09:00:00.000Z`,
+    })
+  })
+
+  it("the dispatcher won't send a task reminder that no longer matches its task", async () => {
+    const userId = await newUser()
+    const mission = await createMission(userId, { title: "Move" })
+    const task = (await createTask(userId, mission.id, { label: "Ship boxes", dueDate: day(10) }))!
+    const [reminder] = await taskReminders(userId, mission.id)
+    // A write that bypassed the sync (or a sync that failed).
+    await (await getDb()).collection(COLLECTIONS.tasks).updateOne({ id: task.id }, { $set: { dueDate: day(40) } })
+    await onlyDue(userId)
+    const rec = recordingMailer()
+
+    const summary = await dispatchDueReminders({ mailer: rec.mailer, now: new Date(Date.parse(reminder.dueAt) + 60_000) })
+    expect(summary).toMatchObject({ claimed: 1, cancelled: 1 })
+    expect(rec.calls()).toBe(0)
+    expect((await listDispatches(userId, reminder.id)).map((d) => [d.outcome, d.reason])).toEqual([["cancelled", "task due date changed"]])
+
+    // The next sync puts it right.
+    await syncTaskReminders(userId, mission.id)
+    expect(await reminderById(reminder.id)).toMatchObject({ status: "scheduled", taskDueDate: day(40) })
+  })
+
+  it("preference changes move or switch off every task reminder", async () => {
+    const userId = await newUser()
+    currentUserId = userId
+    const mission = await createMission(userId, { title: "Move" })
+    await createTask(userId, mission.id, { label: "A", dueDate: day(10) })
+    await createTask(userId, mission.id, { label: "B", dueDate: day(20) })
+
+    await patchPrefsRoute(req("PATCH", "/api/settings/notifications", { leadDays: 3, timeZone: "Africa/Nairobi" }), ctx({}))
+    expect((await taskReminders(userId, mission.id)).map((r) => r.dueAt).sort()).toEqual([
+      `${day(7)}T06:00:00.000Z`,
+      `${day(17)}T06:00:00.000Z`,
+    ])
+
+    await patchPrefsRoute(req("PATCH", "/api/settings/notifications", { taskReminders: false }), ctx({}))
+    expect((await taskReminders(userId, mission.id)).map((r) => r.status)).toEqual(["cancelled", "cancelled"])
+
+    await patchPrefsRoute(req("PATCH", "/api/settings/notifications", { taskReminders: true }), ctx({}))
+    expect((await taskReminders(userId, mission.id)).map((r) => r.status)).toEqual(["scheduled", "scheduled"])
+
+    // Channel switches are read at send time; they don't touch the schedule.
+    const before = await taskReminders(userId, mission.id)
+    await patchPrefsRoute(req("PATCH", "/api/settings/notifications", { email: false }), ctx({}))
+    expect(await taskReminders(userId, mission.id)).toEqual(before)
+  })
+
+  it("accepting a generated plan schedules reminders for its dated tasks", async () => {
+    const userId = await newUser()
+    const plan = missionPlanSchema.parse({
+      title: "Move to Seoul",
+      summary: "Relocate for work",
+      targetDate: day(60),
+      phases: [
+        {
+          name: "Paperwork",
+          tasks: [
+            { key: "visa", label: "Apply for the visa", dueDate: day(20), dependsOn: [] },
+            { key: "research", label: "Research neighbourhoods", dependsOn: [] },
+          ],
+        },
+      ],
+    })
+    const proposal = await createProposal(userId, { plan, request: { goal: "Move to Seoul" }, promptVersion: "test", model: "test", attempts: 1 })
+    const outcome = await acceptProposal(userId, proposal.id, plan)
+    expect(outcome.kind).toBe("accepted")
+    const missionId = (outcome as { missionId: string }).missionId
+    expect((await taskReminders(userId, missionId)).map((r) => [r.title, r.taskDueDate])).toEqual([["Apply for the visa", day(20)]])
+  })
+
+  it("syncing twice at once leaves one reminder per task", async () => {
+    const userId = await newUser()
+    const mission = await createMission(userId, { title: "Move" })
+    await (await getDb()).collection(COLLECTIONS.tasks).insertOne({
+      id: "raw-task", userId, missionId: mission.id, label: "Raw", dueDate: day(10), completed: false,
+      category: "General", priority: "medium", risk: "low", source: "user", dependsOn: [], createdAt: new Date().toISOString(),
+    })
+    await Promise.all([syncTaskReminders(userId, mission.id), syncTaskReminders(userId, mission.id), syncTaskReminders(userId, mission.id)])
+    expect(await taskReminders(userId, mission.id)).toHaveLength(1)
+  })
+})
+
+describeDb("cancelling a reminder", () => {
+  it("cancels the user's own scheduled custom reminder only", async () => {
+    const userId = await newUser()
+    const mission = await createMission(userId, { title: "Move" })
+    const custom = (await createReminder(userId, { missionId: mission.id, title: "Call the bank", dueAt: "2999-01-01T09:00:00Z" }))!
+    await createTask(userId, mission.id, { label: "Visa", dueDate: day(10) })
+    const [taskReminder] = await taskReminders(userId, mission.id)
+    const cancel = (id: string) => patchRemindersRoute(req("PATCH", "/api/reminders", { action: "cancel", id }), ctx({}))
+
+    currentUserId = "cancel-intruder"
+    expect((await cancel(custom.id)).status).toBe(404)
+
+    currentUserId = userId
+    expect((await cancel(taskReminder.id)).status).toBe(404) // follows its task instead
+    expect((await cancel(custom.id)).status).toBe(200)
+    expect((await cancel(custom.id)).status).toBe(404) // already cancelled
+    expect(await reminderById(custom.id)).toMatchObject({ status: "cancelled" })
+
+    const events = (await (await listEventsRoute(req("GET", `/api/missions/${mission.id}/events`), ctx({ id: mission.id }))).json()).data
+    expect(events.filter((e: { type: string }) => e.type === "reminder-cancelled")).toHaveLength(1)
+    // Never dispatched, even once its time has come.
+    await dispatchDueReminders({ mailer: null, now: new Date("2999-01-02T00:00:00Z") })
+    expect(await reminderById(custom.id)).toMatchObject({ status: "cancelled" })
+    expect(await listDispatches(userId, custom.id)).toEqual([])
   })
 })
