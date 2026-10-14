@@ -1,0 +1,89 @@
+name: Backup
+
+# Nightly database backup (NFR-REL-4, delivery plan 7-4). Atlas M0 has no
+# built-in backups, so this is the only copy outside the database itself.
+#
+# Every night: mongodump → encrypt (AES-256, passphrase from a secret) →
+# restore the encrypted file into a scratch MongoDB and check every document
+# came back → keep it as a private workflow artifact for 14 days. A backup
+# that doesn't restore fails the run (GitHub emails the failure).
+#
+# Inactive until configured (docs/07-BACKUP-RESTORE.md):
+#   variable BACKUP_ENABLED = true    (Settings → Secrets and variables → Actions → Variables)
+#   variable BACKUP_MONGODB_DB        (optional; default "velora")
+#   secret   BACKUP_MONGODB_URI       (a read-only database user)
+#   secret   BACKUP_PASSPHRASE        (20+ characters; keep a copy outside GitHub)
+
+on:
+  schedule:
+    - cron: "47 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    if: vars.BACKUP_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      MONGO_IMAGE: mongo:7
+      URI: ${{ secrets.BACKUP_MONGODB_URI }}
+      DB: ${{ vars.BACKUP_MONGODB_DB || 'velora' }}
+      PASS: ${{ secrets.BACKUP_PASSPHRASE }}
+    steps:
+      - name: Check configuration
+        run: |
+          [ -n "$URI" ] || { echo "::error::The BACKUP_MONGODB_URI secret is not set"; exit 1; }
+          [ ${#PASS} -ge 20 ] || { echo "::error::The BACKUP_PASSPHRASE secret must be at least 20 characters"; exit 1; }
+          echo "FILE=velora-$(date -u +%Y-%m-%d).archive.gz.enc" >> "$GITHUB_ENV"
+
+      - name: Dump
+        run: |
+          mkdir -p backup
+          docker run --rm -e URI -e DB -v "$PWD/backup:/backup" "$MONGO_IMAGE" \
+            sh -c 'mongodump --uri="$URI" --db="$DB" --archive=/backup/dump.gz --gzip' 2> dump.log \
+            || { grep -v -i "uri" dump.log | tail -20; exit 1; }
+          DUMPED=$(grep -oP 'done dumping \S+ \(\K[0-9]+' dump.log | awk '{ s += $1 } END { print s + 0 }')
+          echo "DUMPED=$DUMPED" >> "$GITHUB_ENV"
+          echo "Dumped $DUMPED documents"
+
+      - name: Encrypt
+        run: |
+          openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -pass env:PASS -in backup/dump.gz -out "backup/$FILE"
+          rm backup/dump.gz
+
+      - name: Verify by restoring into a scratch database
+        run: |
+          docker run -d --name scratch -p 27019:27017 "$MONGO_IMAGE" >/dev/null
+          for i in $(seq 1 60); do
+            docker exec scratch mongosh --quiet --eval 'db.runCommand({ ping: 1 }).ok' >/dev/null 2>&1 && break
+            sleep 1
+          done
+          openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -pass env:PASS -in "backup/$FILE" \
+            | docker run -i --rm --network host "$MONGO_IMAGE" mongorestore --host 127.0.0.1:27019 --archive --gzip 2> restore.log
+          RESTORED=$(grep -oP '[0-9]+(?= document\(s\) restored successfully)' restore.log || echo 0)
+          FAILED=$(grep -oP '[0-9]+(?= document\(s\) failed to restore)' restore.log || echo unknown)
+          echo "dumped=$DUMPED restored=$RESTORED failed=$FAILED"
+          if [ "$DUMPED" -gt 0 ] && [ "$RESTORED" = "$DUMPED" ] && [ "$FAILED" = 0 ]; then
+            echo "### Backup $FILE" >> "$GITHUB_STEP_SUMMARY"
+            echo "$DUMPED documents dumped, encrypted, and restored into a scratch database without loss." >> "$GITHUB_STEP_SUMMARY"
+          else
+            tail -20 restore.log
+            echo "::error::The backup did not restore completely (dumped $DUMPED, restored $RESTORED, failed $FAILED)"
+            exit 1
+          fi
+
+      - name: Keep the encrypted backup for 14 days
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ env.FILE }}
+          path: backup/${{ env.FILE }}
+          retention-days: 14
+          compression-level: 0
+          if-no-files-found: error

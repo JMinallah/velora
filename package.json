@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit",
     "evals": "tsx evals/run.ts",
     "reminders:run": "tsx scripts/send_reminders.ts",
+    "seed:demo": "tsx scripts/seed-demo.ts",
     "e2e": "playwright test"
   },
   "dependencies": {

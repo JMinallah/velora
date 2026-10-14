@@ -1,34 +1,14 @@
-// Manual reminder dispatch for development: claims due reminders exactly the
-// way the cron endpoint does (atomic status flip), so running both never
-// double-sends. Usage: npm run reminders:run
-import { getDb, closeClient } from "../src/adapters/db"
-import { COLLECTIONS, type ReminderRecord } from "../src/domain/collections"
-import { emitEvent } from "../src/domain/events"
+// Runs the reminder dispatcher once — the same code the scheduled endpoint
+// runs (src/domain/dispatch.ts), so running both never double-sends.
+// In development, emails land in .data/outbox. Usage: npm run reminders:run
+import { getMailer } from "../src/adapters/email"
+import { closeClient } from "../src/adapters/db"
+import { dispatchDueReminders } from "../src/domain/dispatch"
+import { env } from "../src/lib/env"
 
 async function main() {
-  const db = await getDb()
-  const now = new Date().toISOString()
-
-  let processed = 0
-  for (;;) {
-    const reminder = await db.collection<ReminderRecord>(COLLECTIONS.reminders).findOneAndUpdate(
-      { status: "scheduled", dueAt: { $lte: now } },
-      { $set: { status: "sent", updatedAt: now } },
-      { returnDocument: "after" }
-    )
-    if (!reminder) break
-
-    console.log(`reminder due: [${reminder.id}] ${reminder.title} (mission ${reminder.missionId})`)
-    await emitEvent(reminder.userId, {
-      missionId: reminder.missionId,
-      type: "reminder-created",
-      actor: "system",
-      payload: { reminderId: reminder.id, title: reminder.title, details: reminder.details },
-    }).catch(() => undefined)
-    processed++
-  }
-
-  console.log(`processed ${processed} reminder(s)`)
+  const summary = await dispatchDueReminders({ mailer: getMailer(), appUrl: env().APP_URL })
+  console.log(JSON.stringify(summary, null, 2))
   await closeClient()
 }
 

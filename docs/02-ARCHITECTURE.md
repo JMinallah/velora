@@ -80,7 +80,7 @@ velora-v2/
 │   └── components/            # React components (ui/, mission/, chat/, documents/)
 ├── evals/                     # agent eval suite: fixtures + runner (CI)
 ├── tests/                     # unit + integration + e2e
-└── .github/workflows/         # ci.yml, backup.yml, reminders.yml (reminder scheduler)
+└── .github/workflows/         # ci.yml, backup.yml (nightly verified backup), reminders.yml (scheduled jobs)
 ```
 
 ## 4. Key flows
