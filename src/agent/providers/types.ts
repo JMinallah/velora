@@ -26,6 +26,8 @@ export type ProviderResponse = {
   toolCalls: ProviderToolCall[]
   /** Opaque; the loop stores it on the assistant turn so the provider can replay it. */
   providerParts?: unknown
+  /** Token counts, when the provider reports them (logged, NFR-OBS-1). */
+  usage?: { inputTokens?: number; outputTokens?: number }
 }
 
 export type GenerateInput = {
@@ -37,6 +39,8 @@ export type GenerateInput = {
 }
 
 export interface LlmProvider {
+  /** The model answering, for logs and disclosure (e.g. "gemini-3.5-flash-lite"). */
+  readonly model?: string
   generate(input: GenerateInput): Promise<ProviderResponse>
   /**
    * Optional streaming variant (FR-AGT-1): resolves to the same complete

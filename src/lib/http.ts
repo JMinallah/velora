@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import type { ZodError } from "zod"
+import { errorFields, log } from "@/lib/log"
 
 /** Parses a JSON body, returning null (not throwing) on malformed input so routes can answer 400. */
 export async function readJson(req: Request): Promise<unknown> {
@@ -15,7 +16,7 @@ export function validationError(error: ZodError) {
 
 /** Logs the real error server-side; the client only ever sees a generic message. */
 export function serverError(route: string, err: unknown) {
-  console.error(route, err)
+  log.error("server_error", { route, ...errorFields(err) })
   return NextResponse.json({ success: false, error: "Internal server error" }, { status: 500 })
 }
 

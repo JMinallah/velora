@@ -7,6 +7,7 @@ import { getLlmProvider } from "@/agent/providers"
 import { isDailyQuotaError, isTransientLlmError } from "@/agent/providers/gemini"
 import { generatePlan, PlanGenerationError } from "@/agent/planner"
 import { createProposal } from "@/domain/proposals"
+import { log } from "@/lib/log"
 
 const planRequestSchema = z.object({
   goal: z.string().trim().min(1).max(1000),
@@ -44,7 +45,7 @@ export const POST = withAuth(
         generated = await generatePlan({ provider, ...parsed.data, today: new Date().toISOString().slice(0, 10) })
       } catch (error) {
         if (error instanceof PlanGenerationError) {
-          console.warn(JSON.stringify({ event: "plan_invalid", issues: error.issues.slice(0, 10) }))
+          log.warn("plan_invalid", { issues: error.issues.slice(0, 10) })
           return NextResponse.json(
             {
               success: false,

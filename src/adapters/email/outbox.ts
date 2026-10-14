@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { createHash } from "node:crypto"
+import { log } from "@/lib/log"
 import type { EmailMessage, Mailer } from "./types"
 
 /** Development emails land here (gitignored with the rest of .data/). */
@@ -21,7 +22,7 @@ export const outboxMailer: Mailer = {
       path.join(OUTBOX_DIR, `${id}.json`),
       JSON.stringify({ ...message, writtenAt: new Date().toISOString() }, null, 2)
     )
-    console.info(`[outbox] "${message.subject}" → .data/outbox/${id}.json`)
+    log.info("email_outbox", { file: `.data/outbox/${id}.json` })
     return { id: `outbox-${id}` }
   },
 }

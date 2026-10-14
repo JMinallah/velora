@@ -9,6 +9,7 @@ import { getMission } from "@/domain/missions"
 import { listMessages, createMessage } from "@/domain/messages"
 import type { MessageRecord } from "@/domain/collections"
 import { aiPausedResponse, describeLlmFailure, llmUnavailable, readJson, serverError } from "@/lib/http"
+import { errorFields, log } from "@/lib/log"
 
 const HISTORY_LIMIT = 20
 
@@ -154,17 +155,15 @@ export const POST = withAuth<{ id: string }>(async (req, session, { params }) =>
     })
     // Operational metrics only — never message content (NFR-SEC-5, NFR-PERF-1).
     const logTurn = (run: AgentRunResult, firstTextAt: number | null, streamed: boolean) =>
-      console.info(
-        JSON.stringify({
-          event: "chat_turn",
-          turnId,
-          streamed,
-          steps: run.steps,
-          toolCalls: run.trace.length,
-          ttftMs: firstTextAt === null ? null : firstTextAt - startedAt,
-          totalMs: Date.now() - startedAt,
-        })
-      )
+      log.info("chat_turn", {
+        turnId,
+        streamed,
+        steps: run.steps,
+        tools: run.trace.map((t) => (t.ok ? t.tool : `${t.tool}!failed`)),
+        proposals: run.proposals.length,
+        ttftMs: firstTextAt === null ? null : firstTextAt - startedAt,
+        totalMs: Date.now() - startedAt,
+      })
 
     // Streaming (FR-AGT-1): the chat UI asks for NDJSON — one JSON event per
     // line: text deltas, receipts as tools complete, then "done" (or "error").
@@ -205,7 +204,7 @@ export const POST = withAuth<{ id: string }>(async (req, session, { params }) =>
             })
           } catch (error) {
             const failure = describeLlmFailure(classify(error))
-            if (!failure) console.error("POST /api/missions/[id]/chat (stream)", error)
+            if (!failure) log.error("server_error", { route: "POST /api/missions/[id]/chat (stream)", ...errorFields(error) })
             send({ type: "error", ...(failure ?? { code: "server_error", error: "Chat failed" }) })
           } finally {
             controller.close()

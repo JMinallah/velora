@@ -12,6 +12,7 @@ import {
 import { emitEvent } from "./events"
 import { getNotificationPreferences, getUserEmail } from "./preferences"
 import { renderReminderEmail } from "./reminder-copy"
+import { errorFields, log } from "@/lib/log"
 
 /**
  * The reminder dispatcher (delivery plan 6-1, FR-REM-2), run by a scheduler
@@ -92,7 +93,7 @@ export async function dispatchDueReminders(options: Options): Promise<DispatchSu
     } catch (err) {
       // Left in "sending": the lease expires and a later run picks it up.
       summary.errors++
-      console.error("reminder dispatch error", { reminderId: reminder.id, error: err instanceof Error ? err.message : err })
+      log.error("reminder_dispatch_error", { reminderId: reminder.id, ...errorFields(err) })
     }
   }
   return summary

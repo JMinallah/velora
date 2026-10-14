@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { consume, type RateRule } from "@/adapters/ratelimit"
+import { errorFields, log } from "@/lib/log"
 
 /**
  * Rate-limit policy (NFR-SEC-3, 04-SECURITY §5). Every authenticated route
@@ -60,7 +61,7 @@ export async function enforceRateLimit(
       ...perIp.map((rule) => consume(rule, subjects.ip)),
     ])
   } catch (error) {
-    console.error("rate limiter unavailable; allowing request", error)
+    log.error("rate_limiter_unavailable", errorFields(error))
     return null
   }
 
