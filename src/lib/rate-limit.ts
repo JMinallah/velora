@@ -14,6 +14,9 @@ export type RateTier = "read" | "mutation" | "llm"
 const MINUTE = 60_000
 const DAY = 24 * 60 * MINUTE
 
+/** Each user's daily share of AI requests (chat messages, plans, document reads); shown as the usage meter. */
+export const LLM_USER_DAILY: RateRule = { name: "llm-user-day", limit: 50, windowMs: DAY }
+
 const POLICY: Record<RateTier, { perUser: RateRule[]; perIp: RateRule[] }> = {
   read: {
     perUser: [{ name: "read-user-min", limit: 300, windowMs: MINUTE }],
@@ -27,7 +30,7 @@ const POLICY: Record<RateTier, { perUser: RateRule[]; perIp: RateRule[] }> = {
     perUser: [
       { name: "llm-user-min", limit: 6, windowMs: MINUTE },
       // ~50 messages ≈ 125 model requests: one heavy user can't take most of the 500/day.
-      { name: "llm-user-day", limit: 50, windowMs: DAY },
+      LLM_USER_DAILY,
     ],
     // Several accounts behind one address (or one abuser with many) share this.
     perIp: [{ name: "llm-ip-min", limit: 20, windowMs: MINUTE }],

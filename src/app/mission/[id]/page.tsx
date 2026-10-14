@@ -30,6 +30,7 @@ import { ConfirmationCard, type ConfirmationEffect } from "@/components/mission/
 import { UndoBar } from "@/components/mission/UndoBar";
 import { ReplanCard } from "@/components/mission/ReplanCard";
 import type { PendingActionStatus } from "@/types";
+import { notifyAiUsage, useAiStatus } from "@/lib/use-ai-status";
 
 function resolveMissionId(value: string | string[] | undefined, availableIds: string[]) {
   const candidate = Array.isArray(value) ? value[0] : value;
@@ -67,6 +68,7 @@ export default function MissionPage() {
   const activeMissionId = resolveMissionId(paramsForResolve, availableIds)
   const [attachmentMenuOpen, setAttachmentMenuOpen] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const aiStatus = useAiStatus();
   // Bumped after each chat turn / decision so the undo bar re-checks.
   const [chatRevision, setChatRevision] = useState(0);
   const [selectedDocumentsByMission, setSelectedDocumentsByMission] = useState<Record<string, string[]>>(() => ({}));
@@ -391,6 +393,7 @@ export default function MissionPage() {
     } finally {
       setIsSending(false);
       setChatRevision((n) => n + 1);
+      notifyAiUsage();
     }
   };
 
@@ -738,10 +741,20 @@ export default function MissionPage() {
                       </PopoverContent>
                     </Popover>
 
-                    <Button onClick={handleSendMessage} className="gap-2" disabled={isSending}>
-                      <Send className="h-4 w-4" />
-                      {isSending ? "Sending..." : "Send"}
-                    </Button>
+                    <div className="flex items-center gap-3">
+                      {aiStatus && (
+                        <span
+                          className="text-xs text-muted-foreground"
+                          title="Your AI requests today (chat messages, plans, document reads). The count resets daily."
+                        >
+                          AI today: {aiStatus.usage.used} of {aiStatus.usage.limit}
+                        </span>
+                      )}
+                      <Button onClick={handleSendMessage} className="gap-2" disabled={isSending}>
+                        <Send className="h-4 w-4" />
+                        {isSending ? "Sending..." : "Send"}
+                      </Button>
+                    </div>
                   </div>
                 </div>
               </div>

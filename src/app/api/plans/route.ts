@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { withAuth } from "@/lib/with-auth"
-import { llmUnavailable, readJson, serverError, validationError } from "@/lib/http"
+import { aiPausedResponse, llmUnavailable, readJson, serverError, validationError } from "@/lib/http"
 import { env } from "@/lib/env"
 import { getLlmProvider } from "@/agent/providers"
 import { isDailyQuotaError, isTransientLlmError } from "@/agent/providers/gemini"
@@ -36,6 +36,8 @@ export const POST = withAuth(
           { status: 503 }
         )
       }
+      const paused = await aiPausedResponse()
+      if (paused) return paused
 
       let generated
       try {

@@ -44,3 +44,13 @@ export function llmUnavailable(_error: unknown, classify: { isDailyQuota: boolea
   const failure = describeLlmFailure(classify)
   return failure ? NextResponse.json({ success: false, ...failure }, { status: 503 }) : null
 }
+
+/**
+ * The app's daily AI budget is spent (src/domain/llm-budget.ts): answer
+ * before touching the model, with the same honest message the provider's
+ * own daily-quota error gets. Null while there is budget left.
+ */
+export async function aiPausedResponse(): Promise<Response | null> {
+  const { getAiBudget } = await import("@/domain/llm-budget")
+  return (await getAiBudget()).exhausted ? llmUnavailable(null, { isDailyQuota: true, isTransient: false }) : null
+}

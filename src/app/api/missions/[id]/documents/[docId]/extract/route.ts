@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { withAuth } from "@/lib/with-auth"
-import { llmUnavailable, serverError } from "@/lib/http"
+import { aiPausedResponse, llmUnavailable, serverError } from "@/lib/http"
 import { env } from "@/lib/env"
 import { getDocument, updateDocument } from "@/domain/documents"
 import { storeFor } from "@/adapters/storage"
@@ -27,6 +27,8 @@ export const POST = withAuth<{ id: string; docId: string }>(
           { status: 503 }
         )
       }
+      const paused = await aiPausedResponse()
+      if (paused) return paused
 
       const { store, key } = storeFor(doc.storageUrl)
       const bytes = await store.read(key)

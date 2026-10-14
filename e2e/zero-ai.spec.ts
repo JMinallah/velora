@@ -14,6 +14,23 @@ async function open(page: Page, path: string) {
  * Phase 2.5 exit gate: with AI disabled, a user can run a whole mission
  * by hand (docs/06-DELIVERY-PLAN.md).
  */
+test("with AI off, every page says so plainly and manual work still goes ahead (chaos check)", async ({ page }) => {
+  await open(page, "/")
+  const banner = page.getByRole("status", { name: "AI status" })
+  await expect(banner).toContainText("AI features are switched off")
+  await expect(banner).toContainText("add, edit and complete tasks by hand")
+
+  const status = (await (await page.request.get("/api/ai/status")).json()).data
+  expect(status).toMatchObject({ available: false, reason: "disabled" })
+  // AI routes refuse honestly instead of hanging.
+  const plan = await page.request.post("/api/plans", { data: { goal: "Move to Lisbon" } })
+  expect(plan.status()).toBe(503)
+  expect((await plan.json()).code).toBe("agent_disabled")
+
+  await open(page, "/mission/new")
+  await expect(page.getByRole("status", { name: "AI status" })).toBeVisible()
+})
+
 test("creates a mission by hand and lands on it", async ({ page }) => {
   await open(page, "/mission/new")
   await page.getByLabel("Mission title").fill("Move from Nairobi to Seoul")
@@ -340,7 +357,7 @@ test("notification settings persist; a dispatched reminder arrives under the bel
     page.waitForResponse((r) => r.url().endsWith("/api/settings/notifications") && r.request().method() === "PATCH" && r.ok())
   await Promise.all([saved(), email.uncheck()])
   await Promise.all([saved(), page.getByLabel("When").selectOption({ label: "On the day" })])
-  await expect(page.getByRole("status")).toHaveText("Saved")
+  await expect(page.getByRole("status").filter({ hasText: /^Saved$/ })).toBeVisible()
 
   await open(page, "/settings")
   await expect(page.getByLabel("By email")).not.toBeChecked()
