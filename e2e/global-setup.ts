@@ -2,11 +2,14 @@ import { mkdir, writeFile } from "node:fs/promises"
 import { randomUUID } from "node:crypto"
 import { MongoClient, ObjectId } from "mongodb"
 import { E2E_DB } from "../playwright.config"
+import { startAiServer } from "./ai-server"
 
 /**
  * Starts every run from an empty database and signs a test user in by
  * writing the same user + session documents the Auth.js MongoDB adapter
- * creates after a real Google sign-in, then storing the session cookie.
+ * creates after a real Google sign-in, then storing the session cookie
+ * (valid on both servers: cookies are per host, not per port). Then starts
+ * the AI-enabled server; the returned function stops it after the run.
  */
 export default async function globalSetup() {
   const uri = process.env.TEST_MONGODB_URI ?? "mongodb://127.0.0.1:27017"
@@ -54,4 +57,5 @@ export default async function globalSetup() {
   } finally {
     await client.close()
   }
+  return startAiServer()
 }

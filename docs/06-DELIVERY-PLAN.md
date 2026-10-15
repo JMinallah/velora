@@ -229,6 +229,7 @@ The roadmap says *what* each phase is. This document says *how* each phase gets 
 - **7-5 (M)** Account deletion (FR-AUTH-3, Must) incl. stored files; JSON export (FR-AUTH-4); retention pruning job for events.
   *Done (PR #31): Settings → "Your data"; `DELETE /api/account`, `GET /api/account/export`, daily `GET /api/cron/maintenance` (scheduled in `.github/workflows/reminders.yml`). R2's `deletePrefix` (list + batch delete) joins the R2 live check before deployment.*
 - **7-6 (M)** Playwright E2E for the three core flows (manual mission, agent chat with receipts, document upload + confirm).
+  *Done (PR #35): `e2e/ai.spec.ts` runs against a second production server (same build, AI on) whose Gemini calls go to `e2e/fake-gemini.mjs` via `GEMINI_BASE_URL` — the real SDK, streaming included, with scripted answers. Flows: chat request → task + receipt + agent label + one-click undo; deletion only proposed until the card is confirmed; upload → read by "Velora" → unverified until confirmed → renewal reminder; onboarding plan drafted → nothing saved until accepted; ops page for an admin. Manual flows stay in `e2e/zero-ai.spec.ts` (AI off). `tests/fake-gemini.test.ts` keeps the fake honest against the app's provider.*
 - **7-7 (S)** `refusal/` eval set; Lighthouse ≥ 80; real-device pass.
 - **7-8 (S)** Privacy policy and terms (the product stores identity documents); AI-limitations disclosure at point of use (FR-TRS-3).
 
