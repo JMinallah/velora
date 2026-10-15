@@ -7,7 +7,7 @@ import { AI_BASE_URL } from "../playwright.config"
  * e2e/fake-gemini.mjs through the real SDK, so everything is exercised
  * except the model's judgement (that's what the eval suite measures).
  */
-test.use({ baseURL: AI_BASE_URL })
+test.use({ baseURL: AI_BASE_URL, storageState: "e2e/.auth/ai-state.json" })
 
 async function open(page: Page, path: string) {
   await page.goto(path)

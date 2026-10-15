@@ -37,7 +37,7 @@ export async function startAiServer(): Promise<() => Promise<void>> {
       ...APP_ENV,
       GEMINI_API_KEY: "fake-key",
       GEMINI_BASE_URL: fakeUrl,
-      ADMIN_EMAILS: "e2e@velora.test",
+      ADMIN_EMAILS: "ai@velora.test",
     })
   }
   await waitFor(appUrl, "AI app server", 120_000)
