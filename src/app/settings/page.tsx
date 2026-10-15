@@ -152,7 +152,8 @@ export default function SettingsPage() {
             ))}
           </select>
           <p className="text-xs text-muted-foreground">
-            At 9:00 in <strong>{prefs.timeZone}</strong>. If that time has already passed when a task is added, the
+            Reminders are best-effort, so keep your own record of important deadlines too. At 9:00 in{" "}
+            <strong>{prefs.timeZone}</strong>. If that time has already passed when a task is added, the
             reminder comes on the due date itself.
           </p>
           {zoneMismatch && (
@@ -216,6 +217,8 @@ function AccountSection() {
         </a>
       </div>
 
+      <DocumentAiToggle />
+
       <div className="rounded-lg border border-destructive/40 p-3">
         <p className="text-sm font-medium">Delete your account</p>
         <p className="mb-2 text-xs text-muted-foreground">
@@ -269,5 +272,48 @@ function AccountSection() {
         )}
       </div>
     </section>
+  );
+}
+
+/** Consent for AI to read uploaded documents (docs/08-LEGAL-RISKS.md A3/A4): explicit, and withdrawable here. */
+function DocumentAiToggle() {
+  const [granted, setGranted] = useState<boolean | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/consent")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => !cancelled && data?.success && setGranted(Boolean(data.data.documentAi)))
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const change = async (value: boolean) => {
+    setGranted(value);
+    const res = await fetch("/api/consent", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ documentAi: value }),
+    }).catch(() => null);
+    if (!res?.ok) setGranted(!value); // never show a consent that wasn't stored
+  };
+  return (
+    <label className="flex items-start gap-3 rounded-lg border p-3">
+      {/* Rendered (disabled) while loading, so nothing below it jumps when it arrives. */}
+      <input
+        type="checkbox"
+        className="mt-1 size-4 accent-primary"
+        checked={granted ?? false}
+        disabled={granted === null}
+        onChange={(e) => change(e.target.checked)}
+      />
+      <span>
+        <span className="block text-sm font-medium">Let Velora&apos;s AI read documents I upload</span>
+        <span className="block text-xs text-muted-foreground">
+          Files are sent to Google&apos;s Gemini to read details like expiry dates. Turning this off stops it for new
+          uploads; documents already read keep their details until you delete them.
+        </span>
+      </span>
+    </label>
   );
 }

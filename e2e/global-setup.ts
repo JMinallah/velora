@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto"
 import { MongoClient, ObjectId, type Db } from "mongodb"
 import { E2E_DB } from "../playwright.config"
 import { startAiServer } from "./ai-server"
+import { LEGAL_VERSION } from "../src/lib/legal"
 
 /**
  * Starts every run from an empty database and signs a test user in by
@@ -22,12 +23,21 @@ export default async function globalSetup() {
     // dashboards: e2e@velora.test (zero-AI server) and ai@velora.test (AI server).
     const zeroAi = await signIn(db, "e2e@velora.test", "E2E User")
     const ai = await signIn(db, "ai@velora.test", "E2E AI User")
+    // Both have accepted the current terms (the first-visit consent screen is tested with a third, fresh user).
+    for (const { userId } of [zeroAi, ai]) {
+      await db.collection("user_settings").insertOne({
+        userId,
+        consent: { termsVersion: LEGAL_VERSION, acceptedAt: new Date().toISOString(), adultConfirmed: true },
+      })
+    }
+    const fresh = await signIn(db, "fresh@velora.test", "New User")
 
     await mkdir("e2e/.auth", { recursive: true })
     // Specs that seed data directly need to know who is signed in.
     await writeFile("e2e/.auth/user.json", JSON.stringify({ userId: zeroAi.userId }))
     await writeFile("e2e/.auth/state.json", JSON.stringify(storageState(zeroAi.sessionToken)))
     await writeFile("e2e/.auth/ai-state.json", JSON.stringify(storageState(ai.sessionToken)))
+    await writeFile("e2e/.auth/fresh-state.json", JSON.stringify(storageState(fresh.sessionToken)))
   } finally {
     await client.close()
   }

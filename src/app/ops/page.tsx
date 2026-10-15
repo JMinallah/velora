@@ -40,7 +40,7 @@ export default function OpsPage() {
 
   const { ai, last24h, reminders } = data;
   const problems = [
-    !ai.enabled && "AI is switched off (no GEMINI_API_KEY).",
+    !ai.enabled && `AI is switched off: ${ai.disabledReason}.`,
     ai.exhausted && `AI budget spent for today (resets ${time(ai.resetsAt)}).`,
     reminders.late > 0 && `${reminders.late} reminder(s) are over 30 minutes late — is the scheduler running?`,
     last24h.errorRate > 0.02 && `Server error rate is ${pct(last24h.errorRate)} over 24 hours.`,
@@ -70,7 +70,7 @@ export default function OpsPage() {
         <Facts
           title="AI today"
           rows={[
-            ["Model", ai.enabled ? ai.model : "off"],
+            ["Model", ai.enabled ? `${ai.model} (${ai.tier} tier)` : "off"],
             ["Calls", `${ai.calls} of ${ai.cap}`],
             ["Status", ai.exhausted ? "paused" : "available"],
             ["Resets", time(ai.resetsAt)],

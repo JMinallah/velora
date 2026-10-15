@@ -46,41 +46,47 @@ async function main() {
     for (const page of PAGES) await fetch(base + page.path, { headers }).catch(() => undefined)
 
     mkdirSync("lighthouse", { recursive: true })
-    const rows: { name: string; path: string; performance: number; accessibility: number; bestPractices: number; lcp: string }[] = []
+    const rows: { name: string; path: string; performance: number; accessibility: number; bestPractices: number; lcp: string; all: string }[] = []
+    // Lighthouse's own advice: single runs vary by several points, so take the median of three.
+    const RUNS = 3
     for (const page of PAGES) {
-      const out = `lighthouse/${page.path === "/" ? "dashboard" : page.path.slice(1)}.json`
-      execFileSync(
-        "npx",
-        [
-          "--yes",
-          LIGHTHOUSE,
-          base + page.path,
-          "--quiet",
-          "--output=json",
-          `--output-path=${out}`,
-          "--only-categories=performance,accessibility,best-practices",
-          `--extra-headers=${JSON.stringify(headers)}`,
-          "--chrome-flags=--headless=new --no-sandbox --disable-gpu",
-        ],
-        { env: { ...process.env, CHROME_PATH: chromium.executablePath() }, stdio: ["ignore", "ignore", "inherit"] }
-      )
-      const report = JSON.parse(readFileSync(out, "utf8"))
-      const score = (key: string) => Math.round((report.categories[key]?.score ?? 0) * 100)
-      rows.push({
-        name: page.name,
-        path: page.path,
-        performance: score("performance"),
-        accessibility: score("accessibility"),
-        bestPractices: score("best-practices"),
-        lcp: report.audits["largest-contentful-paint"]?.displayValue ?? "—",
-      })
+      const slug = page.path === "/" ? "dashboard" : page.path.slice(1)
+      const runs: { performance: number; accessibility: number; bestPractices: number; lcp: string }[] = []
+      for (let i = 0; i < RUNS; i++) {
+        const out = `lighthouse/${slug}-${i + 1}.json`
+        execFileSync(
+          "npx",
+          [
+            "--yes",
+            LIGHTHOUSE,
+            base + page.path,
+            "--quiet",
+            "--output=json",
+            `--output-path=${out}`,
+            "--only-categories=performance,accessibility,best-practices",
+            `--extra-headers=${JSON.stringify(headers)}`,
+            "--chrome-flags=--headless=new --no-sandbox --disable-gpu",
+          ],
+          { env: { ...process.env, CHROME_PATH: chromium.executablePath() }, stdio: ["ignore", "ignore", "inherit"] }
+        )
+        const report = JSON.parse(readFileSync(out, "utf8"))
+        const score = (key: string) => Math.round((report.categories[key]?.score ?? 0) * 100)
+        runs.push({
+          performance: score("performance"),
+          accessibility: score("accessibility"),
+          bestPractices: score("best-practices"),
+          lcp: report.audits["largest-contentful-paint"]?.displayValue ?? "—",
+        })
+      }
+      const median = [...runs].sort((a, b) => a.performance - b.performance)[Math.floor(RUNS / 2)]
+      rows.push({ name: page.name, path: page.path, ...median, all: runs.map((r) => r.performance).join(" / ") })
     }
 
     const table = [
-      `### Lighthouse (mobile profile; performance budget ≥ ${BUDGET})`,
-      "| Page | Performance | Accessibility | Best practices | LCP |",
-      "|---|---|---|---|---|",
-      ...rows.map((r) => `| ${r.name} (\`${r.path}\`) | ${r.performance < BUDGET ? "❌ " : ""}${r.performance} | ${r.accessibility} | ${r.bestPractices} | ${r.lcp} |`),
+      `### Lighthouse (mobile profile; median of 3 runs; performance budget ≥ ${BUDGET})`,
+      "| Page | Performance (median) | Runs | Accessibility | Best practices | LCP |",
+      "|---|---|---|---|---|---|",
+      ...rows.map((r) => `| ${r.name} (\`${r.path}\`) | ${r.performance < BUDGET ? "❌ " : ""}${r.performance} | ${r.all} | ${r.accessibility} | ${r.bestPractices} | ${r.lcp} |`),
     ].join("\n")
     console.log(table)
     if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${table}\n`)

@@ -140,6 +140,10 @@ export function Sidebar() {
             </Link>
           </nav>
         </div>
+        <p className="px-4 pb-4 text-xs text-muted-foreground lg:px-6">
+          <Link href="/privacy" className="hover:underline">Privacy</Link> ·{" "}
+          <Link href="/terms" className="hover:underline">Terms</Link>
+        </p>
       </div>
     </div>
   );

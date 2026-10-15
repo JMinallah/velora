@@ -1,5 +1,5 @@
 import { getDb } from "@/adapters/db"
-import { agentEnabled, env } from "@/lib/env"
+import { aiDisabledReason, env } from "@/lib/env"
 import { COLLECTIONS } from "./collections"
 import { getAiBudget } from "./llm-budget"
 import { recentHours } from "./ops-metrics"
@@ -39,7 +39,7 @@ export async function opsSnapshot(now = new Date()) {
   const llmCalls = sum("llmCalls")
   return {
     generatedAt: now.toISOString(),
-    ai: { enabled: agentEnabled(), model: env().GEMINI_MODEL, ...budget },
+    ai: { enabled: aiDisabledReason(env()) === null, disabledReason: aiDisabledReason(env()), tier: env().GEMINI_TIER, model: env().GEMINI_MODEL, ...budget },
     last24h: {
       requests,
       serverErrors: sum("serverErrors"),

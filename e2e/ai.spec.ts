@@ -69,6 +69,13 @@ test("a document is read on upload; its details stay unverified until the user c
   const missionId = await newMission(page, "Move to Kigali")
   await open(page, "/documents")
   await page.getByRole("combobox").selectOption(missionId)
+  // Nothing is sent to the AI until the user allows it (explicit, revocable consent).
+  const allow = page.getByLabel("Let Velora's AI read my documents")
+  await expect(allow).not.toBeChecked()
+  await Promise.all([
+    page.waitForResponse((r) => r.url().endsWith("/api/consent") && r.request().method() === "POST" && r.ok()),
+    allow.check(),
+  ])
 
   const png = Buffer.from(
     "89504e470d0a1a0a0000000d4948445200000001000000010806000000" +

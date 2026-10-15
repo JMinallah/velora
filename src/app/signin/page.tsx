@@ -4,6 +4,8 @@ import { env } from "@/lib/env"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import Link from "next/link"
+import { MINIMUM_AGE } from "@/lib/legal"
 
 // Reads env + session at request time; never prerendered at build.
 export const dynamic = "force-dynamic"
@@ -48,6 +50,11 @@ export default async function SignInPage() {
               </Button>
             </form>
           )}
+          <p className="text-center text-xs text-muted-foreground">
+            For people {MINIMUM_AGE}+. By continuing you agree to the{" "}
+            <Link href="/terms" className="underline">Terms</Link> and{" "}
+            <Link href="/privacy" className="underline">Privacy Policy</Link>.
+          </p>
         </CardContent>
       </Card>
     </main>

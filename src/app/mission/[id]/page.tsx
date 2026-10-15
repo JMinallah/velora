@@ -762,6 +762,9 @@ export default function MissionPage() {
                       </Button>
                     </div>
                   </div>
+                  <p className="mt-2 text-[11px] text-muted-foreground">
+                    Velora is an AI and can be wrong. Check visa, legal, medical and money details with official sources.
+                  </p>
                 </div>
               </div>
             </>
