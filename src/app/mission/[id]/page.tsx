@@ -234,6 +234,13 @@ export default function MissionPage() {
     }));
   };
 
+  // The mission's tasks as stored now — after Velora or a confirmation changed them.
+  const fetchTasks = async (missionId: string) => {
+    const res = await fetch(`/api/missions/${missionId}/tasks`).catch(() => null);
+    const data = res ? await res.json().catch(() => null) : null;
+    return data?.success ? (data.data as TaskRecord[]) : null;
+  };
+
   const handleSendMessage = async () => {
     const trimmed = draft.trim();
     if (!trimmed && selectedDocuments.length === 0) return;
@@ -356,6 +363,12 @@ export default function MissionPage() {
         } else if (event.type === "done") {
           finished = true;
           updateMessages((messages) => messages.map((m) => (m.id === replyId ? { ...m, text: event.reply } : m)));
+          // Velora changed something: show it in the task list now, not after a reload.
+          if (event.receipts.length > 0) {
+            void fetchTasks(missionId).then((reloaded) => {
+              if (reloaded) setMissions((cur) => (cur[missionId] ? { ...cur, [missionId]: { ...cur[missionId], tasks: reloaded } } : cur));
+            });
+          }
         } else {
           throw new ChatError(
             USER_FACING_CHAT_ERRORS.includes(event.code) ? event.error : "Chat failed",
@@ -395,13 +408,6 @@ export default function MissionPage() {
       setChatRevision((n) => n + 1);
       notifyAiUsage();
     }
-  };
-
-  // A confirmation card was decided: keep its status and the affected data in step.
-  const fetchTasks = async (missionId: string) => {
-    const res = await fetch(`/api/missions/${missionId}/tasks`).catch(() => null);
-    const data = res ? await res.json().catch(() => null) : null;
-    return data?.success ? (data.data as TaskRecord[]) : null;
   };
 
   // After an undo: reload the tasks (the change could be any of them) and

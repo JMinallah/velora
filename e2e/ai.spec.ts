@@ -95,7 +95,7 @@ test("onboarding: Velora drafts a plan; nothing exists until the user accepts it
   await page.getByRole("button", { name: "Draft my plan" }).click()
 
   await expect(page).toHaveURL(/\/plan\/[0-9a-f-]{36}$/)
-  await expect(page.getByRole("heading", { level: 1, name: "Move from Nairobi to Lisbon" })).toBeVisible()
+  await expect(page.getByLabel("Mission title")).toHaveValue("Move from Nairobi to Lisbon")
   await expect(page.getByLabel("Task: Apply for the residence visa")).toBeVisible()
   expect(((await (await page.request.get("/api/missions")).json()).data as unknown[]).length).toBe(before)
 
