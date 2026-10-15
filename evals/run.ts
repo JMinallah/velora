@@ -11,7 +11,8 @@
  *                         (use 13000 for a 5/minute model).
  *                         Set 0 on a paid key.
  *
- * Sets live in evals/sets/ (tool-selection, injection, regression).
+ * Sets live in evals/sets/ (tool-selection, injection, regression, refusal;
+ * planning and documents run the planner and the extractor).
  * Usage: npm run evals                  (all sets)
  *        npm run evals -- --set injection (one set)
  * Exit code 1 on any failed fixture — CI treats this as merge-blocking.
@@ -89,6 +90,8 @@ async function main() {
   const { toolSelection } = await import("./sets/tool-selection")
   const { injection } = await import("./sets/injection")
   const { regression } = await import("./sets/regression")
+  const { refusal } = await import("./sets/refusal")
+  const { judgeReply } = await import("./judge")
   const { planning } = await import("./sets/planning")
   const { generatePlan, PlanGenerationError } = await import("../src/agent/planner")
   const { documents } = await import("./sets/documents")
@@ -98,6 +101,7 @@ async function main() {
     "tool-selection": toolSelection,
     injection,
     regression,
+    refusal,
   }
 
   // `npm run evals -- --set injection` runs one set; default runs all.
@@ -224,6 +228,11 @@ async function main() {
           today: new Date().toISOString().slice(0, 10),
           proposals: run.proposals.map((p) => ({ tool: p.tool, summary: p.summary })),
           replans: run.replans.map((r) => ({ summary: r.summary })),
+          judge: async (rubric) => {
+            const { verdict, rationale } = await judgeReply({ provider, message: fixture.message, reply: run.reply, rubric })
+            console.log(`        judge: ${verdict} — ${rationale}`)
+            return verdict === "pass" ? null : `judge: ${rationale}`
+          },
         })
         return { problem: problem && `${problem}\n        reply: ${run.reply.slice(0, 160)}` }
       })

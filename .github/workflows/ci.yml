@@ -65,6 +65,11 @@ jobs:
       - name: End-to-end tests
         run: npm run e2e
 
+      # NFR-PERF-3: performance ≥ 80 on the main pages, from the build the
+      # E2E run just made (scores in the job summary).
+      - name: Lighthouse budget
+        run: npx tsx e2e/lighthouse.ts
+
       - name: Upload Playwright report
         if: failure()
         uses: actions/upload-artifact@v7
