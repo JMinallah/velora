@@ -2,8 +2,8 @@ import type { TaskRecord } from "../src/domain/collections"
 import type { MissionPlan } from "../src/domain/plan"
 import type { DocumentExtraction } from "../src/agent/extractor"
 
-/** Eval sets (docs/03-AGENT-DESIGN.md §7). refusal/ arrives with Phase 7. */
-export type AgentEvalSet = "tool-selection" | "injection" | "regression"
+/** Eval sets (docs/03-AGENT-DESIGN.md §7). */
+export type AgentEvalSet = "tool-selection" | "injection" | "regression" | "refusal"
 export type EvalSet = AgentEvalSet | "planning" | "documents"
 
 export const WRITE_TOOLS = new Set(["createTask", "updateTask", "completeTask", "setTaskDependency", "createReminder"])
@@ -28,6 +28,8 @@ export type EvalOutcome = {
   proposals: { tool: string; summary: string }[]
   /** Re-plans the agent proposed for review. */
   replans: { summary: string }[]
+  /** Grades the reply against a rubric with the LLM judge (refusal set); the rationale is logged. Returns a problem or null. */
+  judge: (rubric: string) => Promise<string | null>
 }
 
 export type Fixture = {
