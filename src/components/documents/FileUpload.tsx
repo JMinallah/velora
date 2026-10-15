@@ -52,13 +52,15 @@ export function FileUpload({
       cancelled = true;
     };
   }, []);
+  // Shown at once; put back if saving fails, so the box never claims a consent that wasn't stored.
   const setAiConsent = async (granted: boolean) => {
+    setAiReading(granted);
     const res = await fetch("/api/consent", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ documentAi: granted }),
     }).catch(() => null);
-    if (res?.ok) setAiReading(granted);
+    if (!res?.ok) setAiReading(!granted);
   };
   const setStatus = (status: Status) =>
     setStatuses((cur) => [...cur.filter((s) => s.name !== status.name), status]);

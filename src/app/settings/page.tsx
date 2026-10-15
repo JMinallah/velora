@@ -290,12 +290,13 @@ function DocumentAiToggle() {
   }, []);
   if (granted === null) return null;
   const change = async (value: boolean) => {
+    setGranted(value);
     const res = await fetch("/api/consent", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ documentAi: value }),
     }).catch(() => null);
-    if (res?.ok) setGranted(value);
+    if (!res?.ok) setGranted(!value); // never show a consent that wasn't stored
   };
   return (
     <label className="flex items-start gap-3 rounded-lg border p-3">
