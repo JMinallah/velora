@@ -288,7 +288,6 @@ function DocumentAiToggle() {
       cancelled = true;
     };
   }, []);
-  if (granted === null) return null;
   const change = async (value: boolean) => {
     setGranted(value);
     const res = await fetch("/api/consent", {
@@ -300,7 +299,14 @@ function DocumentAiToggle() {
   };
   return (
     <label className="flex items-start gap-3 rounded-lg border p-3">
-      <input type="checkbox" className="mt-1 size-4 accent-primary" checked={granted} onChange={(e) => change(e.target.checked)} />
+      {/* Rendered (disabled) while loading, so nothing below it jumps when it arrives. */}
+      <input
+        type="checkbox"
+        className="mt-1 size-4 accent-primary"
+        checked={granted ?? false}
+        disabled={granted === null}
+        onChange={(e) => change(e.target.checked)}
+      />
       <span>
         <span className="block text-sm font-medium">Let Velora&apos;s AI read documents I upload</span>
         <span className="block text-xs text-muted-foreground">
