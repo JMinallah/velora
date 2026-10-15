@@ -216,7 +216,7 @@ The roadmap says *what* each phase is. This document says *how* each phase gets 
 
 ## Phase 7 — Production hardening (launch gate)
 
-**Entry gate:** Phase 6 exit gate fully ticked.
+**Entry gate:** Phase 6 exit gate fully ticked — met 2026-10-14 (deploy-dependent items recorded as open).
 
 ### Work items
 - **7-1 (M)** Groq fallback provider; active model disclosed in the UI (NFR-REL-2).
@@ -234,12 +234,57 @@ The roadmap says *what* each phase is. This document says *how* each phase gets 
 - **7-8 (S)** Privacy policy and terms (the product stores identity documents); AI-limitations disclosure at point of use (FR-TRS-3).
   *Done as drafts (PR #37), together with a legal risk review ([08-LEGAL-RISKS.md](08-LEGAL-RISKS.md)): /privacy and /terms (pending a lawyer's review and the bracketed details); first-visit consent (18+, versioned); explicit, revocable consent before AI reads documents (server-enforced); AI notice under the chat; prompt v4 (no individual eligibility verdicts); production AI only on Gemini's paid tier — Google's terms forbid personal data on the free tier and require the paid tier for EEA/UK/Swiss users; incident runbook ([09-INCIDENT-RESPONSE.md](09-INCIDENT-RESPONSE.md)).*
 
-### Exit gate
-- [ ] Every NFR in 01-SRS §3 has a ticked verification — *checklist with links*
-- [ ] 04-SECURITY §8 CI gates all active — *CI config*
-- [ ] Chaos test: LLM disabled → manual mode fully works, banner shown — *E2E*
-- [ ] Restore rehearsal completed — *write-up link*
-- [ ] Account deletion removes all user data and files — *test*
+### Exit gate — reviewed 2026-10-15 (PRs #31–#37)
+- [ ] Every NFR in 01-SRS §3 has a ticked verification — *checklist below: 21 of 24 verified; 3 open by owner decision (REL-2, OBS-2, COST-1)*
+- [x] 04-SECURITY §8 CI gates all active — *`.github/workflows/ci.yml`, one `checks` job required by branch protection: (1) gitleaks over full history; (2) `npm audit` high for production deps, critical for all; (3) route × actor matrix (`tests/routes*.test.ts`); (4) injection evals on every agent-affecting change; (5) signed-URL expiry and foreign-ownership tests (`tests/storage.test.ts`, `tests/routes-agent-docs.test.ts`)*
+- [x] Chaos test: LLM disabled → manual mode fully works, banner shown — *`e2e/zero-ai.spec.ts` › "with AI off, every page says so plainly and manual work still goes ahead"; the whole zero-AI spec (13 flows) runs with AI off*
+- [x] Restore rehearsal completed — *[07-BACKUP-RESTORE.md §4](07-BACKUP-RESTORE.md): dropped database restored byte-identical (153 documents, 17 collections, every document hash and index); nightly workflow re-verifies each backup by restoring it*
+- [x] Account deletion removes all user data and files — *`tests/account.test.ts` › "removes all of the user's data and files, and nobody else's (exit gate)": scans every collection for the user's id/email afterwards; a sabotaged deletion list fails it*
+
+**NFR checklist (01-SRS §3)**
+
+| NFR | Verified by | |
+|---|---|---|
+| SEC-1 secrets only in env; CI secret scan | `src/lib/env.ts` (named failure, no secret defaults); gitleaks in CI | ✅ |
+| SEC-2 per-user isolation at the query layer | every domain function takes `userId`; route × {anonymous, other user, owner} matrix in `tests/routes.test.ts`, `tests/routes-agent-docs.test.ts` | ✅ |
+| SEC-3 rate limits on mutating and LLM routes | `src/lib/rate-limit.ts` in `withAuth` (MongoDB counters instead of Upstash — 2.5-8 decision); 429 + Retry-After test | ✅ |
+| SEC-4 documents encrypted at rest; signed URLs ≤ 15 min | private R2/local store, links 10/5 min (`tests/storage.test.ts`) | ✅ (R2 live check open, see Phase 5) |
+| SEC-5 no message bodies or document contents in logs | `src/lib/log.ts` redaction; `tests/observability.test.ts` (logs carry no content, addresses or prompts) | ✅ |
+| SEC-6 threat model | [04-SECURITY.md](04-SECURITY.md); legal risks [08-LEGAL-RISKS.md](08-LEGAL-RISKS.md); [09-INCIDENT-RESPONSE.md](09-INCIDENT-RESPONSE.md) | ✅ |
+| REL-1 graceful LLM failure; manual mode always works | honest 503 codes (`llm_quota`, `llm_transient`, `agent_disabled`); budget pause before the model (`tests/ai-budget.test.ts`); chaos E2E | ✅ |
+| REL-2 fallback provider with the active model disclosed | — | ⏳ **open (7-1):** the owner is comparing providers before choosing (2026-10-14). Any OpenAI-compatible provider fits the `LlmProvider` interface. |
+| REL-3 atomic tool calls; plans applied transactionally | plan accept / re-plan accept in transactions (`tests/routes-agent-docs.test.ts` › "an accept that fails part-way leaves nothing behind", re-plan stale/reject tests) | ✅ |
+| REL-4 daily backup to a private artifact | `.github/workflows/backup.yml` (encrypted, restore-verified); rehearsal | ✅ (first real run at deploy) |
+| PERF-1 first token ≤ 4 s p90 | `chat_turn.ttftMs` logged per turn; 2.5–3.5 s warm measured on Flash-Lite (2.5 gate) | ✅ (re-measure on the real host) |
+| PERF-2 non-LLM routes ≤ 500 ms p95 | every request logged with `ms`; E2E flows complete sub-second | ✅ instrumented — p95 to be read from the host's logs after deploy |
+| PERF-3 dashboard ≤ 3 s; Lighthouse ≥ 80 | Lighthouse CI gate, mobile profile, median of 3: sign-in 84, dashboard 87, settings 88, documents 88; LCP 2.0–3.4 s under Lighthouse's throttled mobile network | ✅ (LCP on sign-in is just over 3 s under throttling; fine on desktop) |
+| PERF-4 per-user quota with a meter; global cap → manual mode with a banner | #32: `LLM_DAILY_CAP`, "AI today: n of 50", banner; `tests/ai-budget.test.ts` | ✅ |
+| QUAL-1 strict TypeScript; zod at every trust boundary | `tsc --noEmit` in CI; zod on API input, tool input, LLM output (plans, extraction, judge), env | ✅ |
+| QUAL-2 unit + integration for every route + one E2E per core flow | 189 unit/integration tests; E2E: manual mission (zero-AI spec), agent chat with receipts, document upload + confirm (`e2e/ai.spec.ts`) | ✅ |
+| QUAL-3 evals: planning, tool selection, injection, refusal | 32 fixtures in CI on agent changes: tool-selection 7, injection 6, regression 2, refusal 10 (LLM judge, rationale logged), planning 4, documents 3 | ✅ (results are in the job log, not yet a PR comment) |
+| QUAL-4 lint, typecheck, tests, secret scan, evals green before merge | branch protection requires `checks`, enforced for admins | ✅ |
+| OBS-1 structured JSON logs with request ids; agent steps logged | #33: `request`, `model_call` (model, latency, tokens, tools, outcome), `chat_turn` | ✅ |
+| OBS-2 error tracking (Sentry) | — | ⏳ **open:** needs a Sentry account; deferred to the deploy step (2.5-2). Structured error logs cover it meanwhile. |
+| OBS-3 ops dashboard: quota, error rate, dispatch status | `/ops` for `ADMIN_EMAILS` (#33) | ✅ |
+| COST-1 $0 steady state | — | ⚠️ **changed by the legal review:** real users' data may only go to Gemini's *paid* tier (A1). Cost is cents per thousand requests, not $0. Owner to enable billing before real users. |
+| COST-2 every free-tier limit documented, with behaviour at the limit | table below | ✅ |
+
+**Free-tier limits and what happens at them (COST-2)**
+
+| Service | Limit (free tier) | At the limit |
+|---|---|---|
+| Gemini 3.5 Flash-Lite | 15 requests/min, 500/day per project (AI Studio, 2026-10-11) | app pauses AI at `LLM_DAILY_CAP` (450) with a banner; manual work continues; per-minute 429s retried once, then an honest "briefly overloaded" |
+| MongoDB Atlas M0 | 512 MB storage, shared CPU | writes fail → generic 500, logged; retention pruning keeps chat/events bounded; upgrade to M2+ |
+| Cloudflare R2 | 10 GB storage; 1M write / 10M read operations a month | uploads fail with a clear message; nothing else affected |
+| Resend | 100 emails/day, 3,000/month | send fails → retried twice → `failed` in the dispatch log; in-app reminders unaffected |
+| GitHub Actions | unlimited minutes on a public repo; 3,000 min/month on Pro if private | schedules stop; `/ops` shows late reminders; move the trigger to the host's cron |
+| Vercel Hobby (if chosen) | non-commercial use only; daily cron only | use the GitHub schedule; a paid plan before any payment (D1) |
+
+**Gate review findings (2026-10-15):**
+- The new browser tests caught a real bug: after the agent changed tasks in chat, the task list stayed stale until a reload (fixed in #35). Writing the multi-tool regression fixture again showed its question had become answerable from the prompt's mission summary, so it no longer exercised tools; it now asks for data only tools have (#37).
+- **Legal review (#37):** the free Gemini tier must not receive personal data. That turns COST-1 into "cents, not $0" and adds a production guard (`GEMINI_TIER=paid`). Also added: privacy/terms drafts, versioned consent with 18+, server-enforced opt-in before AI reads documents, and no individual visa-eligibility verdicts (prompt v4). Owner items: a lawyer's review, the "Velora" trademark conflict (renaming is being considered), DPAs, company formation when affordable.
+- Lighthouse single runs vary by several points; the gate uses the median of three. A layout shift from a switch that appeared late cost Settings 9 points; fixed.
+- **Phase 7 status:** closed for everything that doesn't need the owner. The three open NFRs (REL-2 fallback provider, OBS-2 Sentry, COST-1 paid tier) and the deploy items (2.5-1/2.5-2, R2 live check, first real backup, Resend live send) are the **entry list for Phase 8**: none can be closed without the owner's accounts or decisions.
 
 ---
 
