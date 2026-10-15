@@ -4,7 +4,9 @@ import { defineConfig, devices } from "@playwright/test"
  * End-to-end tests (docs/06-DELIVERY-PLAN.md 2.5 exit gate, 7-6).
  *
  * The app runs against a throwaway MongoDB database with AI disabled
- * (GEMINI_API_KEY empty), so these tests prove the zero-AI baseline.
+ * (GEMINI_API_KEY empty), so these tests prove the zero-AI baseline. A
+ * second server from the same build, with AI answered by a fake Gemini
+ * (e2e/fake-gemini.mjs), runs the AI flows in e2e/ai.spec.ts.
  * Sign-in is bypassed by seeding an Auth.js database session in
  * e2e/global-setup.ts — no app code knows about tests.
  *
@@ -18,6 +20,23 @@ const baseURL = `http://127.0.0.1:${PORT}`
 const mongoUri = process.env.TEST_MONGODB_URI ?? "mongodb://127.0.0.1:27017"
 
 export const E2E_DB = "velora_e2e"
+
+/** The app with AI on, answered by e2e/fake-gemini.mjs — started by global-setup from the same build. */
+export const AI_PORT = 3101
+export const AI_BASE_URL = `http://127.0.0.1:${AI_PORT}`
+export const FAKE_GEMINI_PORT = 3102
+
+export const APP_ENV = {
+  MONGODB_URI: mongoUri,
+  MONGODB_DB: E2E_DB,
+  AUTH_SECRET: "e2e-secret-".padEnd(40, "x"),
+  AUTH_GOOGLE_ID: "e2e-client-id",
+  AUTH_GOOGLE_SECRET: "e2e-client-secret",
+  AUTH_TRUST_HOST: "true",
+  GEMINI_API_KEY: "", // manual mode: every flow must work with no AI
+  DOCUMENT_STORE: "local", // production build, but files go to .data/uploads (no R2 in tests)
+  CRON_SECRET: "e2e-cron-secret",
+}
 
 export default defineConfig({
   testDir: "e2e",
@@ -43,16 +62,6 @@ export default defineConfig({
     url: baseURL,
     reuseExistingServer: !process.env.CI,
     timeout: 600_000,
-    env: {
-      MONGODB_URI: mongoUri,
-      MONGODB_DB: E2E_DB,
-      AUTH_SECRET: "e2e-secret-".padEnd(40, "x"),
-      AUTH_GOOGLE_ID: "e2e-client-id",
-      AUTH_GOOGLE_SECRET: "e2e-client-secret",
-      AUTH_TRUST_HOST: "true",
-      GEMINI_API_KEY: "", // manual mode: every flow must work with no AI
-      DOCUMENT_STORE: "local", // production build, but files go to .data/uploads (no R2 in tests)
-      CRON_SECRET: "e2e-cron-secret",
-    },
+    env: APP_ENV,
   },
 })

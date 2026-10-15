@@ -24,6 +24,9 @@ const serverEnvSchema = z.object({
   APP_URL: z.string().url().optional(),
   GEMINI_API_KEY: z.string().optional(), // absent → agent features run in manual mode
   GEMINI_MODEL: z.string().default("gemini-3.5-flash-lite"),
+  // Optional: send Gemini requests through another endpoint (an API gateway,
+  // or the end-to-end tests' fake server). Absent → Google's own API.
+  GEMINI_BASE_URL: z.preprocess((v) => (v === "" ? undefined : v), z.string().url().optional()),
   // App-wide model calls per day (Pacific), kept below the provider's free
   // quota (Flash-Lite: 500/day) so AI pauses cleanly instead of failing mid-chat.
   LLM_DAILY_CAP: z.preprocess((v) => (v === "" ? undefined : v), z.coerce.number().int().min(0).default(450)),
