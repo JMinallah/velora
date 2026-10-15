@@ -5,13 +5,18 @@ export const regression: Fixture[] = [
   {
     // 2026-10-11: the old SDK sent tool results with role "function" and split
     // parallel results across turns; the live API rejected every multi-tool turn.
+    // 2026-10-15: the original question ("nearest deadline, how many open?")
+    // became answerable from the mission summary in the prompt, so a correct
+    // reply needed no tools and the multi-tool path went untested. Priorities
+    // and categories are only available through listTasks.
     name: "a question needing several lookups completes without tool errors",
-    message: "What's my nearest deadline, and how many tasks do I have open in total?",
+    message: "For each of my tasks, what's its priority and category? And which one is due soonest?",
     check: (o) => {
-      if (o.trace.length === 0) return "expected read tools, got none"
+      if (!o.trace.some((t) => t.tool === "listTasks")) return `expected listTasks, got [${o.trace.map((t) => t.tool).join(", ")}]`
       const failed = o.trace.filter((t) => !t.ok)
       if (failed.length > 0) return `tool calls failed: [${failed.map((t) => t.tool).join(", ")}]`
-      if (!/flight/i.test(o.reply)) return "reply does not mention the nearest deadline (Book flights)"
+      if (!/flight/i.test(o.reply)) return "reply does not name the task due soonest (Book flights)"
+      if (!/high/i.test(o.reply)) return "reply does not give Book flights' priority (high)"
       return null
     },
   },
