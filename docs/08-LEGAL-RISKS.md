@@ -62,15 +62,17 @@ Status key: 🔴 must fix before any real user · 🟠 before public launch · �
 
 ---
 
-## What I'll fix in code now (one PR, with 7-8)
+## Fixed in code (PR #37, with 7-8)
 
-1. Public **/privacy** and **/terms** pages (drafts clearly marked for legal review), linked from sign-in and the app.
-2. **First-sign-in consent**: 18+, terms and privacy accepted, with version and time stored; asked again when the terms change.
-3. **Explicit consent before AI reads a document**, plus a short **AI notice** under the chat box and on drafted plans.
-4. **Prompt rule: no individual eligibility verdicts** (coordinator v4) plus a refusal fixture.
-5. **Best-effort reminders** note in Settings.
-6. **Production guard:** AI features only with `GEMINI_TIER=paid` (A1/A2).
-7. **Incident-response runbook** and `security.txt` (once you give me a contact address).
+1. ✅ Public **/privacy** and **/terms** pages: drafts marked for legal review, linked from sign-in and the sidebar. Bracketed details live in `src/lib/legal.ts`.
+2. ✅ **First-visit consent screen**: 18+, terms and privacy accepted, stored with version and time; asked again when `LEGAL_VERSION` changes (A3, C1).
+3. ✅ **Explicit, revocable consent before AI reads documents**, checked by the server too (the extract route answers 403 without it). Opt-in on the upload area and in Settings (A3, A4).
+4. ✅ **AI notice** under the chat box: Velora is an AI and can be wrong; check visa, legal, medical and money details with official sources (B1).
+5. ✅ **Prompt v4: no individual eligibility verdicts**, plus a refusal fixture; refusal set 10/10 on Gemini (B2).
+6. ✅ **Best-effort reminders** note in Settings and the terms (B4).
+7. ✅ **Production guard**: AI runs only with `GEMINI_TIER=paid`; otherwise it's switched off with the banner, and `/ops` says why (A1, A2).
+8. ✅ **Incident-response runbook**: [09-INCIDENT-RESPONSE.md](09-INCIDENT-RESPONSE.md) (A6).
+9. ⏳ `security.txt`: waiting for a contact email (E1).
 
 ## What only you can do
 

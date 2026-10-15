@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto"
 import type { AgentTurn, LlmProvider } from "./providers/types"
 import { toolRegistry, toolDeclarations, destructiveTools } from "./tools"
-import { coordinatorPrompt, PROMPT_VERSION } from "./prompts/coordinator.v3"
+import { coordinatorPrompt, PROMPT_VERSION } from "./prompts/coordinator.v4"
 import * as missions from "@/domain/missions"
 import * as tasks from "@/domain/tasks"
 import { computeRisk, RISK_LABEL } from "@/domain/risk"

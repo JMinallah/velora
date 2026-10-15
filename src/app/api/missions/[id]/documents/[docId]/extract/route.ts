@@ -5,6 +5,7 @@ import { env } from "@/lib/env"
 import { getDocument, updateDocument } from "@/domain/documents"
 import { storeFor } from "@/adapters/storage"
 import { getLlmProvider } from "@/agent/providers"
+import { getConsent } from "@/domain/consent"
 import { isDailyQuotaError, isTransientLlmError } from "@/agent/providers/gemini"
 import { extractDocument, ExtractionError } from "@/agent/extractor"
 import { log } from "@/lib/log"
@@ -30,6 +31,14 @@ export const POST = withAuth<{ id: string; docId: string }>(
       }
       const paused = await aiPausedResponse()
       if (paused) return paused
+      // Identity documents go to the AI provider abroad only with the user's
+      // explicit, revocable consent (docs/08-LEGAL-RISKS.md A3/A4).
+      if (!(await getConsent(session.userId)).documentAi) {
+        return NextResponse.json(
+          { success: false, code: "consent_required", error: "Velora reads documents only after you allow it." },
+          { status: 403 }
+        )
+      }
 
       const { store, key } = storeFor(doc.storageUrl)
       const bytes = await store.read(key)

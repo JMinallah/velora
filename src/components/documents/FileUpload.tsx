@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { UploadCloud } from "lucide-react";
 import type { DocumentRecord } from "@/domain/collections";
@@ -40,6 +40,26 @@ export function FileUpload({
   onUploaded?: (document: DocumentRecord) => void;
 }) {
   const [statuses, setStatuses] = useState<Status[]>([]);
+  // Whether the user lets AI read their documents (explicit, revocable — docs/08-LEGAL-RISKS.md A3/A4).
+  const [aiReading, setAiReading] = useState<boolean | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/consent")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => !cancelled && setAiReading(Boolean(data?.data?.documentAi)))
+      .catch(() => !cancelled && setAiReading(false));
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const setAiConsent = async (granted: boolean) => {
+    const res = await fetch("/api/consent", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ documentAi: granted }),
+    }).catch(() => null);
+    if (res?.ok) setAiReading(granted);
+  };
   const setStatus = (status: Status) =>
     setStatuses((cur) => [...cur.filter((s) => s.name !== status.name), status]);
 
@@ -61,6 +81,10 @@ export function FileUpload({
         try {
           const document = await uploadFile(missionId, file);
           onUploaded?.(document);
+          if (!aiReading) {
+            setStatus({ name: file.name, state: "done", message: "uploaded ✓ — stored privately, not read (AI reading is off)" });
+            continue;
+          }
           // Velora reads it (quarantined: no tools) — the details arrive unverified.
           setStatus({ name: file.name, state: "reading" });
           const read = await fetch(`/api/missions/${missionId}/documents/${document.id}/extract`, { method: "POST" });
@@ -88,6 +112,22 @@ export function FileUpload({
 
   return (
     <div className="space-y-2">
+      {aiReading !== null && (
+        <label className="flex items-start gap-2 rounded-md border bg-secondary/20 p-3 text-xs">
+          <input
+            type="checkbox"
+            className="mt-0.5 size-4 accent-primary"
+            checked={aiReading}
+            onChange={(e) => setAiConsent(e.target.checked)}
+          />
+          <span>
+            <span className="block text-sm font-medium">Let Velora&apos;s AI read my documents</span>
+            Each file is sent to Google&apos;s Gemini to pull out details like document numbers and expiry dates. They
+            stay marked unverified until you confirm them. Off: files are only stored, privately. You can change this in
+            Settings.
+          </span>
+        </label>
+      )}
       <div {...getRootProps({ className: style })}>
         <input {...getInputProps()} aria-label="Upload documents" />
         <UploadCloud className="h-10 w-10 text-muted-foreground" />

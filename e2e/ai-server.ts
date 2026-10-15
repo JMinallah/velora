@@ -36,6 +36,7 @@ export async function startAiServer(): Promise<() => Promise<void>> {
     launch("node_modules/.bin/next", ["start", "-p", String(AI_PORT)], {
       ...APP_ENV,
       GEMINI_API_KEY: "fake-key",
+      GEMINI_TIER: "paid", // production build: AI runs only on the paid tier
       GEMINI_BASE_URL: fakeUrl,
       ADMIN_EMAILS: "ai@velora.test",
     })

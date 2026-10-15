@@ -24,6 +24,12 @@ const serverEnvSchema = z.object({
   APP_URL: z.string().url().optional(),
   GEMINI_API_KEY: z.string().optional(), // absent → agent features run in manual mode
   GEMINI_MODEL: z.string().default("gemini-3.5-flash-lite"),
+  // Google's terms forbid sending personal information to the *free* Gemini
+  // tier (it may be used for training and read by reviewers) and require the
+  // paid tier for EEA/UK/Swiss users. Production runs AI only when this says
+  // "paid" (docs/08-LEGAL-RISKS.md A1/A2); development may use the free tier
+  // with test data.
+  GEMINI_TIER: z.preprocess((v) => (v === "" ? undefined : v), z.enum(["free", "paid"]).default("free")),
   // Optional: send Gemini requests through another endpoint (an API gateway,
   // or the end-to-end tests' fake server). Absent → Google's own API.
   GEMINI_BASE_URL: z.preprocess((v) => (v === "" ? undefined : v), z.string().url().optional()),
@@ -65,9 +71,20 @@ export function env(): ServerEnv {
   return cached
 }
 
-/** True when the LLM-backed agent features can run. */
+/**
+ * True when the LLM-backed agent features can run: a key is set, and in
+ * production the key is on Gemini's paid tier (real users' personal data
+ * must never go to the free tier).
+ */
 export function agentEnabled(): boolean {
-  return Boolean(env().GEMINI_API_KEY)
+  return aiDisabledReason(env()) === null
+}
+
+/** Why AI features are off, or null when they can run. */
+export function aiDisabledReason(e: Pick<ServerEnv, "GEMINI_API_KEY" | "GEMINI_TIER">, nodeEnv = process.env.NODE_ENV): string | null {
+  if (!e.GEMINI_API_KEY) return "no GEMINI_API_KEY"
+  if (nodeEnv === "production" && e.GEMINI_TIER !== "paid") return "production requires GEMINI_TIER=paid (Gemini's free tier must not receive personal data)"
+  return null
 }
 
 /** Whether this signed-in email may see the ops page. */

@@ -395,3 +395,31 @@ test("downloads all of the user's data from Settings", async ({ page }) => {
   await expect(page.getByRole("button", { name: "Delete everything" })).toBeEnabled()
   await page.getByRole("button", { name: "Cancel" }).click()
 })
+
+test.describe("a new user", () => {
+  test.use({ storageState: "e2e/.auth/fresh-state.json" })
+
+  test("must confirm 18+ and accept the terms before using Velora; the legal pages stay readable", async ({ page }) => {
+    await open(page, "/")
+    const gate = page.getByRole("dialog", { name: "Before you start" })
+    await expect(gate).toContainText("It is an AI and can be wrong")
+    const go = gate.getByRole("button", { name: "Continue" })
+    await expect(go).toBeDisabled()
+    await gate.getByLabel(/I am 18 or older/).check()
+    await expect(go).toBeDisabled()
+    await gate.getByLabel(/I agree to the/).check()
+    await go.click()
+    await expect(gate).toHaveCount(0)
+
+    // Recorded, with the version, and not asked again.
+    const consent = (await (await page.request.get("/api/consent")).json()).data
+    expect(consent).toMatchObject({ current: true, documentAi: false, record: { adultConfirmed: true, termsVersion: consent.version } })
+    await open(page, "/settings")
+    await expect(page.getByRole("dialog", { name: "Before you start" })).toHaveCount(0)
+
+    for (const [path, heading] of [["/privacy", "Privacy Policy"], ["/terms", "Terms of Service"]]) {
+      await open(page, path)
+      await expect(page.getByRole("heading", { level: 1, name: heading })).toBeVisible()
+    }
+  })
+})

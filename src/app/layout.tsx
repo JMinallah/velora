@@ -5,6 +5,7 @@ import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
 import { HydrationMarker } from "@/components/HydrationMarker";
 import { AiStatusBanner } from "@/components/AiStatusBanner";
+import { ConsentGate } from "@/components/ConsentGate";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
 
@@ -22,6 +23,7 @@ export default function RootLayout({
     <html lang="en" className={`${inter.variable} h-full antialiased`}>
       <body className="min-h-full">
         <HydrationMarker />
+        <ConsentGate />
         <div className="grid min-h-screen w-full md:grid-cols-[220px_1fr] lg:grid-cols-[280px_1fr]">
           <Sidebar />
           <div className="flex flex-col bg-background">

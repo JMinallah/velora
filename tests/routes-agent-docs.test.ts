@@ -154,7 +154,7 @@ describeDb("chat route", () => {
       receipts: [{ tool: "createTask", text: 'Created task "Book movers" — due 2026-11-01' }],
       proposals: [],
       replans: [],
-      promptVersion: "coordinator.v3",
+      promptVersion: "coordinator.v4",
     })
 
     const messages = (await (await listMessagesRoute(req("GET", "/"), ctx({ id: missionId }))).json()).data
@@ -163,7 +163,7 @@ describeDb("chat route", () => {
       ["update", '✓ Created task "Book movers" — due 2026-11-01'],
       ["reasoning", "Added it."],
     ])
-    expect(messages[2].promptVersion).toBe("coordinator.v3")
+    expect(messages[2].promptVersion).toBe("coordinator.v4")
 
     const tasks = (await (await listTasksRoute(req("GET", "/"), ctx({ id: missionId }))).json()).data
     expect(tasks).toEqual([expect.objectContaining({ label: "Book movers", source: "agent", dueDate: "2026-11-01" })])
@@ -805,7 +805,7 @@ describeDb("chat route — streaming (NDJSON)", () => {
     expect(res.headers.get("content-type")).toContain("application/x-ndjson")
     expect(lines.map((l) => l.type)).toEqual(["receipt", "text", "text", "done"])
     expect(lines[0]).toMatchObject({ tool: "createTask", text: 'Created task "Pack books"' })
-    expect(lines[3]).toMatchObject({ reply: "Added it.", promptVersion: "coordinator.v3", turnId: expect.any(String) })
+    expect(lines[3]).toMatchObject({ reply: "Added it.", promptVersion: "coordinator.v4", turnId: expect.any(String) })
 
     const messages = (await (await listMessagesRoute(req("GET", "/"), ctx({ id: missionId }))).json()).data
     expect(messages.map((m: { type: string }) => m.type)).toEqual(["user", "update", "reasoning"])
@@ -966,10 +966,35 @@ describeDb("documents: signed upload → verify → view → delete (5-1, 5-2)",
       }
       return generate
     }
-    const extract = (missionId: string, docId: string) =>
-      extractDocumentRoute(req("POST", "/"), ctx({ id: missionId, docId }))
+    // The user has allowed AI to read their documents (consent is tested below).
+    const extract = async (missionId: string, docId: string) => {
+      const { updateConsent } = await import("@/domain/consent")
+      await updateConsent(currentUserId!, { documentAi: true })
+      return extractDocumentRoute(req("POST", "/"), ctx({ id: missionId, docId }))
+    }
     const verify = (missionId: string, docId: string, body: unknown) =>
       verifyDocumentRoute(req("PATCH", "/", body), ctx({ id: missionId, docId }))
+
+    it("reads nothing without the user's consent, and stops when it is withdrawn", async () => {
+      const missionId = await createMissionAs("user-docs-consent")
+      const doc = await uploadPng(missionId)
+      const generate = readWith([extraction()])
+      let called = 0
+      const structured = provider!.generateStructured!
+      provider!.generateStructured = async (input) => (called++, structured(input))
+      const { updateConsent } = await import("@/domain/consent")
+
+      const refused = await extractDocumentRoute(req("POST", "/"), ctx({ id: missionId, docId: doc.id }))
+      expect(refused.status).toBe(403)
+      expect((await refused.json()).code).toBe("consent_required")
+
+      await updateConsent("user-docs-consent", { documentAi: true })
+      expect((await extractDocumentRoute(req("POST", "/"), ctx({ id: missionId, docId: doc.id }))).status).toBe(200)
+      await updateConsent("user-docs-consent", { documentAi: false })
+      expect((await extractDocumentRoute(req("POST", "/"), ctx({ id: missionId, docId: doc.id }))).status).toBe(403)
+      expect(called).toBe(1)
+      expect(generate).not.toHaveBeenCalled()
+    })
 
     it("stores the details as AI-extracted and unverified, audited as system", async () => {
       const missionId = await createMissionAs("user-docs")

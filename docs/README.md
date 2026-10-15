@@ -14,6 +14,7 @@ This is the production rebuild of the v1 hackathon project. Read in order:
 | [06-DELIVERY-PLAN.md](06-DELIVERY-PLAN.md) | Per-phase work items, phase gates with evidence, and where the build actually stands |
 | [07-BACKUP-RESTORE.md](07-BACKUP-RESTORE.md) | Nightly encrypted, restore-verified backups; how to restore; the rehearsal write-up |
 | [08-LEGAL-RISKS.md](08-LEGAL-RISKS.md) | Legal risk register: what could get Velora sued or fined, and the fix for each (not legal advice) |
+| [09-INCIDENT-RESPONSE.md](09-INCIDENT-RESPONSE.md) | What to do in the first hour, day and 72 hours of a personal-data breach |
 
 ## The three ideas that define v2
 

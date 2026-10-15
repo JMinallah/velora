@@ -34,3 +34,13 @@ describe("parseServerEnv", () => {
     expect(env.CRON_SECRET).toBeUndefined()
   })
 })
+
+describe("AI availability (docs/08-LEGAL-RISKS.md A1)", () => {
+  it("needs a key, and in production the paid Gemini tier", async () => {
+    const { aiDisabledReason } = await import("@/lib/env")
+    expect(aiDisabledReason({ GEMINI_API_KEY: undefined, GEMINI_TIER: "paid" }, "production")).toMatch(/no GEMINI_API_KEY/)
+    expect(aiDisabledReason({ GEMINI_API_KEY: "k", GEMINI_TIER: "free" }, "production")).toMatch(/GEMINI_TIER=paid/)
+    expect(aiDisabledReason({ GEMINI_API_KEY: "k", GEMINI_TIER: "paid" }, "production")).toBeNull()
+    expect(aiDisabledReason({ GEMINI_API_KEY: "k", GEMINI_TIER: "free" }, "development")).toBeNull()
+  })
+})
